@@ -1,0 +1,6 @@
+---
+- name: Setup
+  gather_facts: true
+  hosts: vm
+  roles:
+    - apt

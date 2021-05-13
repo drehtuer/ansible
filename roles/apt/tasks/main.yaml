@@ -1,0 +1,21 @@
+- name: Host
+  debug:
+    msg: "Running on '{{ ansible_hostname }}' as '{{ ansible_user }}'"
+
+- name: Upgrade installed packages
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+    name: "*"
+    state: latest
+    install_recommends: no
+  register: apt_upgrade
+
+- name: "On apt upgrade changes"
+  debug:
+    var: apt_upgrade
+  when: apt_upgrade.changed
+
+- name: Timezone
+  timezone:
+    name: "{{ system_timezone }}"

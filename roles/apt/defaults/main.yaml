@@ -1,0 +1,125 @@
+---
+apt_packages:
+  base:
+    - apt-transport-https
+    - aptitude
+    - ca-certificates
+    - curl
+    - git
+    - git-lfs
+    - neovim
+    - net-tools
+    - nmap
+    - openssh-server
+    - pass
+    - python3-neovim
+    - screen
+    - sshfs
+    - tmux
+    - unattended-upgrades
+    - xxd
+    - zsh
+
+  server:
+
+  builder:
+    - asciidoctor
+    - build-essential
+    - clang
+    - clang-format
+    - clang-tidy
+    - clang-tools
+    - clangd
+    - cloc
+    - cmake
+    - cppcheck
+    - doxygen
+    - markdown
+    - plantuml
+    - universal-ctags
+
+  text:
+    - aspell-de
+    - aspell-en
+    - hunspell-de-de-frami
+    - hunspell-en-us
+    - hyphen-de
+    - hyphen-en-us
+    - texlive-base
+    - texlive-binaries
+
+  console:
+    - acpi-support
+    - acpid
+    - android-sdk-platform-tools
+    - ascii
+    - imagemagick
+    - jq
+    - ncal
+    - nodejs
+    - ranger
+    - sshpass
+    - tofrodos
+    - usbutils
+
+  xorg:
+    - dunst
+    - i3blocks
+    - i3lock
+    - lightdm
+    - lightdm-gtk-greeter
+    - menu
+    - nitrogen
+    - numlockx
+    - parcellite
+    - picom
+    - rofi
+    - signal-desktop
+    - suckless-tools
+    - ttf-mscorefonts-installer
+    - udiskie
+    - xclip
+    - xfonts-100dpi
+    - xsel
+    - xsettingsd
+
+  audio:
+    - alsa-tools
+    - alsa-tools-gui
+    - indicator-sound
+    - pavucontrol
+    - pulseaudio-dlna
+
+  virtualbox:
+    - virtualbox
+    - virtualbox-dkms
+    - virtualbox-ext-pack
+    - virtualbox-guest-additions-iso
+    - virtualbox-qt
+
+  desktop:
+    - cheese
+    - gimp
+    - gnome-calculator
+    - gnome-font-viewer
+    - gnuplot
+    - google-chrome-stable
+    - gparted
+    - gpick
+    - graphicsmagick
+    - hexchat
+    - inkscape
+    - keepassxc
+    - libnotify-bin
+    - libreoffice
+    - meld
+    - mirage
+    - network-manager-gnome
+    - pacmanfm
+    - remmina
+    - scrot
+    - smplayer
+    - wireshark
+    - xboxdrv
+    - xsane
+    - zathura

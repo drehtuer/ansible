@@ -1,0 +1,19 @@
+all:
+  children:
+    test:
+      hosts:
+        vm:
+          ansible_port: 2222
+          ansible_host: 127.0.0.1
+          ansible_user: drehtuer
+          ansible_connection: ssh
+    servers:
+      hosts:
+        rlyeh:
+    desktops:
+      hosts:
+        azathoth:
+    laptops:
+      hosts:
+        hastur:
+
