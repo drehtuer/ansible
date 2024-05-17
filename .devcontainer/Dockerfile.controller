@@ -1,0 +1,73 @@
+# https://docs.docker.com/reference/dockerfile/
+FROM  ubuntu:24.04
+
+LABEL name="Dev environment" \
+      description="Control node running Ubuntu 24.04" \
+      version="1.8"
+
+ARG   DEBIAN_FRONTEND=noninteractive
+
+RUN   \
+      # apt cache folders as tmpfs, discarded after build.
+      # No need to delete these folders later
+      --mount=type=tmpfs,target=/var/lib/apt/lists \
+      --mount=type=tmpfs,target=/var/cache/apt \
+      # Secrets, e.g. passwords
+      --mount=type=secret,id=username,required \
+      --mount=type=secret,id=password,required \
+      --mount=type=secret,id=docker-gid,required \
+      apt-get update \
+      && apt-get upgrade \
+          --yes \
+          -qq \
+      && apt-get install \
+          --no-install-recommends \
+          --yes \
+          -qq \
+            # Ansible
+            ansible \
+            # Let's be on the safe side,
+            # our default shell should be
+            # available
+            bash \
+            # git within devcontainer
+            git \
+            # Access docker on host
+            docker.io \
+            # python for ansible
+            python-is-python3 \
+            python3-venv \
+            # user may become root
+            sudo \
+      # Add non-root user,
+      # password needed for `sudo`
+      && useradd \
+          --create-home \
+          --user-group \
+          # user should have docker access (in container).
+          # docker.socket may have a different gid.
+          --groups sudo,docker \
+          --shell /usr/bin/bash \
+          --password $(cat /run/secrets/password) \
+            $(cat /run/secrets/username) \
+      # Add group to access docker.socket.
+      && groupadd \
+          # Fail silently if GID already exists
+          --force \
+          # Allow alias-group if GID already
+          # exists
+          --non-unique \
+          --gid $(cat /run/secrets/docker-gid) \
+          --users $(cat /run/secrets/username) \
+            docker_host
+
+# Can't set default user here, USER takes
+# only a string, but our user name is stored
+# in a secret file. Don't want to add an additional
+# environment variable, we set the user
+# in devcontainer.json via 'remoteUser'.
+# This also takes care of mapping uid:gid correctly.
+
+# Keep container running, vscode needs
+# to attach to it
+CMD [ "sleep", "infinity" ]

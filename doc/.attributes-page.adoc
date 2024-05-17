@@ -1,0 +1,11 @@
+// Common attributes for all
+// asciidoc pages
+:backend: html5
+:data-uri:
+:doctype: article
+:icons: font
+:icontype: svg
+:lang: en
+:source-highlighter: highlight.js
+:toc: auto
+:xrefstyle: short

@@ -1,0 +1,19 @@
+= README
+include::doc/.attributes-page.adoc[]
+
+== Overview
+
+:url-drehtuer-de: https://drehtuer.de[drehtuer.de^]
+:url-drehtuer-net: https://drehtuer.net[drehtuer.net^]
+:url-ansible: https://www.ansible.com[Ansible^]
+:url-dev-container: https://containers.dev[Development Container^]
+:url-vscode: https://code.visualstudio.com[Visual Studio Code^]
+
+This repo contains the configuration for the hosts link:{url-drehtuer-de}/link:{url-drehtuer-net} as link:{url-ansible} scripts.
+The environment is provided as configuration for link:{url-dev-container} and link:{url-vscode}.
+
+== Environment Setup
+
+:url-doc-environment-setup: doc/environment-setup.adoc[Environment Setup]
+
+See link:{url-doc-environment-setup} for details.

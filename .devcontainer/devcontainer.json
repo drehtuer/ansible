@@ -1,0 +1,41 @@
+// https://containers.dev/
+{
+  "name": "Ansible DevContainer",
+  "dockerComposeFile": [
+    "compose.yml"
+  ],
+  "service": "ansible-controller",
+  "remoteUser": "${localEnv:USER}",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "customizations": {
+    "vscode": {
+      // VS code extensions
+      "extensions": [
+        "redhat.ansible",
+        "dhoeric.ansible-vault",
+        "asciidoctor.asciidoctor-vscode",
+        "ms-azuretools.vscode-docker",
+        "wholroyd.jinja"
+      ],
+      "settings": {
+        // Use bash as default shell
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/usr/bin/bash"
+          }
+        }
+      }
+    }
+  },
+  "mounts": [
+    // Make user settings available in container
+    "source=${localEnv:HOME}/.bashrc,target=${localEnv:HOME}/.bashrc,type=bind",
+    "source=${localEnv:HOME}/.gitconfig,target=${localEnv:HOME}/.gitconfig,type=bind",
+    "source=${localEnv:HOME}/.config,target=${localEnv:HOME}/.config,type=bind",
+    // Mount current workspace
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+    // Make docker available
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ]
+}

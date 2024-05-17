@@ -1,0 +1,49 @@
+# https://docs.docker.com/reference/dockerfile/
+FROM  ubuntu:24.04
+
+LABEL name="Test environment" \
+      description="Minimal managed node running Ubuntu 24.04" \
+      version="1.6"
+
+ARG   DEBIAN_FRONTEND=noninteractive
+
+RUN   \
+      # apt cache folders as tmpfs, discarded after build.
+      # No need to delete these folders later
+      --mount=type=tmpfs,target=/var/lib/apt/lists \
+      --mount=type=tmpfs,target=/var/cache/apt \
+      # Secrets, e.g. passwords
+      --mount=type=secret,id=username,required \
+      --mount=type=secret,id=password,required \
+      apt-get update \
+      && apt-get upgrade \
+          --yes \
+          -qq \
+      && apt-get install \
+          --no-install-recommends \
+          --yes \
+          -qq \
+            # Minimal installation,
+            # all necessary packages
+            # should be installed via
+            # ansible
+            #
+            # sshd for remote access
+            openssh-server \
+            # python to run ansible
+            python-is-python3 \
+            python3 \
+            # user may become root
+            sudo \
+      # Add non-root user,
+      # password needed for `sudo`
+      && useradd \
+          --create-home \
+          --user-group \
+          --groups sudo \
+          --shell /usr/bin/bash \
+          --password $(cat /run/secrets/password) \
+            $(cat /run/secrets/username)
+
+# Run ssh server in foreground, don't immediately exit
+CMD [ "service", "ssh", "start", "-D" ]
