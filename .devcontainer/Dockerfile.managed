@@ -3,9 +3,11 @@ FROM  ubuntu:24.04
 
 LABEL name="Test environment" \
       description="Minimal managed node running Ubuntu 24.04" \
-      version="1.6"
+      version="1.7"
 
 ARG   DEBIAN_FRONTEND=noninteractive
+
+ENV   LANG=en_US.utf8
 
 RUN   \
       # apt cache folders as tmpfs, discarded after build.
@@ -28,6 +30,8 @@ RUN   \
             # should be installed via
             # ansible
             #
+            # locale support
+            locales \
             # sshd for remote access
             openssh-server \
             # python to run ansible
@@ -35,6 +39,13 @@ RUN   \
             python3 \
             # user may become root
             sudo \
+      # Generate en_US.UTF-8 locales
+      && localedef \
+          --inputfile=en_US \
+          --force \
+          --charmap=UTF-8 \
+          --alias-file=/usr/share/locale/locale.alias \
+          en_US.UTF-8 \
       # Add non-root user,
       # password needed for `sudo`
       && useradd \
