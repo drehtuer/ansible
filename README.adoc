@@ -12,6 +12,17 @@ include::doc/.attributes-page.adoc[]
 This repo contains the configuration for the hosts link:{url-drehtuer-de}/link:{url-drehtuer-net} as link:{url-ansible} scripts.
 The environment is provided as configuration for link:{url-dev-container} and link:{url-vscode}.
 
+== License
+
+The repo is published under the *MIT license*.
+
+.Click to show the license
+[%collapsible]
+====
+include::LICENSE[]
+====
+
+
 == Environment Setup
 
 :url-doc-environment-setup: doc/environment-setup.adoc[Environment Setup]
