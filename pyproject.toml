@@ -1,10 +1,10 @@
-[tool.ruff]
 # https://docs.astral.sh/ruff
+[tool.ruff]
 exclude = [
   ".adoc",
+  ".devcontainer",
   ".vscode",
   "doc",
-  ".devcontainer",
 ]
 
 indent-width = 2

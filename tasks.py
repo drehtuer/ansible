@@ -1,6 +1,7 @@
 """
 https://docs.pyinvoke.org/en/stable/
 """
+
 from invoke import task
 
 ANSIBLE = 'ansible'
