@@ -35,7 +35,6 @@ RUN   \
             # sshd for remote access
             openssh-server \
             # python to run ansible
-            python-is-python3 \
             python3 \
             # user may become root
             sudo \

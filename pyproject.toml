@@ -1,0 +1,35 @@
+[tool.ruff]
+# https://docs.astral.sh/ruff
+exclude = [
+  ".adoc",
+  ".vscode",
+  "doc",
+  ".devcontainer",
+]
+
+indent-width = 2
+target-version = "py312"
+
+[tool.ruff.lint]
+# https://docs.astral.sh/ruff/rules/
+select = [
+  # pyflakes
+  "F",
+  # pycodestyle
+  "E",
+  "W",
+  # import sort
+  "I",
+  # naming
+  "N",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"

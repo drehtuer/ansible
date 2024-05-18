@@ -15,7 +15,11 @@
         "dhoeric.ansible-vault",
         "asciidoctor.asciidoctor-vscode",
         "ms-azuretools.vscode-docker",
-        "wholroyd.jinja"
+        "wholroyd.jinja",
+        "charliermarsh.ruff",
+        "dchanco.vsc-invoke",
+        "ms-python.python",
+        "tamasfe.even-better-toml"
       ],
       "settings": {
         // Use bash as default shell

@@ -3,7 +3,7 @@ FROM  ubuntu:24.04
 
 LABEL name="Dev environment" \
       description="Control node running Ubuntu 24.04" \
-      version="1.9"
+      version="1.10"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 
@@ -28,19 +28,24 @@ RUN   \
           -qq \
             # Ansible
             ansible \
+            ansible-lint \
             # Let's be on the safe side,
             # our default shell should be
             # available
             bash \
-            # git within devcontainer
-            git \
             # Access docker on host
             docker.io \
+            # git within devcontainer
+            git \
             # locale support
             locales \
-            # python for ansible
+            # Python support
+            python3.12 \
             python-is-python3 \
-            python3-venv \
+            # Invoke to organize cmd commands
+            python3-invoke \
+            # Ansible login via password (-k)
+            sshpass \
             # user may become root
             sudo \
       # Generate en_US.UTF-8 locales
