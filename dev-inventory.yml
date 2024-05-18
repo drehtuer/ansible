@@ -1,0 +1,4 @@
+dev:
+  hosts:
+    managed:
+      ansible_host: managed

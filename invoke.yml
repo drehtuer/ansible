@@ -1,0 +1,7 @@
+# invoke configuration
+run:
+  # Print command to stdout
+  echo: true
+  # Run command in interactive
+  # terminal
+  pty: true

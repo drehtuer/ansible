@@ -22,12 +22,20 @@ select = [
   "I",
   # naming
   "N",
+  # pydocstyle
+  "D",
   # pyupgrade
   "UP",
   # flake8-bugbear
   "B",
   # flake8-simplify
   "SIM",
+]
+ignore = [
+  # pydocstyle
+  "D200",
+  "D205",
+  "D212",
 ]
 
 [tool.ruff.format]
