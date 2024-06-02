@@ -37,6 +37,8 @@
     "source=${localEnv:HOME}/.bashrc,target=${localEnv:HOME}/.bashrc,type=bind",
     "source=${localEnv:HOME}/.gitconfig,target=${localEnv:HOME}/.gitconfig,type=bind",
     "source=${localEnv:HOME}/.config,target=${localEnv:HOME}/.config,type=bind",
+    // Mount ssh keys
+    "source=${localEnv:HOME}/.ssh,target=${localEnv:HOME}/.ssh,type=bind",
     // Mount current workspace
     "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
     // Make docker available

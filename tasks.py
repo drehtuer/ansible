@@ -8,16 +8,17 @@ correct parameters as well as shorthand
 for complex parameters.
 """
 
-from typing import Any
-
 from invoke import context, task
 
 ANSIBLE = 'ansible'
 ANSIBLE_PLAYBOOK = 'ansible-playbook'
-INVENTORY = 'dev-inventory.yml'
-HOSTS = 'dev'
+PLAYBOOK_TEST_CONNECTION = 'playbooks/test-connection.yml'
+PLAYBOOK_BASE_SETUP = 'playbooks/base-setup.yml'
+INVENTORY = 'inventories/dev.yml'
+HOSTS_ALL = 'all'
 HOST_MANAGED = 'managed'
 LOG_DIR = 'log'
+ASK_PASS = '--ask-pass'
 
 
 def ctx_run(ctx: context, cmd: list[str]) -> None:
@@ -29,8 +30,17 @@ def ctx_run(ctx: context, cmd: list[str]) -> None:
   ctx.run(' '.join(cmd))
 
 
+def check_ask_pass(cmd: list[str], ask_pass: bool) -> None:
+  """
+  If requested, append flag to
+  ask for password.
+  """
+  if ask_pass:
+    cmd.append(ASK_PASS)
+
+
 @task
-def ssh(ctx: context, host: str = HOST_MANAGED) -> None:
+def login(ctx: context, host: str = HOST_MANAGED) -> None:
   """
   Login to remote host via `ssh`.
   """
@@ -58,7 +68,7 @@ def clean(ctx: context) -> None:
 
 
 @task
-def ping(ctx: context, hosts: str = HOSTS, ask_pass: Any = False) -> None:
+def ping(ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False) -> None:
   """
   Ping all hosts via ansible
   If no pubkey auth is setup on the
@@ -77,25 +87,59 @@ def ping(ctx: context, hosts: str = HOSTS, ask_pass: Any = False) -> None:
     f'--inventory {INVENTORY}',
     hosts,
   ]
-
-  if ask_pass:
-    cmd.append('--ask-pass')
+  check_ask_pass(cmd, ask_pass)
 
   ctx_run(ctx, cmd)
 
 
 @task
-def playbook(ctx: context, hosts: str = HOSTS, ask_pass: Any = False) -> None:
+def reboot_managed(ctx: context) -> None:
   """
-  Run playbook.
+  Reboot remote server via docker command.
+  The container does not contain a `shutdown`
+  command, need to restart via docker instead.
+  """
+  cmd: list[str] = [
+    'docker',
+    'container',
+    'restart',
+    'ansible_devcontainer-ansible-managed-1',
+  ]
+
+  ctx_run(ctx, cmd)
+
+
+@task
+def playbook_test_connection(
+  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False
+) -> None:
+  """
+  Run connection test playbook.
   """
   cmd: list[str] = [
     ANSIBLE_PLAYBOOK,
     f'--inventory {INVENTORY}',
-    'playbook.yml',
+    PLAYBOOK_TEST_CONNECTION,
   ]
+  check_ask_pass(cmd, ask_pass)
 
-  if ask_pass:
-    cmd.append('--ask-pass')
+  ctx_run(ctx, cmd)
+
+
+@task
+def playbook_base_setup(
+  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False
+) -> None:
+  """
+  Playbook for base server setup.
+  """
+  cmd: list[str] = [
+    ANSIBLE_PLAYBOOK,
+    f'--inventory {INVENTORY}',
+    PLAYBOOK_BASE_SETUP,
+    '--become',
+    '--ask-become-pass',
+  ]
+  check_ask_pass(cmd, ask_pass)
 
   ctx_run(ctx, cmd)

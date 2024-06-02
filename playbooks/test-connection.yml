@@ -1,0 +1,14 @@
+# Simple playbook to test if the
+# remote machine can be reached
+# and ansible commands can run.
+- name: Test server accessibility
+  hosts: all
+  tasks:
+  - name: Ping
+    ansible.builtin.ping:
+    ansible.builtin.debug:
+      msg: Network connection to remote machine
+  
+  - name: Run 'Hello World'
+    ansible.builtin.debug:
+      msg: Hello World!
