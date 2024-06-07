@@ -12,13 +12,14 @@ from invoke import context, task
 
 ANSIBLE = 'ansible'
 ANSIBLE_PLAYBOOK = 'ansible-playbook'
-PLAYBOOK_TEST_CONNECTION = 'playbooks/test-connection.yml'
-PLAYBOOK_BASE_SETUP = 'playbooks/base-setup.yml'
+PLAYBOOK_TEST_CONNECTION = 'test-connection.yml'
+PLAYBOOK_BASE_SETUP = 'base-setup.yml'
 INVENTORY = 'inventories/dev.yml'
 HOSTS_ALL = 'all'
 HOST_MANAGED = 'managed'
 LOG_DIR = 'log'
 ASK_PASS = '--ask-pass'
+VERBOSE = '-v'
 
 
 def ctx_run(ctx: context, cmd: list[str]) -> None:
@@ -37,6 +38,15 @@ def check_ask_pass(cmd: list[str], ask_pass: bool) -> None:
   """
   if ask_pass:
     cmd.append(ASK_PASS)
+
+
+def check_verbose(cmd: list[str], verbose: bool) -> None:
+  """
+  If requested, append verbose
+  flag.
+  """
+  if verbose:
+    cmd.append(VERBOSE)
 
 
 @task
@@ -122,13 +132,14 @@ def playbook_test_connection(
     PLAYBOOK_TEST_CONNECTION,
   ]
   check_ask_pass(cmd, ask_pass)
+  check_verbose(cmd, ask_pass)
 
   ctx_run(ctx, cmd)
 
 
 @task
 def playbook_base_setup(
-  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False
+  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose=True
 ) -> None:
   """
   Playbook for base server setup.
@@ -141,5 +152,6 @@ def playbook_base_setup(
     '--ask-become-pass',
   ]
   check_ask_pass(cmd, ask_pass)
+  check_verbose(cmd, ask_pass)
 
   ctx_run(ctx, cmd)

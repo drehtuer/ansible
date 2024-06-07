@@ -1,0 +1,9 @@
+# Override with own variables
+users:
+  # Default user root
+  - name: "root"
+    group: "root"
+    shell: "/usr/bin/sh"
+    groups: ""
+    create_home: true
+    password: "*"
