@@ -1,0 +1,5 @@
+- name: Add authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.public_key }}"
+  loop: "{{ authorized_keys }}"

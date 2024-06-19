@@ -1,0 +1,10 @@
+- name: Add users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    shell: "{{ item.shell }}"
+    groups: "{{ item.groups }}"
+    create_home: "{{ item.create_home }}"
+    password: "{{ item.password }}"
+    append: true
+  loop: "{{ users }}"

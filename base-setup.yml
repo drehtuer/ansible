@@ -4,6 +4,7 @@
   vars_files:
   - apt-packages.yml
   - users.yml
+  - authorized-keys.yml
   tasks:
   # Update apt and install
   # necessary packages
