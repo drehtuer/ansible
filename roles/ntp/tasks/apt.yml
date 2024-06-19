@@ -1,0 +1,10 @@
+- name: Install ntpsec
+  ansible.builtin.apt:
+    autoclean: yes
+    autoremove: yes
+    install_recommends: false
+    name:
+      # ntpd
+      - ntpsec
+      # hwclock
+      - util-linux-extra

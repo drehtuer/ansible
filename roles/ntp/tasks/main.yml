@@ -1,0 +1,11 @@
+- name: Install ntpsec
+  import_tasks: apt.yml
+
+- name: Config ntpsec
+  import_tasks: config.yml
+
+- name: Force ntp update
+  import_tasks: ntp-update.yml
+
+- name: Set HW clock to system clock
+  import_tasks: hwclock.yml

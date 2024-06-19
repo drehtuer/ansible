@@ -1,0 +1,16 @@
+# https://www.ntp.org/documentation/
+# https://community.hetzner.com/tutorials/install-and-configure-ntp
+restrict    default ignore
+restrict -6 default ignore
+
+# local connection is allowed
+restrict    127.0.0.1
+restrict -6 ::1
+
+# NTP server
+{% for server in ntp.server %}
+server      {{ server }} iburst
+restrict    {{ server }} nomodify notrap nopeer noquery
+restrict -6 {{ server }} nomodify notrap nopeer noquery
+
+{% endfor %}

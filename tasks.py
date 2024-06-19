@@ -19,7 +19,7 @@ HOSTS_ALL = 'all'
 HOST_MANAGED = 'managed'
 LOG_DIR = 'log'
 ASK_PASS = '--ask-pass'
-VERBOSE = '-v'
+VERBOSE = '-vvv'
 
 
 def ctx_run(ctx: context, cmd: list[str]) -> None:
@@ -121,7 +121,7 @@ def reboot_managed(ctx: context) -> None:
 
 @task
 def playbook_test_connection(
-  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False
+  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose: bool = False
 ) -> None:
   """
   Run connection test playbook.
@@ -132,14 +132,14 @@ def playbook_test_connection(
     PLAYBOOK_TEST_CONNECTION,
   ]
   check_ask_pass(cmd, ask_pass)
-  check_verbose(cmd, ask_pass)
+  check_verbose(cmd, verbose)
 
   ctx_run(ctx, cmd)
 
 
 @task
 def playbook_base_setup(
-  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose=True
+  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose: bool = False
 ) -> None:
   """
   Playbook for base server setup.
@@ -152,6 +152,6 @@ def playbook_base_setup(
     '--ask-become-pass',
   ]
   check_ask_pass(cmd, ask_pass)
-  check_verbose(cmd, ask_pass)
+  check_verbose(cmd, verbose)
 
   ctx_run(ctx, cmd)
