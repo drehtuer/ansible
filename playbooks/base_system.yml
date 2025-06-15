@@ -1,0 +1,5 @@
+- name: Basic server setup
+  hosts: all
+  roles:
+    - system
+    - ntp

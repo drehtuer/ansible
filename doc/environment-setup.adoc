@@ -19,7 +19,6 @@ sudo apt install \
   --no-install-recommends \
     containerd \
     docker-buildx \
-    docker-compose-v2 \
     docker.io
 ----
 
@@ -27,49 +26,7 @@ And - of course - the installation of link:{url-vscode}.
 
 Intallation on link:{url-wsl} running *Ubuntu 24.04* works fine.
 
-== Container User and Password
-
-Missing from the repo are secret files to define the default (non-root) user for both containers, the user's password, and the docker group id.
-These files are excluded from git in `.gitignore` to avoid uploading them by accident.
-
-[cols="h,m,d", options="autowidth"]
-|===
-| User name | `.devcontainer/.username` | Name of your user. This should be the same as your current user name
-| Password | `.devcontainer/.password` | Password for the non-root user
-| Docker Group ID | `.devcontainer/.docker-gid` | Group ID of `docker`
-|===
-
-Each secret file should contain only its value.
-
-=== Docker Group ID
-
-Since the group ID of docker on the host machine will most likely differ from the group ID in the docker container, it must be forwarded to the container at build time to ensure access to docker from within the container for the non-root user.
-The docker group ID can be easily read out from the host via the command:
-
-[source, bash]
-----
-getent group docker | cut -d: -f3
-----
-
-== Controller and Managed Node
-
-The two development containers provide a *controller node* for vscode to run in and a *managed node* that acts as a test server.
-The user runs his vscode instance on the controller to edit the scripts.
-The managed node acts as the server to apply the scripts on.
-No external server is needed.
-
-While the Docker image for the managed node is immutable (unless the image is re-built), the container instance may retain changes made to the server.
-The server can easily be reset to an initial state by deleting the associated container.
-
-To simplify the communication between both containers, an entry to the controllers `/etc/hosts` is added by the `compose.yml` file for the alias *managed*, that points to the internal IP of the managed node.
-An SSH server is running on the managed node and both nodes use the same user and password, so accessing it becomes trivial:
-
-[source, bash]
-----
-ssh managed
-----
-
-=== Controller Mounts
+=== Docker Mounts
 
 The controller node maps configuration files from the host to provide the same environment as on the host.
 
@@ -81,7 +38,3 @@ The controller node maps configuration files from the host to provide the same e
 |===
 
 The file `.devcontainer/devcontainer.json` may be adapted easily to accomodate other config files (e.g. `zsh` settings).
-
-The Docker communication socket `/var/run/docker.sock` is mapped into the container as well.
-The secret file for the host's docker group ID ensures that the user inside the container can communicate to the docker instance on the host.
-This is mainly for conveniance to run Docker extensions in vscode inside the controller container.

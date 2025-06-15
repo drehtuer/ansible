@@ -1,12 +1,12 @@
 // https://containers.dev/
 {
   "name": "Ansible DevContainer",
-  "dockerComposeFile": [
-    "compose.yml"
-  ],
-  "service": "ansible-controller",
-  "remoteUser": "${localEnv:USER}",
-  "workspaceFolder": "${localWorkspaceFolder}",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "ARG_USER": "${localEnv:USER}"
+    }
+  },
   "customizations": {
     "vscode": {
       // VS code extensions
@@ -14,12 +14,13 @@
         "redhat.ansible",
         "dhoeric.ansible-vault",
         "asciidoctor.asciidoctor-vscode",
-        "ms-azuretools.vscode-docker",
         "wholroyd.jinja",
         "charliermarsh.ruff",
         "dchanco.vsc-invoke",
         "ms-python.python",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-containers",
+        "ms-vscode-remote.remote-containers"
       ],
       "settings": {
         // Use bash as default shell
@@ -40,8 +41,6 @@
     // Mount ssh keys
     "source=${localEnv:HOME}/.ssh,target=${localEnv:HOME}/.ssh,type=bind",
     // Mount current workspace
-    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
-    // Make docker available
-    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached"
   ]
 }

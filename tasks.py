@@ -10,19 +10,21 @@ for complex parameters.
 
 from invoke import context, task
 
-ANSIBLE = 'ansible'
-ANSIBLE_PLAYBOOK = 'ansible-playbook'
-PLAYBOOK_TEST_CONNECTION = 'test-connection.yml'
-PLAYBOOK_BASE_SETUP = 'base-setup.yml'
-INVENTORY = 'inventories/dev.yml'
+ANSIBLE_BIN = 'ansible'
+ANSIBLE_PLAYBOOK_BIN = 'ansible-playbook'
+INVENTORY_DIR = 'inventories'
+INVENTORY = f'{INVENTORY_DIR}/machines.yml'
 HOSTS_ALL = 'all'
-HOST_MANAGED = 'managed'
 LOG_DIR = 'log'
 ASK_PASS = '--ask-pass'
+ASK_BECOME_PASS = '--ask-become-pass'
 VERBOSE = '-vvv'
 
 
-def ctx_run(ctx: context, cmd: list[str]) -> None:
+def ctx_run(
+  ctx: context,
+  cmd: list[str],
+) -> None:
   """
   Boiler plate function to
   flatten the command list
@@ -31,7 +33,21 @@ def ctx_run(ctx: context, cmd: list[str]) -> None:
   ctx.run(' '.join(cmd))
 
 
-def check_ask_pass(cmd: list[str], ask_pass: bool) -> None:
+def check_remote_user(
+  cmd: list[str],
+  remote_user: str,
+) -> None:
+  """
+  If not empty, run operations as this user.
+  """
+  if remote_user is not None:
+    cmd.append(f'--user {remote_user}')
+
+
+def check_ask_pass(
+  cmd: list[str],
+  ask_pass: bool,
+) -> None:
   """
   If requested, append flag to
   ask for password.
@@ -40,7 +56,21 @@ def check_ask_pass(cmd: list[str], ask_pass: bool) -> None:
     cmd.append(ASK_PASS)
 
 
-def check_verbose(cmd: list[str], verbose: bool) -> None:
+def check_ask_become_pass(
+  cmd: list[str],
+  ask_become_pass: bool,
+) -> None:
+  """
+  If requested, append flag for sudo password.
+  """
+  if ask_become_pass:
+    cmd.append(ASK_BECOME_PASS)
+
+
+def check_verbose(
+  cmd: list[str],
+  verbose: bool,
+) -> None:
   """
   If requested, append verbose
   flag.
@@ -50,19 +80,29 @@ def check_verbose(cmd: list[str], verbose: bool) -> None:
 
 
 @task
-def login(ctx: context, host: str = HOST_MANAGED) -> None:
+def login(
+  ctx: context,
+  host: str,
+  remote_user: str = None,
+) -> None:
   """
   Login to remote host via `ssh`.
   """
+  user = ''
+  if remote_user is not None:
+    user = f'{remote_user}@'
+
   cmd: list[str] = [
     'ssh',
-    host,
+    f'{user}{host}',
   ]
   ctx_run(ctx, cmd)
 
 
 @task
-def clean(ctx: context) -> None:
+def clean(
+  ctx: context,
+) -> None:
   """
   Clear temporary/intermediate data.
 
@@ -78,80 +118,51 @@ def clean(ctx: context) -> None:
 
 
 @task
-def ping(ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False) -> None:
+def ping(
+  ctx: context,
+  hosts: str = HOSTS_ALL,
+  remote_user: str = None,
+  ask_pass: bool = False,
+  ask_become_pass: bool = True,
+) -> None:
   """
-  Ping all hosts via ansible
-  If no pubkey auth is setup on the
-  remote host, the optional
-  flag `--ask-pass` is needed to
-  switch to password based login.
-  Mainly used for testing if all
-  remote hosts are available.
-
-  Note: May need an `ssh` login first
-        if host key is not known, yet.
+  Ping host(s) via ansible.
   """
   cmd: list[str] = [
-    f'{ANSIBLE}',
+    f'{ANSIBLE_BIN}',
     '--module-name ping',
     f'--inventory {INVENTORY}',
     hosts,
   ]
+  check_remote_user(cmd, remote_user)
   check_ask_pass(cmd, ask_pass)
+  check_ask_become_pass(cmd, ask_become_pass)
 
   ctx_run(ctx, cmd)
 
 
 @task
-def reboot_managed(ctx: context) -> None:
-  """
-  Reboot remote server via docker command.
-  The container does not contain a `shutdown`
-  command, need to restart via docker instead.
-  """
-  cmd: list[str] = [
-    'docker',
-    'container',
-    'restart',
-    'ansible_devcontainer-ansible-managed-1',
-  ]
-
-  ctx_run(ctx, cmd)
-
-
-@task
-def playbook_test_connection(
-  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose: bool = False
+def run_playbook(
+  ctx: context,
+  playbook: str,
+  hosts: str = HOSTS_ALL,
+  remote_user: str = None,
+  ask_pass: bool = False,
+  ask_become_pass: bool = True,
+  verbose: bool = False,
 ) -> None:
   """
-  Run connection test playbook.
+  Run a playbook on machines.
   """
   cmd: list[str] = [
-    ANSIBLE_PLAYBOOK,
+    ANSIBLE_PLAYBOOK_BIN,
+    playbook,
     f'--inventory {INVENTORY}',
-    PLAYBOOK_TEST_CONNECTION,
-  ]
-  check_ask_pass(cmd, ask_pass)
-  check_verbose(cmd, verbose)
-
-  ctx_run(ctx, cmd)
-
-
-@task
-def playbook_base_setup(
-  ctx: context, hosts: str = HOSTS_ALL, ask_pass: bool = False, verbose: bool = False
-) -> None:
-  """
-  Playbook for base server setup.
-  """
-  cmd: list[str] = [
-    ANSIBLE_PLAYBOOK,
-    f'--inventory {INVENTORY}',
-    PLAYBOOK_BASE_SETUP,
     '--become',
-    '--ask-become-pass',
   ]
+  check_remote_user(cmd, remote_user)
   check_ask_pass(cmd, ask_pass)
+  check_ask_become_pass(cmd, ask_become_pass)
   check_verbose(cmd, verbose)
 
   ctx_run(ctx, cmd)

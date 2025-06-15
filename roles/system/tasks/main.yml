@@ -1,0 +1,21 @@
+- name: Install dependencies
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - hostname
+      - locales
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ hostname }}"
+- name: Copy locale.gen file
+  ansible.builtin.template:
+    src: templates/locale.gen.j2
+    dest: /etc/locale.gen
+    owner: root
+    group: root
+    mode: "0644"
+  register: result
+  notify:
+    - Generate locales
+    - Set default locales
+    - Set LANG

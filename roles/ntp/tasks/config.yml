@@ -1,4 +1,0 @@
-- name: ntpdate config
-  ansible.builtin.template:
-    src: templates/ntp.conf.j2
-    dest: /etc/ntp.conf

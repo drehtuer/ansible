@@ -1,5 +1,0 @@
-- name: Update apt repo(s)
-  ansible.builtin.apt:
-    update_cache: yes
-    autoclean: yes
-    cache_valid_time: 3600

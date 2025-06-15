@@ -1,3 +1,0 @@
-- name: Set HW clock
-  # Set HW clock from system clock
-  ansible.builtin.shell: hwclock --systohc

@@ -1,5 +1,2 @@
-/.devcontainer/.username
-/.devcontainer/.password
-/.devcontainer/.docker-gid
 /log/
 /vault/

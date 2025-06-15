@@ -7,9 +7,6 @@ users:
     groups: ""
     create_home: true
     password: "*"
-
-# Needs at least one entry for
-# ansible `loop` function
 authorized_keys:
-# - name: <name>
-# - public_key: <public key as string>
+  - name: "root"
+    public_key: ""

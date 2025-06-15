@@ -1,8 +1,12 @@
-- name: apt-update
-  import_tasks: apt-update.yml
-
-- name: apt-upgrade
-  import_tasks: apt-upgrade.yml
-
-- name: apt-install
-  import_tasks: apt-install.yml
+- name: Update apt repo(s)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  notify:
+    - Upgrade all packages
+- name: Install base packages
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+    install_recommends: false
+    name: "{{ apt.packages }}"

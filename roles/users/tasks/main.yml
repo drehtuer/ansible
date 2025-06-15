@@ -1,5 +1,15 @@
-- name: add-users
-  import_tasks: add-users.yml
-
-- name: add-authorized-keys
-  import_tasks: add-authorized-keys.yml
+- name: Add users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    shell: "{{ item.shell }}"
+    groups: "{{ item.groups }}"
+    create_home: "{{ item.create_home }}"
+    password: "{{ item.password }}"
+    append: true
+  loop: "{{ users }}"
+- name: Add authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.public_key }}"
+  loop: "{{ authorized_keys }}"

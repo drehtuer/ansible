@@ -1,3 +1,0 @@
-- name: Run an ntp update
-  # Force time sync (with jumps > 1000s)
-  ansible.builtin.shell: ntpd -q -g

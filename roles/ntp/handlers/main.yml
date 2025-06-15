@@ -1,0 +1,11 @@
+- name: Restart ntpd
+  ansible.builtin.systemd_service:
+    name: ntpd
+    daemon_reload: true
+    state: restarted
+    enabled: true
+- name: Set HW clock
+  # Set HW clock from system clock
+  ansible.builtin.command:
+    cmd: hwclock --systohc
+  changed_when: true

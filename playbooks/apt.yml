@@ -1,0 +1,4 @@
+- name: Apt update and installation
+  hosts: all
+  roles:
+    - apt

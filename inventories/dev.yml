@@ -1,6 +1,0 @@
-# Group `all` is even pre-defined
-# by ansible
-all:
-  hosts:
-    # Docker test host
-    managed:

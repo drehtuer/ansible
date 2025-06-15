@@ -1,6 +1,0 @@
-- name: Install base packages
-  ansible.builtin.apt:
-    autoclean: yes
-    autoremove: yes
-    install_recommends: false
-    name: "{{ apt.packages }}"

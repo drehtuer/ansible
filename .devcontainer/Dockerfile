@@ -1,11 +1,13 @@
+# syntax=docker/dockerfile:1
 # https://docs.docker.com/reference/dockerfile/
 FROM  ubuntu:24.04
 
-LABEL name="Dev environment" \
+LABEL name="Ansible controller" \
     description="Control node running Ubuntu 24.04" \
     version="1.10"
 
 ARG   DEBIAN_FRONTEND=noninteractive
+ARG   ARG_USER
 
 ENV   LANG=en_US.utf8
 
@@ -14,10 +16,7 @@ RUN   \
     # No need to delete these folders later
     --mount=type=tmpfs,target=/var/lib/apt/lists \
     --mount=type=tmpfs,target=/var/cache/apt \
-    # Secrets, e.g. passwords
-    --mount=type=secret,id=username,required \
-    --mount=type=secret,id=password,required \
-    --mount=type=secret,id=docker-gid,required \
+    \
     apt-get update \
     && apt-get upgrade \
     --yes \
@@ -33,21 +32,28 @@ RUN   \
     # our default shell should be
     # available
     bash \
-    # Access docker on host
-    docker.io \
+    bash-completion \
     # git within devcontainer
     git \
-    # locale support
+    # locales support
     locales \
     # Python support
     python3.12 \
     python-is-python3 \
     # Invoke to organize cmd commands
     python3-invoke \
-    # Ansible login via password (-k)
-    sshpass \
-    # user may become root
+    # User may become root
     sudo \
+    # Editor
+    neovim \
+    luarocks \
+    # Network
+    ca-certificates \
+    curl \
+    iputils-ping \
+    ssh \
+    sshpass \
+    wget \
     # Generate en_US.UTF-8 locales
     && localedef \
     --inputfile=en_US \
@@ -60,22 +66,25 @@ RUN   \
     && useradd \
     --create-home \
     --user-group \
-    # user should have docker access (in container).
-    # docker.socket may have a different gid.
-    --groups sudo,docker \
     --shell /usr/bin/bash \
-    --password $(cat /run/secrets/password) \
-    $(cat /run/secrets/username) \
-    # Add group to access docker.socket.
-    && groupadd \
-    # Fail silently if GID already exists
-    --force \
-    # Allow alias-group if GID already
-    # exists
-    --non-unique \
-    --gid $(cat /run/secrets/docker-gid) \
-    --users $(cat /run/secrets/username) \
-    docker_host
+    ${ARG_USER} \
+    && inv \
+    --print-completion-script=bash \
+    > /etc/bash_completion.d/invoke
+
+COPY \
+    --chmod=644 \
+    ansible-galaxy.yml \
+    /ansible-galaxy.yml
+
+RUN \
+    ansible-galaxy \
+    install \
+    --role-file \
+    /ansible-galaxy.yml
+
+
+USER ${ARG_USER}
 
 # Can't set default user here, USER takes
 # only a string, but our user name is stored
