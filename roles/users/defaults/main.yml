@@ -1,12 +1,13 @@
 # Override with own variables
 users:
-  # Default user root
-  - name: "root"
-    group: "root"
-    shell: "/usr/bin/sh"
-    groups: ""
-    create_home: true
-    password: "*"
-authorized_keys:
-  - name: "root"
-    public_key: ""
+  users:
+    # Default user root
+    - name: "root"
+      group: "root"
+      shell: "/usr/bin/sh"
+      groups: ""
+      create_home: true
+      password: "*"
+  authorized_keys:
+    - name: "root"
+      public_key: ""

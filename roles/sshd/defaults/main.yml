@@ -1,0 +1,7 @@
+hostname: localhost
+sshd:
+  host_keys:
+    - name: ed25519
+      sha256: 0
+    - name: rsa
+      sha256: 0

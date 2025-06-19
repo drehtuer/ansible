@@ -1,0 +1,4 @@
+- name: Time settings
+  hosts: all
+  roles:
+    - time

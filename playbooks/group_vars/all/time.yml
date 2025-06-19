@@ -1,0 +1,7 @@
+time:
+  ntp:
+    server:
+      - ntp1.hetzner.de
+      - ntp2.hetzner.de
+      - ntp3.hetzner.de
+  timezone: Europe/Berlin

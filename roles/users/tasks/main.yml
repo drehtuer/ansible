@@ -7,9 +7,13 @@
     create_home: "{{ item.create_home }}"
     password: "{{ item.password }}"
     append: true
-  loop: "{{ users }}"
+  loop: "{{ users.users }}"
+  loop_control:
+    label: "{{ item.name }}"
 - name: Add authorized keys
   ansible.posix.authorized_key:
     user: "{{ item.name }}"
     key: "{{ item.public_key }}"
-  loop: "{{ authorized_keys }}"
+  loop: "{{ users.authorized_keys }}"
+  loop_control:
+    label: "{{ item.name }}"

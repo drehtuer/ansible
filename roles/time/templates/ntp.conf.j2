@@ -8,7 +8,7 @@ restrict    127.0.0.1
 restrict -6 ::1
 
 # NTP server
-{% for server in ntp.server %}
+{% for server in time.ntp.server %}
 server      {{ server }} iburst
 restrict    {{ server }} nomodify notrap nopeer noquery
 restrict -6 {{ server }} nomodify notrap nopeer noquery

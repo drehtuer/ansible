@@ -17,3 +17,9 @@
     mode: "0644"
   notify:
     - Restart ntpd
+- name: Set timezone
+  community.general.timezone:
+    hwclock: "UTC"
+    name: "{{ time.timezone }}"
+  notify:
+    - Restart crond

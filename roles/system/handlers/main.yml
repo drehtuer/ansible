@@ -6,9 +6,9 @@
   ansible.builtin.debconf:
     name: locales
     question: locales/default_environment_locale
-    value: "{{ locales.locale }}"
+    value: "{{ system.locales.locale }}"
     vtype: select
 - name: Set LANG
   ansible.builtin.command:
-    cmd: "localectl set-locale LANG={{ locales.locale }} LC_TIME={{ locales.locale_alt }}"
+    cmd: "localectl set-locale LANG={{ system.locales.locale }} LC_TIME={{ system.locales.locale_time }}"
   changed_when: true

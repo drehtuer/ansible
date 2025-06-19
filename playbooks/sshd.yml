@@ -1,0 +1,4 @@
+- name: SSHd setup
+  hosts: all
+  roles:
+    - sshd

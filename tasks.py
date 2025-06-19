@@ -123,7 +123,7 @@ def ping(
   hosts: str = HOSTS_ALL,
   remote_user: str = None,
   ask_pass: bool = False,
-  ask_become_pass: bool = True,
+  ask_become_pass: bool = False,
 ) -> None:
   """
   Ping host(s) via ansible.
@@ -148,7 +148,7 @@ def run_playbook(
   hosts: str = HOSTS_ALL,
   remote_user: str = None,
   ask_pass: bool = False,
-  ask_become_pass: bool = True,
+  ask_become_pass: bool = False,
   verbose: bool = False,
 ) -> None:
   """

@@ -9,3 +9,7 @@
   ansible.builtin.command:
     cmd: hwclock --systohc
   changed_when: true
+- name: Restart crond
+  ansible.builtin.systemd_service:
+    name: crond
+    state: restarted

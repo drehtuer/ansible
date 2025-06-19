@@ -1,0 +1,4 @@
+- name: Cron setup
+  hosts: all
+  roles:
+    - cron

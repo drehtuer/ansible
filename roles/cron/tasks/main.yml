@@ -1,0 +1,10 @@
+- name: Install cron
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - cron
+- name: Systemd enable cron
+  ansible.builtin.systemd_service:
+    name: cron
+    state: started
+    enabled: true

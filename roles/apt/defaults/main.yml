@@ -4,3 +4,4 @@ apt:
     # Python3 should always be installed
     # on managed hosts when using ansible
     - python3
+    - openssh-server
