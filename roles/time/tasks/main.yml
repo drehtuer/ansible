@@ -2,7 +2,7 @@
   ansible.builtin.apt:
     install_recommends: false
     name:
-      # ntpd
+      - cron
       - ntpsec
       # hwclock
       - util-linux-extra
