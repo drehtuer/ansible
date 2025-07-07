@@ -1,0 +1,8 @@
+firewall:
+  rules:
+    tcp:
+      - port: 22
+        comment: "SSH"
+    udp:
+      - port: 53
+        comment: "DNS"

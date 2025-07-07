@@ -1,0 +1,36 @@
+- name: Install iptables
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - iptables
+      - iptables-persistent
+- name: Config for iptables (v4)
+  ansible.builtin.template:
+    src: templates/iptables.rules.j2
+    dest: /etc/iptables/rules.v4
+    owner: root
+    group: root
+    mode: "0600"
+  notify:
+    - Reload iptables
+    - Reload docker
+- name: Config for iptables (v6)
+  ansible.builtin.template:
+    src: templates/ip6tables.rules.j2
+    dest: /etc/iptables/rules.v6
+    owner: root
+    group: root
+    mode: "0600"
+  notify:
+    - Reload ip6tables
+    - Reload docker
+- name: Ensure iptables service is enabled and running
+  ansible.builtin.systemd:
+    name: netfilter-persistent
+    enabled: true
+    state: started
+- name: Ensure ip6tables service is enabled and running
+  ansible.builtin.systemd:
+    name: netfilter-persistent
+    enabled: true
+    state: started

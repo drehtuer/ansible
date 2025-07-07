@@ -1,0 +1,59 @@
+*filter
+
+# Drop by default
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+
+# Outgoing traffic is allowed
+:OUTPUT ACCEPT [0:0]
+
+# Protocol chains
+:TCP - [0:0]
+:UDP - [0:0]
+
+# Allow established and related connections
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# Allow loopback interface
+-A INPUT -i lo -j ACCEPT
+
+# Invalid states
+-A INPUT -p tcp -m conntrack --ctstate INVALID -j DROP
+
+# ICMP
+-A INPUT -p ipv6-icmp --icmpv6-type packet-too-big -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type time-exceeded -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type parameter-problem -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type echo-request -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type router-solicitation -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type router-advertisement -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type neighbor-solicitation -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type neighbor-advertisement -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type redirect -j ACCEPT
+
+# Forward to chains
+-A INPUT -p tcp --tcp-flags FIN,SYN,RST,ACK SYN -m conntrack --ctstate NEW -j TCP
+-A INPUT -p udp -m conntrack --ctstate NEW -j UDP
+
+# Reject all other traffic
+-A INPUT -p tcp -j REJECT --reject-with tcp-reset
+-A INPUT -p udp -j REJECT --reject-with icmp6-port-unreachable
+-A INPUT -j REJECT --reject-with icmp6-adm-prohibited
+
+# TCP rules
+# Rate limiting SSH https://www.ssh-audit.com/hardening_guides.html#ubuntu_24_04_lts
+-A TCP -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set
+-A TCP -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 10 --hitcount 10 -j DROP
+
+{% for tcp in firewall.rules.tcp %}
+-A TCP -p tcp --dport {{ tcp.port }} -m state --state NEW -j ACCEPT -m comment --comment "{{ tcp.comment }}"
+{% endfor %}
+
+# UDP rules
+{% if firewall.rules.udp is defined %}
+{% for udp in firewall.rules.udp %}
+-A UDP -p udp --dport {{ udp.port }} -m state --state NEW -j ACCEPT -m comment --comment "{{ udp.comment }}"
+{% endfor %}
+{% endif %}
+
+COMMIT
