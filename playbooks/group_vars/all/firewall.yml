@@ -7,6 +7,8 @@ firewall:
         comment: "HTTP"
       - port: 443
         comment: "HTTPS"
+      - port: 993
+        comment: "IMAPS"
     udp:
       - port: 53
         comment: "DNS"

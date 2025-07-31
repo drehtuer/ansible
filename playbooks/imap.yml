@@ -1,0 +1,4 @@
+- name: IMAP server
+  hosts: all
+  roles:
+    - imap

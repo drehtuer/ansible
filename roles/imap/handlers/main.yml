@@ -1,0 +1,11 @@
+- name: Restart dovecot
+  ansible.builtin.systemd:
+    name: dovecot
+    daemon-reload: true
+    state: restarted
+    enabled: true
+- name: Reload dovecot
+  ansible.builtin.systemd:
+    name: dovecot
+    state: reloaded
+    enabled: true

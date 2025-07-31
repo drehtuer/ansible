@@ -1,0 +1,18 @@
+- name: Install IMAP (dovecot)
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - dovecot-core
+      - dovecot-imapd
+      - dovecot-antispam
+  notify:
+    - Restart dovecot
+- name: Configure dovecot
+  ansible.builtin.copy:
+    src: files/dovecot.conf
+    dest: /etc/dovecot/dovecot.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload dovecot
