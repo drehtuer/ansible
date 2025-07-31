@@ -1,0 +1,12 @@
+firewall:
+  rules:
+    tcp:
+      - port: 22
+        comment: "SSH"
+      - port: 80
+        comment: "HTTP"
+      - port: 443
+        comment: "HTTPS"
+    udp:
+      - port: 53
+        comment: "DNS"

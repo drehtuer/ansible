@@ -1,0 +1,112 @@
+- name: Install nginx, letsencrypt, php-fpm
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - nginx
+      - letsencrypt
+      - php-fpm
+  notify:
+    - Restart nginx
+    - Restart certbot
+    - Restart php-fpm
+- name: Create directories for nginx configuration
+  ansible.builtin.file:
+    path: /etc/nginx/conf-server
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Create directories for nginx sites-available and sites-enabled
+  ansible.builtin.file:
+    path: /etc/sites-available
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Create directories for nginx sites-enabled
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Remove default nginx configuration
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+- name: Remove default nginx configuration
+  ansible.builtin.file:
+    path: /etc/nginx/conf.d/default.conf
+    state: absent
+- name: Shared security configuration for nginx
+  ansible.builtin.copy:
+    src: files/security.conf
+    dest: /etc/nginx/conf-server/security.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Shared general configuration for nginx
+  ansible.builtin.copy:
+    src: files/general.conf
+    dest: /etc/nginx/conf-server/general.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Let's Encrypt configuration for nginx
+  ansible.builtin.copy:
+    src: files/letsencrypt.conf
+    dest: /etc/nginx/conf-server/letsencrypt.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+    - Restart certbot
+- name: PHP-FPM configuration for nginx
+  ansible.builtin.copy:
+    src: files/php-fpm.conf
+    dest: /etc/nginx/conf-server/php-fpm.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+    - Restart php-fpm
+- name: Let's Encrypt configuration for certbot
+  ansible.builtin.copy:
+    src: files/letsencrypt_cli.ini
+    dest: /etc/letsencrypt/cli.ini
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload certbot
+- name: Root server for nginx
+  ansible.builtin.template:
+    src: templates/root.conf.j2
+    dest: /etc/sites-available/root.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Create symlink for nginx sites-enabled
+  ansible.builtin.file:
+    src: /etc/sites-available/root.conf
+    dest: /etc/nginx/sites-enabled/root.conf
+    state: link
+  notify:
+    - Reload nginx
+- name: Configuration for nginx
+  ansible.builtin.copy:
+    src: files/nginx.conf
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx

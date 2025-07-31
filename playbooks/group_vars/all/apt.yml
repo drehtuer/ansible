@@ -3,9 +3,11 @@ apt:
     - aptitude
     - bash
     - bash-completion
+    - btop
     - ca-certificates
     - curl
     - git
+    - htop
     - less
     - luarocks
     - iputils-ping

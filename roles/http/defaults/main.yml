@@ -1,0 +1,5 @@
+hostname_fqdn: localhost
+http:
+  root: /var/www/html
+  port_http: 80
+  port_https: 443

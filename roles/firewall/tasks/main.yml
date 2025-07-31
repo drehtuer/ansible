@@ -22,14 +22,9 @@
     group: root
     mode: "0600"
   notify:
-    - Reload ip6tables
+    - Reload iptables
     - Reload docker
-- name: Ensure iptables service is enabled and running
-  ansible.builtin.systemd:
-    name: netfilter-persistent
-    enabled: true
-    state: started
-- name: Ensure ip6tables service is enabled and running
+- name: Ensure iptables (v4|v6) service is enabled and running
   ansible.builtin.systemd:
     name: netfilter-persistent
     enabled: true
