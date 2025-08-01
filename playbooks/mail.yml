@@ -1,0 +1,4 @@
+- name: Mail server
+  hosts: all
+  roles:
+    - mail
