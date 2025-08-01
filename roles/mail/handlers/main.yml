@@ -1,0 +1,31 @@
+- name: Restart postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: restarted
+    enabled: true
+- name: Reload postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: reloaded
+    enabled: true
+- name: Compile mail aliases
+  ansible.builtin.command: newaliases
+  args:
+    creates: /etc/aliases.db
+  notify:
+    - Reload postfix
+- name: Restart rspamd
+  ansible.builtin.systemd:
+    name: rspamd
+    state: restarted
+    enabled: true
+- name: Reload rspamd
+  ansible.builtin.systemd:
+    name: rspamd
+    state: reloaded
+    enabled: true
+- name: Reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+    enabled: true

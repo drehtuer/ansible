@@ -3,10 +3,14 @@ firewall:
     tcp:
       - port: 22
         comment: "SSH"
+      - port: 25
+        comment: "SMTP(s)"
       - port: 80
         comment: "HTTP"
       - port: 443
         comment: "HTTPS"
+      - port: 587
+        comment: "SMTP(s) Submission"
       - port: 993
         comment: "IMAPS"
     udp:

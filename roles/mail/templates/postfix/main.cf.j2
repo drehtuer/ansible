@@ -1,0 +1,52 @@
+mydomain = {{ hostname_fqdn }}
+myhostname = {{ hostname_fqdn }}
+myorigin = $myhostname
+inet_interfaces = all
+inet_protocols = all
+
+mynetworks = 127.0.0.1/8 [::1]/128
+
+# SMTP defaults
+smtpd_recipient_restrictions = 
+    permit_sasl_authenticated,
+    permit_mynetworks,
+    reject_unauth_destination,
+    check_policy_service unix:private/policy-spf
+
+smtpd_relay_restrictions = 
+    permit_sasl_authenticated,
+    permit_mynetworks,
+    reject_unauth_destination
+
+# SSL
+smtpd_tls_cert_file = {{ mail.conf.ssl.cert }}
+smtpd_tls_key_file = {{ mail.conf.ssl.key }}
+smtpd_use_tls = yes
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
+smtpd_tls_security_level = encrypt
+
+smtpd_tls_received_header = yes
+smtpd_tls_log_level = 1
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+
+smtpd_banner = $myhostname ESMTP
+
+# LMTP -> dovecot
+virtual_transport = lmtp:unix:private/dovecot-lmtp
+local_transport = error:local devivery disabled
+
+mydestination = localhost.$mydomain, localhost
+
+# Logging
+maillog_file = /var/log/mail.log
+
+# Mail aliases
+alias_maps = hash:/etc/aliases
+
+# RSpamd
+smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}
+non_smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}
+milter_default_action = accept
+milter_protocol = 6

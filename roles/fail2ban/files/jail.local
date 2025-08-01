@@ -1,0 +1,20 @@
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 5
+backend = systemd
+
+[sshd]
+enabled = true
+port = ssh
+logpath = /var/log/auth.log
+
+[postfix]
+enabled = true
+port = smtp,submission
+mode = normal
+logpath = /var/log/mail.log
+
+[dovecot]
+enabled = true
+port = imaps

@@ -4,13 +4,16 @@ listen = *, ::
 
 # Auth
 disable_plaintext_auth = yes
-auth_mechannisms = plain
+auth_mechanisms = plain
 passdb {
   driver = pam
 }
 userdb {
   driver = passwd
 }
+
+# Plugins
+mail_plugins = $mail_plugins sieve
 
 # Logging
 log_path = syslog
@@ -26,6 +29,7 @@ namespace inbox {
   subscriptions = yes
 }
 mail_privileged_group = mail
+mail_access_groups = mail
 
 # Master
 service imap-login {
@@ -36,16 +40,20 @@ service imap-login {
 }
 
 service lmtp {
-  unix_listener lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
     mode = 0600
     user = postfix
     group = postfix
   }
 }
 
+protocol lmtp {
+  postmaster_address = postmaster@{{ hostname_fqdn }}
+}
+
 service auth {
   unix_listener /var/spool/postfix/private/auth {
-    mode = 0600
+    mode = 0660
     user = postfix
     group = postfix
   }
@@ -53,10 +61,10 @@ service auth {
 
 # SSL
 ssl = yes
-ssl_cert = </etc/ssl/certs/dovecot.pem
-ssl_key = </etc/ssl/private/dovecot.key
-# ssl_ca = </etc/ssl/certs/ca-certificates.crt
-ssh_dh = </usr/share/dovecot/dh.pem
+ssl_cert = <{{ imap.conf.ssl.cert }}
+ssl_key = <{{ imap.conf.ssl.key }}
+# ssl_ca = <{{ imap.conf.ssl.ca }}
+ssh_dh = <{{ imap.conf.ssl.dh }}
 ssl_min_protocol = TLSv1.2
 ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES:!RC4:!DSS:!SHA1:!SHA256:!SHA384:!CAMELLIA128:!CAMELLIA256
 ssl_prefer_server_ciphers = yes
@@ -72,12 +80,6 @@ namespace inbox {
   mailbox "Sent Messages" {
     special_use = \Sent
   }
-  mailbox Flagged {
-    special_use = \Flagged
-  }
-  mailbox Junk {
-    special_use = \Junk
-  }
   mailbox Archive {
     special_use = \Archive
   }
@@ -89,7 +91,20 @@ namespace inbox {
   }
 }
 
-# Plugins
+# Sieve
 plugin {
-  # Antispam
+  sieve_plugins = sieve_extprograms
+  sieve_extensions = +vnd.dovecot.pipe
+  sieve_pipe_bin_dir = /etc/dovecot/sieve-pipe
+}
+
+plugin {
+  imapsieve_mailbox1_name = Spam
+  imapsieve_mailbox1_causes = COPY
+  imapsieve_mailbox1_before = file:/etc/dovecot/sieve/learn-spam.sieve
+  
+  imapsieve_mailbox2_name = *
+  imapsieve_mailbox2_from = Spam
+  imapsieve_mailbox2_causes = COPY
+  imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-ham.sieve
 }

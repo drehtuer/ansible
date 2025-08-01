@@ -1,0 +1,4 @@
+- name: Fail2Ban
+  hosts: all
+  roles:
+    - fail2ban

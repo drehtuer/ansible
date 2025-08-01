@@ -3,6 +3,7 @@
     install_recommends: false
     name:
       - nginx
+      - apache2-utils
       - letsencrypt
       - php-fpm
   notify:
@@ -26,6 +27,20 @@
 - name: Create directories for nginx sites-enabled
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Create directories for nginx locations-available
+  ansible.builtin.file:
+    path: /etc/nginx/locations-available
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Create directories for nginx locations-enabled
+  ansible.builtin.file:
+    path: /etc/nginx/locations-enabled
     state: directory
     owner: root
     group: root

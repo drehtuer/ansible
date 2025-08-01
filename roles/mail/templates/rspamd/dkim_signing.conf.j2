@@ -1,0 +1,11 @@
+enabled = true;
+sign_authnenticated = true;
+selector = mail;
+path = "/var/lib/rspamd/dkim/$domain.$selector.key";
+
+domain {
+  {{ hostname_fqdn }} {
+    selector = mail;
+    path = "/var/lib/rspamd/dkim/{{ hostname_fqdn }}.mail.key";
+  }
+}

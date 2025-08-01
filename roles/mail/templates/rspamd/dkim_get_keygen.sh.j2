@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+RSPAM_DKIM_DIR="/var/lib/rspamd/dkim"
+PRIVATE_KEY="${RSPAM_DKIM_DIR}/{{ hostname_fqdn }}.dkim.key"
+PUBLIC_KEY="${RSPAM_DKIM_DIR}/{{ hostname_fqdn }}.dkim.pub"
+
+if [ -e "${PRIVATE_KEY}" ]; then
+  echo "Private key already exists: ${PRIVATE_KEY}"
+  exit 0
+fi
+
+mkdir -p /var/lib/rspamd/dkim
+rspamadm dkim_keygen \
+  --domain {{ hostname_fqdn }} \
+  --selector mail \
+  --private-key "${PRIVATE_KEY}" \
+  > "${PUBLIC_KEY}"
+
+chown -R _rspamd:_rspamd "${RSPAM_DKIM_DIR}"
+chmod 0600 "${PRIVATE_KEY}"

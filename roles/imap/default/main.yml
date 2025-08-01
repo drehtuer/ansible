@@ -1,0 +1,9 @@
+imap:
+  conf:
+    ssl:
+      cert: /etc/ssl/certs/dovecot.pem
+      key: /etc/ssl/private/dovecot.key
+      ca: /etc/ssl/certs/ca-certificates.crt
+      dh: /usr/share/dovecot/dh.pem
+  rspamd:
+    http_port: 11334
