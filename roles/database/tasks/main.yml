@@ -1,0 +1,23 @@
+- name: Install database (mariaDB)
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - mariadb-server
+      - mariadb-client
+      - python3-mysqldb
+  notify:
+    - Restart mariadb
+- name: Set root password
+  community.mysql.mysql_user:
+    name: "{{ database.root.user }}"
+    host: localhost
+    password: "{{ database.root.password }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    check_implicit_admin: true
+    column_case_sensitive: true
+    priv: "*.*:ALL,GRANT"
+    state: present
+  notify:
+    - Remove anonymous users
+    - Disable remote root login
+    - Remove test database

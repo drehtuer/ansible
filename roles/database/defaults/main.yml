@@ -1,0 +1,4 @@
+database:
+  root:
+    user: root
+    password: ""

@@ -1,0 +1,33 @@
+- name: Restart mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: restarted
+    enabled: true
+- name: Reload mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: reloaded
+    enabled: true
+- name: Remove anonymous users
+  community.mysql.mysql_user:
+    name: ""
+    host_all: true
+    state: absent
+    login_user: "{{ database.root.user }}"
+    login_password: "{{ database.root.password }}"
+- name: Disable remote root login
+  community.mysql.mysql_user:
+    name: "{{ database.root.user }}"
+    host: "{{ item }}"
+    state: absent
+    login_user: "{{ database.root.user }}"
+    login_password: "{{ database.root.password }}"
+  loop:
+    - "%"
+    - "::1"
+- name: Remove test database
+  community.mysql.mysql_db:
+    name: test
+    state: absent
+    login_user: "{{ database.root.user }}"
+    login_password: "{{ database.root.password }}"
