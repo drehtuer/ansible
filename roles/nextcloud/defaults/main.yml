@@ -1,0 +1,9 @@
+nextcloud:
+  mysql:
+    nextcloud:
+      database: nextcloud
+      user: nextcloud
+      password: ""
+    root:
+      user: root
+      password: ""

@@ -1,0 +1,64 @@
+- name: Install Nextcloud and dependencies
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - php-mysql
+      - php-zip
+      - php-dom
+      - php-mbstring
+      - php-curl
+      - php-gd
+      - php-bcmath
+      - php-imagick
+      - php-intl
+      - php-gmp
+      - unzip
+      - curl
+- name: Create Nextcloud database
+  community.mysql.mysql_db:
+    name: "{{ nextcloud.mysql.nextcloud.database }}"
+    state: present
+    login_user: "{{ nextcloud.mysql.root.user }}"
+    login_password: "{{ nextcloud.mysql.root.password }}"
+- name: Create Nextcloud database user
+  community.mysql.mysql_user:
+    name: "{{ nextcloud.mysql.nextcloud.user }}"
+    password: "{{ nextcloud.mysql.nextcloud.password }}"
+    host: localhost
+    column_case_sensitive: false
+    priv: "{{ nextcloud.mysql.nextcloud.database }}.*:ALL"
+    state: present
+    login_user: "{{ nextcloud.mysql.root.user }}"
+    login_password: "{{ nextcloud.mysql.root.password }}"
+- name: Nextcloud folder
+  ansible.builtin.file:
+    path: /var/www/nextcloud
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  changed_when: true
+  notify:
+    - Download Nextcloud
+    - Extract Nextcloud
+    - Set ownership for Nextcloud files
+    - Add cron job for Nextcloud
+- name: Nextcloud nginx location
+  ansible.builtin.copy:
+    src: files/nextcloud.conf
+    dest: /etc/nginx/locations-available/nextcloud.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Enable Nextcloud nginx location
+  ansible.builtin.file:
+    src: /etc/nginx/locations-available/nextcloud.conf
+    dest: /etc/nginx/locations-enabled/nextcloud.conf
+    state: link
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx

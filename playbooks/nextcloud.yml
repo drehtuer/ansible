@@ -1,0 +1,4 @@
+- name: Nextcloud server
+  hosts: all
+  roles:
+    - nextcloud
