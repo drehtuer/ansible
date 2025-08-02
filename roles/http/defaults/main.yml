@@ -3,3 +3,6 @@ http:
   root: /var/www/html
   port_http: 80
   port_https: 443
+  letsencrypt:
+    email: postmaster@localhost
+    webroot_path: /var/www/certbot

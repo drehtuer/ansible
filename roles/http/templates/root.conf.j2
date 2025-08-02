@@ -1,17 +1,15 @@
 server {
-    #listen                  {{ http.port_https }} ssl http2;
-    #listen                  [::]:{{ http.port_https }} ssl http2;
-    listen                  {{ http.port_http }};
-    listen                  [::]:{{ http.port_http }};
+    listen                  {{ http.port_https }} ssl http2;
+    listen                  [::]:{{ http.port_https }} ssl http2;
     server_name             {{ hostname_fqdn }} www.{{ hostname_fqdn }};
     set                     $base /var/www/html;
     root                    $base;
     index                   index.html index.php;
 
     # SSL
-    #ssl_certificate         /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem;
-    #ssl_certificate_key     /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem;
-    #ssl_trusted_certificate /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem;
+    ssl_certificate         /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem;
+    ssl_certificate_key     /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem;
 
     # security
     include                 conf-server/security.conf;
@@ -38,13 +36,12 @@ server {
 }
 
 # HTTP -> HTTPS redirect
-#server {
-#    listen      {{ http.port_http }};
-#    listen      [::]:{{ http.port_http }};
-#    server_name .{{ hostname_fqdn }} www.{{ hostname_fqdn }};
-#    include     conf-server/letsencrypt.conf;
+server {
+    listen      {{ http.port_http }};
+    listen      [::]:{{ http.port_http }};
+    server_name .{{ hostname_fqdn }} www.{{ hostname_fqdn }};
 
-#    location / {
-#        return 301 https://{{ hostname_fqdn }}$request_uri:{{ http.port_https }};
-#    }
-#}
+    location / {
+        return 301 https://{{ hostname_fqdn }}$request_uri:{{ http.port_https }};
+    }
+}

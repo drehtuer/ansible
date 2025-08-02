@@ -20,9 +20,9 @@
     name: certbot
     state: reloaded
     enabled: true
-- name: Restart php-fpm
+- name: Restart php8.3-fpm
   ansible.builtin.systemd_service:
-    name: php-fpm
+    name: php8.3-fpm
     daemon_reload: true
     state: restarted
     enabled: true

@@ -20,7 +20,7 @@ all:
         3962613863653364350a363461363832636632383865346333303563386461623861616361343865
         3233
     carcosa:
-      ansible_host: 88.198.12.17
+      ansible_host: carcosa
       hostname: carcosa
       hostname_fqdn: carcosa.drehtuer.net
       ip_v4: 88.198.12.17

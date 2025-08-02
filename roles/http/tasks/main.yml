@@ -45,6 +45,12 @@
     owner: root
     group: root
     mode: "0755"
+- name: Create DH parameters for nginx (takes a while)
+  ansible.builtin.command:
+    cmd: >
+      openssl dhparam -out /etc/nginx/dhparam.pem 4096
+  args:
+    creates: /etc/nginx/dhparam.pem
 - name: Remove default nginx configuration
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled/default
@@ -72,15 +78,36 @@
   notify:
     - Reload nginx
 - name: Let's Encrypt configuration for nginx
-  ansible.builtin.copy:
-    src: files/letsencrypt.conf
-    dest: /etc/nginx/conf-server/letsencrypt.conf
+  ansible.builtin.template:
+    src: templates/letsencrypt.conf.j2
+    dest: /etc/nginx/locations-available/letsencrypt.conf
     owner: root
     group: root
     mode: "0644"
   notify:
     - Reload nginx
-    - Restart certbot
+- name: Create symlink for nginx locations-enabled
+  ansible.builtin.file:
+    src: /etc/nginx/locations-available/letsencrypt.conf
+    dest: /etc/nginx/locations-enabled/letsencrypt.conf
+    state: link
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Register certbot
+  ansible.builtin.command:
+    cmd: >
+      certbot certonly
+      -w {{ http.letsencrypt.webroot_path }}
+      -d {{ hostname_fqdn }}
+      -d {{ hostname_fqdn.split('.')[1:] | join('.') }}
+      --non-interactive
+      --agree-tos
+      --email {{ http.letsencrypt.email }}
+  args:
+    creates: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
 - name: PHP-FPM configuration for nginx
   ansible.builtin.copy:
     src: files/php-fpm.conf
@@ -91,6 +118,13 @@
   notify:
     - Reload nginx
     - Restart php-fpm
+- name: Create directories for certbot
+  ansible.builtin.file:
+    path: /var/www/certbot
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
 - name: Let's Encrypt configuration for certbot
   ansible.builtin.copy:
     src: files/letsencrypt_cli.ini
@@ -100,6 +134,7 @@
     mode: "0644"
   notify:
     - Reload certbot
+    - Run certbot
 - name: Root server for nginx
   ansible.builtin.template:
     src: templates/root.conf.j2
