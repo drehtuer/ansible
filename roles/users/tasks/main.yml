@@ -1,3 +1,9 @@
+- name: Add groups
+  ansible.builtin.group:
+    name: "{{ item.group }}"
+  loop: "{{ users.users }}"
+  loop_control:
+    label: "{{ item.group }}"
 - name: Add users
   ansible.builtin.user:
     name: "{{ item.name }}"

@@ -56,6 +56,17 @@ def check_ask_pass(
     cmd.append(ASK_PASS)
 
 
+def check_host(
+  cmd: str,
+  hosts: str,
+) -> None:
+  """
+  If not empty, append hosts to command.
+  """
+  if hosts and hosts != HOSTS_ALL:
+    cmd.append(f"--limit '{hosts}'")
+
+
 def check_ask_become_pass(
   cmd: list[str],
   ask_become_pass: bool,
@@ -163,6 +174,7 @@ def run_playbook(
   check_remote_user(cmd, remote_user)
   check_ask_pass(cmd, ask_pass)
   check_ask_become_pass(cmd, ask_become_pass)
+  check_host(cmd, hosts)
   check_verbose(cmd, verbose)
 
   ctx_run(ctx, cmd)

@@ -1,4 +1,7 @@
-#!/usr/bin/sh
+#!/usr/bin/env bash
+
+set -eo pipefail
+# set -x
 
 # https://www.ssh-audit.com/hardening_guides.html#ubuntu_24_04_lts
 
@@ -13,6 +16,7 @@ FILE_DIR="$(readlink -f "${SCRIPT_DIR}/../files")"
 HOSTNAME="${1}"
 KEY_ED25519="${KEY_DIR}/ssh_${HOSTNAME}_ed25519_key"
 KEY_RSA="${KEY_DIR}/ssh_${HOSTNAME}_rsa_key"
+MODULI_SCREENED="${KEY_DIR}/moduli"
 
 # ed25519
 if [ ! -e "${KEY_ED25519}" ]; then
@@ -27,10 +31,6 @@ if [ ! -e "${KEY_RSA}" ]; then
 fi
 ansible-vault encrypt "${KEY_RSA}" --output "${FILE_DIR}/$(basename ${KEY_RSA}).aes256" 1>/dev/null
 HASH_RSA=$(sha256sum "${KEY_RSA}" | cut -d ' ' -f1)
-
-# moduli
-ansible-vault encrypt "${MODULI_SCREEN}" --output "${FILE_DIR}/$(basename ).aes256" 1>/dev/null
-HASH_MODULI=$(sha256sum "${MODULI_SCREEN}" | cut -d ' ' -f1)
 
 # output
 echo "sshd:"
