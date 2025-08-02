@@ -17,7 +17,7 @@
     mode: '0755'
 - name: Copy rspam learn ham script
   ansible.builtin.template:
-    src: rspamd-learn-ham.sh.j2
+    src: templates/rspamd-learn-ham.sh.j2
     dest: /usr/local/bin/rspamd-learn-ham.sh
     owner: root
     group: root
@@ -26,7 +26,7 @@
     - Compile sieve scripts (ham)
 - name: Copy rspam learn spam script
   ansible.builtin.template:
-    src: rspamd-learn-spam.sh.j2
+    src: templates/rspamd-learn-spam.sh.j2
     dest: /usr/local/bin/rspamd-learn-spam.sh
     owner: root
     group: root
