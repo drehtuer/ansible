@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
+set -eo pipefail
+# set -x
+
 RSPAM_DKIM_DIR="/var/lib/rspamd/dkim"
-PRIVATE_KEY="${RSPAM_DKIM_DIR}/{{ hostname_fqdn }}.dkim.key"
-PUBLIC_KEY="${RSPAM_DKIM_DIR}/{{ hostname_fqdn }}.dkim.pub"
+DOMAIN="{{ hostname_fqdn.split('.')[1:] | join('.') }}"
+PRIVATE_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.dkim.key"
+PUBLIC_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.dkim.pub"
 
 if [ -e "${PRIVATE_KEY}" ]; then
   echo "Private key already exists: ${PRIVATE_KEY}"
@@ -11,9 +15,10 @@ fi
 
 mkdir -p /var/lib/rspamd/dkim
 rspamadm dkim_keygen \
-  --domain {{ hostname_fqdn }} \
+  --domain ${DOMAIN} \
   --selector mail \
-  --private-key "${PRIVATE_KEY}" \
+  --privkey "${PRIVATE_KEY}" \
+  --type ED25519 \
   > "${PUBLIC_KEY}"
 
 chown -R _rspamd:_rspamd "${RSPAM_DKIM_DIR}"

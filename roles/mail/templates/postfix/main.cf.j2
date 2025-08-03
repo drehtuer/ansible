@@ -1,4 +1,4 @@
-mydomain = {{ hostname_fqdn }}
+mydomain = {{ hostname_fqdn.split('.')[1:] | join('.') }}
 myhostname = {{ hostname_fqdn }}
 myorigin = $myhostname
 inet_interfaces = all
@@ -19,8 +19,8 @@ smtpd_relay_restrictions =
     reject_unauth_destination
 
 # SSL
-smtpd_tls_cert_file = {{ mail.conf.ssl.cert }}
-smtpd_tls_key_file = {{ mail.conf.ssl.key }}
+smtpd_tls_cert_file = {{ mail.ssl.cert }}
+smtpd_tls_key_file = {{ mail.ssl.key }}
 smtpd_use_tls = yes
 smtpd_tls_security_level = may
 smtpd_tls_auth_only = yes

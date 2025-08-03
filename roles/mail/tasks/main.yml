@@ -16,8 +16,8 @@
   notify:
     - Reload postfix
 - name: Configure postfix (master.cf)
-  ansible.builtin.template:
-    src: templates/postfix/master.cf
+  ansible.builtin.copy:
+    src: files/postfix/master.cf
     dest: /etc/postfix/master.cf
     owner: root
     group: root
@@ -43,12 +43,12 @@
 - name: Run DKIM script
   ansible.builtin.command: /usr/local/bin/dkim_keygen.sh
   args:
-    creates: /etc/rspamd/keys/{{ hostname_fqdn }}/{{ hostname_fqdn }}.dkim.key
+    creates: /etc/rspamd/keys/{{ hostname_fqdn.split('.')[1:] | join('.') }}/{{ hostname_fqdn.split('.')[1:] | join('.') }}.dkim.key
   notify:
     - Reload rspamd
 - name: Configure rspamd (worker-proxy.inc)
   ansible.builtin.template:
-    src: templates/rspamd/local.d/worker-proxy.inc.j2
+    src: templates/rspamd/worker-proxy.inc.j2
     dest: /etc/rspamd/local.d/worker-proxy.inc
     owner: root
     group: root
@@ -121,22 +121,22 @@
 - name: Add rspamd rproxy in nginx
   ansible.builtin.template:
     src: templates/nginx/rspamd.conf.j2
-    dest: /etc/nginx/sites-available/rspamd.conf
+    dest: /etc/nginx/locations-available/rspamd.conf
     owner: root
     group: root
     mode: "0644"
   notify:
     - Reload nginx
-- name: Check rspamd web ui htaccess
+- name: Check rspamd web ui htpasswd
   ansible.builtin.stat:
-    path: "/etc/nginx/locations-available/rspamd.htaccess"
+    path: "/etc/nginx/locations-available/rspamd.htpasswd"
     get_checksum: true
     checksum_algorithm: "sha256"
   register: rspamd_htaccess_checksum
 - name: Add htaccess for rspamd web ui
   ansible.builtin.copy:
-    src: files/nginx/rspamd.htaccess.aes256
-    dest: /etc/nginx/locations-available/rspamd.htaccess
+    src: files/nginx/rspamd.htpasswd.aes256
+    dest: /etc/nginx/locations-available/rspamd.htpasswd
     decrypt: true
     owner: root
     group: root
@@ -144,15 +144,15 @@
   when: rspamd_htaccess_checksum != mail.rspamd.htaccess_sha256
 - name: Enable rspamd htaccess in nginx
   ansible.builtin.file:
-    src: /etc/nginx/locations-available/rspamd.htaccess
-    dest: /etc/nginx/locations-enabled/rspamd.htaccess
+    src: /etc/nginx/locations-available/rspamd.htpasswd
+    dest: /etc/nginx/locations-enabled/rspamd.htpasswd
     state: link
   notify:
     - Reload nginx
 - name: Enable rspamd site in nginx
   ansible.builtin.file:
-    src: /etc/nginx/sites-available/rspamd.conf
-    dest: /etc/nginx/sites-enabled/rspamd.conf
+    src: /etc/nginx/locations-available/rspamd.conf
+    dest: /etc/nginx/locations-enabled/rspamd.conf
     state: link
   notify:
     - Reload nginx

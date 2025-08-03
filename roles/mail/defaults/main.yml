@@ -4,6 +4,10 @@ mail:
       address: "ubuntu"
     - name: root
       address: "ubuntu"
+  ssl:
+    cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
+    key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
+    ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
   rspamd:
     milter_port: 11332
     http_port: 11334
