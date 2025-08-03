@@ -5,8 +5,8 @@ set -eo pipefail
 
 RSPAM_DKIM_DIR="/var/lib/rspamd/dkim"
 DOMAIN="{{ hostname_fqdn.split('.')[1:] | join('.') }}"
-PRIVATE_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.dkim.key"
-PUBLIC_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.dkim.pub"
+PRIVATE_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.key"
+PUBLIC_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.pub"
 
 if [ -e "${PRIVATE_KEY}" ]; then
   echo "Private key already exists: ${PRIVATE_KEY}"

@@ -1,7 +1,19 @@
+upstream php-handler {
+    server unix:/run/php/php-fpm.sock;
+}
+
+# Set the `immutable` cache control options only for assets with a cache busting `v` argument
+map $arg_v $asset_immutable {
+    "" "";
+    default ", immutable";
+}
+
+
 server {
     listen                  {{ http.port_https }} ssl http2;
     listen                  [::]:{{ http.port_https }} ssl http2;
-    server_name             {{ hostname_fqdn }} www.{{ hostname_fqdn }};
+    set $domain             {{ hostname_fqdn.split('.')[1:] | join('.') }};
+    server_name             $domain www.$domain;
     set                     $base /var/www/html;
     root                    $base;
     index                   index.html index.php;
@@ -39,9 +51,10 @@ server {
 server {
     listen      {{ http.port_http }};
     listen      [::]:{{ http.port_http }};
-    server_name .{{ hostname_fqdn }} www.{{ hostname_fqdn }};
+    set $domain {{ hostname_fqdn.split('.')[1:] | join('.') }};
+    server_name $domain www.$domain;
 
     location / {
-        return 301 https://{{ hostname_fqdn }}$request_uri:{{ http.port_https }};
+        return 301 https://$domain$request_uri;
     }
 }

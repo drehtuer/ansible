@@ -43,7 +43,7 @@
 - name: Run DKIM script
   ansible.builtin.command: /usr/local/bin/dkim_keygen.sh
   args:
-    creates: /etc/rspamd/keys/{{ hostname_fqdn.split('.')[1:] | join('.') }}/{{ hostname_fqdn.split('.')[1:] | join('.') }}.dkim.key
+    creates: /var/lib/rspamd/dkim/{{ hostname_fqdn.split('.')[1:] | join('.') }}.mail.key
   notify:
     - Reload rspamd
 - name: Configure rspamd (worker-proxy.inc)

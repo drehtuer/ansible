@@ -13,6 +13,7 @@
       - php-intl
       - php-gmp
       - unzip
+      - bzip2
       - curl
 - name: Create Nextcloud database
   community.mysql.mysql_db:
@@ -37,7 +38,6 @@
     owner: www-data
     group: www-data
     mode: "0755"
-  changed_when: true
   notify:
     - Download Nextcloud
     - Extract Nextcloud

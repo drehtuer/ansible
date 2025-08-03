@@ -23,3 +23,8 @@
     minute: "*/5"
     user: www-data
     job: "/usr/bin/php -f /var/www/nextcloud/cron.php"
+- name: Reload nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+    enabled: true
