@@ -6,7 +6,7 @@ myorigin = $mydomain
 inet_interfaces = all
 inet_protocols = all
 
-mynetworks = 127.0.0.0/8, [::1]/128
+mynetworks = 127.0.0.0/8 [::1]/128
 
 # SMTP defaults
 smtpd_relay_restrictions = 
@@ -15,12 +15,13 @@ smtpd_relay_restrictions =
     reject_unauth_destination
 
 smtpd_recipient_restrictions = 
-    permit_sasl_authenticated,
     permit_mynetworks,
+    permit_sasl_authenticated,
     reject_unauth_destination
 
 smtpd_sender_restrictions =
     permit_mynetworks,
+    permit_sasl_authenticated,
     reject_authenticated_sender_login_mismatch,
     reject_unknown_sender_domain
 
@@ -58,7 +59,7 @@ maillog_file = /var/log/mail.log
 # Mail aliases
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
-virtual_alias_maps = hash:/etc/valias
+virtual_alias_maps = hash:/etc/valiases
 
 # RSpamd
 smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}
