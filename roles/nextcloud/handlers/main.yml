@@ -33,8 +33,3 @@
     name: php8.3-fpm
     state: reloaded
     enabled: true
-- name: Reload cron
-  ansible.builtin.systemd:
-    name: cron
-    state: reloaded
-    enabled: true

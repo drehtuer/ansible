@@ -15,6 +15,7 @@
       - unzip
       - bzip2
       - curl
+      - imagemagick
 - name: Create Nextcloud database
   community.mysql.mysql_db:
     name: "{{ nextcloud.mysql.nextcloud.database }}"
@@ -108,5 +109,14 @@
     minute: "*/15"
     job: "/usr/bin/php /var/www/nextcloud/cron.php"
     state: present
-  notify:
-    - Reload cron
+    cron_file: nextcloud_cron
+- name: Cron job to remove iCCP profiles
+  ansible.builtin.cron:
+    name: "Remove iCCP profiles from PNG files"
+    user: www-data
+    minute: "0"
+    hour: "3"
+    weekday: "0"
+    job: "/usr/bin/find /var/www/nextcloud -type f -name '*.png' -exec mogrify -strip {} +"
+    state: present
+    cron_file: nextcloud_iccp_cleanup
