@@ -4,6 +4,7 @@
     name:
       - dovecot-core
       - dovecot-imapd
+      - dovecot-lmtpd
       - dovecot-sieve
       - curl
   notify:

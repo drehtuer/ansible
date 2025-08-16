@@ -33,6 +33,15 @@
     mode: "0644"
   notify:
     - Compile mail aliases
+- name: Configure virtual mail aliases
+  ansible.builtin.template:
+    src: templates/postfix/valiases.j2
+    dest: /etc/valiases
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Compile virtual mail aliases
 - name: Copy DKIM key script
   ansible.builtin.template:
     src: templates/rspamd/dkim_keygen.sh.j2
@@ -43,7 +52,7 @@
 - name: Run DKIM script
   ansible.builtin.command: /usr/local/bin/dkim_keygen.sh
   args:
-    creates: /var/lib/rspamd/dkim/{{ hostname_fqdn.split('.')[1:] | join('.') }}.mail.key
+    creates: /var/lib/rspamd/dkim/{{ domain }}.mail.key
   notify:
     - Reload rspamd
 - name: Configure rspamd (worker-proxy.inc)

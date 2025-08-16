@@ -102,7 +102,7 @@
       certbot certonly
       -w {{ http.letsencrypt.webroot_path }}
       -d {{ hostname_fqdn }}
-      -d {{ hostname_fqdn.split('.')[1:] | join('.') }}
+      -d {{ domain }}
       --non-interactive
       --agree-tos
       --email {{ http.letsencrypt.email }}
@@ -155,6 +155,17 @@
   ansible.builtin.copy:
     src: files/nginx.conf
     dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Add mjs support for nginx
+  ansible.builtin.lineinfile:
+    path: /etc/nginx/mime.types
+    regexp: '^\s*text/javascript\s+mjs;'
+    line: '    text/javascript    mjs;'
+    insertafter: '\s*application/javascript\s+js;'
     owner: root
     group: root
     mode: "0644"

@@ -1,20 +1,51 @@
 [DEFAULT]
-bantime = 3600
-findtime = 600
+bantime = 1h
+findtime = 10m
 maxretry = 5
 backend = systemd
 
 [sshd]
 enabled = true
 port = ssh
+filter = sshd
 logpath = /var/log/auth.log
+maxretry = 5
+findtime = 10m
+bantime = 1h
 
 [postfix]
 enabled = true
 port = smtp,submission
 mode = normal
+filter = postfix
 logpath = /var/log/mail.log
+maxretry = 5
+findtime = 10m
+bantime = 1h
 
 [dovecot]
 enabled = true
 port = imaps
+filter = dovecot
+logpath = /var/log/dovecot.log
+maxretry = 5
+findtime = 10m
+bantime = 1h
+
+[nginx-http-auth]
+enabled = true
+filter = nginx-http-auth
+port = https
+logpath = /var/log/nginx/error.log
+maxretry = 5
+findtime = 10m
+bantime = 1h
+
+[nginx-404]
+enabled = true
+filter = nginx-404
+port = https
+logpath = /var/log/nginx/access.log
+maxretry = 20
+findtime = 10m
+bantime = 1h

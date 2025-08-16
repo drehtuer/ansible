@@ -4,7 +4,8 @@ listen = *, ::
 
 # Auth
 disable_plaintext_auth = yes
-auth_mechanisms = plain
+auth_mechanisms = plain login
+auth_username_format = %n
 passdb {
   driver = pam
 }
@@ -12,12 +13,8 @@ userdb {
   driver = passwd
 }
 
-# Plugins
-mail_plugins = $mail_plugins sieve
-
 # Logging
-log_path = syslog
-syslog_facility = mail
+log_path = /var/log/dovecot.log
 
 # Mailbox
 mail_location = maildir:~/.mail
@@ -48,7 +45,8 @@ service lmtp {
 }
 
 protocol lmtp {
-  postmaster_address = postmaster@{{ hostname_fqdn.split('.')[1:] | join('.') }}
+  postmaster_address = postmaster@{{ domain }}
+  mail_plugins = $mail_plugins sieve
 }
 
 service auth {
@@ -63,7 +61,7 @@ service auth {
 ssl = yes
 ssl_cert = <{{ imap.conf.ssl.cert }}
 ssl_key = <{{ imap.conf.ssl.key }}
-# ssl_ca = <{{ imap.conf.ssl.ca }}
+ssl_ca = <{{ imap.conf.ssl.ca }}
 ssl_dh = <{{ imap.conf.ssl.dh }}
 ssl_min_protocol = TLSv1.2
 ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES:!RC4:!DSS:!SHA1:!SHA256:!SHA384:!CAMELLIA128:!CAMELLIA256

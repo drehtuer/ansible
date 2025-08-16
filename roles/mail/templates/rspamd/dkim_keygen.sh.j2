@@ -4,7 +4,7 @@ set -eo pipefail
 # set -x
 
 RSPAM_DKIM_DIR="/var/lib/rspamd/dkim"
-DOMAIN="{{ hostname_fqdn.split('.')[1:] | join('.') }}"
+DOMAIN="{{ domain }}"
 PRIVATE_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.key"
 PUBLIC_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.pub"
 

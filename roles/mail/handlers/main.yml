@@ -11,7 +11,13 @@
 - name: Compile mail aliases
   ansible.builtin.command: newaliases
   args:
-    creates: /etc/aliases.db
+    creates: /always_run_newaliases
+  notify:
+    - Reload postfix
+- name: Compile virtual mail aliases
+  ansible.builtin.command: postmap /etc/valiases
+  args:
+    creates: /etc/valiases.db
   notify:
     - Reload postfix
 - name: Restart rspamd

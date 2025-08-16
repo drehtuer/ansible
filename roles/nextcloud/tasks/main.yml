@@ -62,3 +62,51 @@
     mode: "0644"
   notify:
     - Reload nginx
+- name: Nextcloud PHP configuration
+  ansible.builtin.copy:
+    src: files/php-fpm/nextcloud.conf
+    dest: /etc/php/8.3/fpm/pool.d/nextcloud.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload PHP-FPM
+- name: Increase PHP memory limit
+  ansible.builtin.lineinfile:
+    path: /etc/php/8.3/fpm/php.ini
+    regexp: '^memory_limit\s*='
+    line: 'memory_limit = 512M'
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload PHP-FPM
+- name: Enable PHP opcache
+  ansible.builtin.lineinfile:
+    path: /etc/php/8.3/fpm/php.ini
+    regexp: '^;?opcache.enable\s*='
+    line: 'opcache.enable = 1'
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload PHP-FPM
+- name: Set PHP opcache memory size
+  ansible.builtin.lineinfile:
+    path: /etc/php/8.3/fpm/php.ini
+    regexp: '^;?opcache.interned_strings_buffer\s*='
+    line: 'opcache.interned_strings_buffer = 12'
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload PHP-FPM
+- name: Nextcloud cron job
+  ansible.builtin.cron:
+    name: "Nextcloud cron job"
+    user: www-data
+    minute: "*/15"
+    job: "/usr/bin/php /var/www/nextcloud/cron.php"
+    state: present
+  notify:
+    - Reload cron

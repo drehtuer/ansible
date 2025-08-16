@@ -1,9 +1,11 @@
 mail:
   aliases:
-    - name: postmaster
-      address: "ubuntu"
-    - name: root
-      address: "ubuntu"
+    - alias: postmaster
+      forwards:
+        - root
+    - name: www-data
+      forwards:
+        - root
   ssl:
     cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
     key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem

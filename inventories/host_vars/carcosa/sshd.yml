@@ -1,0 +1,6 @@
+sshd:
+  host_keys:
+    - name: ed25519
+      sha256: 1ba215407987f16a83bbf149caf7ebf9cf91b46a4f57b476eeb77340ad3462f6
+    - name: rsa
+      sha256: cfc7efe1828101fa2727311dea776241d7e3e552d57cb32a050653d2fcb0e619

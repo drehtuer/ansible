@@ -31,3 +31,11 @@
     state: absent
     login_user: "{{ database.root.user }}"
     login_password: "{{ database.root.password }}"
+- name: Create initial installation done file
+  ansible.builtin.file:
+    path: /root/.mysql_root_password_set
+    state: touch
+    mode: '0600'
+    owner: root
+    group: root
+  when: not lookup('file', '/root/.mysql_root_password_set', errors='ignore')

@@ -1,9 +1,24 @@
+- name: Install user management packages
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - sudo
+      - passwd
 - name: Add groups
   ansible.builtin.group:
     name: "{{ item.group }}"
   loop: "{{ users.users }}"
   loop_control:
     label: "{{ item.group }}"
+- name: Group sudo without password
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers.d/sudo_nopasswd
+    create: true
+    owner: root
+    group: root
+    mode: '0440'
+    line: "%sudo ALL=(ALL) NOPASSWD: ALL"
+    validate: 'visudo -cf %s'
 - name: Add users
   ansible.builtin.user:
     name: "{{ item.name }}"

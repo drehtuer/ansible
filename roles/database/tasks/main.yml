@@ -7,6 +7,10 @@
       - python3-mysqldb
   notify:
     - Restart mariadb
+- name: Check for initial installation done file
+  ansible.builtin.stat:
+    path: /root/.mysql_root_password_set
+  register: mysql_root_password_set
 - name: Set root password
   community.mysql.mysql_user:
     name: "{{ database.root.user }}"
@@ -17,7 +21,9 @@
     column_case_sensitive: true
     priv: "*.*:ALL,GRANT"
     state: present
+  when: not mysql_root_password_set.stat.exists
   notify:
     - Remove anonymous users
     - Disable remote root login
     - Remove test database
+    - Create initial installation done file

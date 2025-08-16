@@ -1,3 +1,4 @@
+# Local aliases file for Postfix
 {% for entry in mail.aliases %}
-{{ entry.name }}: {{ entry.address }}
+{{ entry.alias }}:  {{ entry.forwards | join(', ') }}
 {% endfor %}

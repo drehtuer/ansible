@@ -1,22 +1,28 @@
-mydomain = {{ hostname_fqdn.split('.')[1:] | join('.') }}
+compatibility_level = 3.6
+
+mydomain = {{ domain }}
 myhostname = {{ hostname_fqdn }}
-myorigin = $myhostname
+myorigin = $mydomain
 inet_interfaces = all
 inet_protocols = all
 
-mynetworks = 127.0.0.1/8 [::1]/128
+mynetworks = 127.0.0.0/8, [::1]/128
 
 # SMTP defaults
+smtpd_relay_restrictions = 
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination
+
 smtpd_recipient_restrictions = 
     permit_sasl_authenticated,
     permit_mynetworks,
-    reject_unauth_destination,
-    check_policy_service unix:private/policy-spf
-
-smtpd_relay_restrictions = 
-    permit_sasl_authenticated,
-    permit_mynetworks,
     reject_unauth_destination
+
+smtpd_sender_restrictions =
+    permit_mynetworks,
+    reject_authenticated_sender_login_mismatch,
+    reject_unknown_sender_domain
 
 # SSL
 smtpd_tls_cert_file = {{ mail.ssl.cert }}
@@ -24,7 +30,6 @@ smtpd_tls_key_file = {{ mail.ssl.key }}
 smtpd_use_tls = yes
 smtpd_tls_security_level = may
 smtpd_tls_auth_only = yes
-smtpd_tls_security_level = encrypt
 
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = high
@@ -35,23 +40,25 @@ smtp_tls_ciphers = high
 smtp_tls_mandatory_ciphers = high
 
 smtpd_tls_received_header = yes
-smtpd_tls_log_level = 1
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 
-smtpd_banner = $myhostname ESMTP
+smtpd_banner = $mydomain ESMTP
 
 # LMTP -> dovecot
 virtual_transport = lmtp:unix:private/dovecot-lmtp
-local_transport = error:local devivery disabled
+# local_transport = error:local delivery disabled
 
-mydestination = localhost.$mydomain, localhost
+mydestination = localhost
+virtual_mailbox_domains = $mydomain $myhostname
 
 # Logging
 maillog_file = /var/log/mail.log
 
 # Mail aliases
 alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+virtual_alias_maps = hash:/etc/valias
 
 # RSpamd
 smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}

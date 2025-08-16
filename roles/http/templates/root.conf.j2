@@ -12,7 +12,7 @@ map $arg_v $asset_immutable {
 server {
     listen                  {{ http.port_https }} ssl http2;
     listen                  [::]:{{ http.port_https }} ssl http2;
-    set $domain             {{ hostname_fqdn.split('.')[1:] | join('.') }};
+    set $domain             {{ domain }};
     server_name             $domain www.$domain;
     set                     $base /var/www/html;
     root                    $base;
