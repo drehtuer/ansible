@@ -1,0 +1,6 @@
+enabled = true;
+bind_socket = "127.0.0.1:{{ rspamd.milter_port }}";
+add_headers = true;
+timeout = 120s;
+multer_protocol = 6;
+milter_default_action = accept;

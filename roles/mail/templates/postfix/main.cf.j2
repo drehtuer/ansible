@@ -62,7 +62,7 @@ alias_database = hash:/etc/aliases
 virtual_alias_maps = hash:/etc/valiases
 
 # RSpamd
-smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}
-non_smtpd_milters = inet:localhost:{{ mail.rspamd.milter_port }}
+smtpd_milters = inet:127.0.0.1:{{ mail.rspamd.milter_port }}
+non_smtpd_milters = inet:127.0.0.1:{{ mail.rspamd.milter_port }}
 milter_default_action = accept
 milter_protocol = 6

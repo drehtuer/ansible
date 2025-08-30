@@ -20,18 +20,3 @@
     creates: /always_run_this_command
   notify:
     - Reload postfix
-- name: Restart rspamd
-  ansible.builtin.systemd:
-    name: rspamd
-    state: restarted
-    enabled: true
-- name: Reload rspamd
-  ansible.builtin.systemd:
-    name: rspamd
-    state: reloaded
-    enabled: true
-- name: Reload nginx
-  ansible.builtin.systemd:
-    name: nginx
-    state: reloaded
-    enabled: true

@@ -1,0 +1,4 @@
+rspamd:
+  milter_port: 11332
+  http_port: 11334
+  htaccess_sha256: "4611135e55fbfd8fed7731c5a616fe87eef0d7be6e2d94757164efbc9b83d7bf"
