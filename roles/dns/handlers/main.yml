@@ -8,7 +8,3 @@
     name: systemd-resolved
     state: restarted
     enabled: true
-- name: Create unbound key
-  ansible.builtin.command:
-    cmd: sudo -u unbound unbound-anchor -a /var/lib/unbound/root.key
-    creates: /var/lib/unbound/root.key
