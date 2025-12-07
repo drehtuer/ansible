@@ -1,10 +1,11 @@
-- name: Install database (mariaDB)
+- name: Install mariaDB
   ansible.builtin.apt:
     install_recommends: false
     name:
       - mariadb-server
       - mariadb-client
       - python3-mysqldb
+    update_cache: true
   notify:
     - Restart mariadb
 - name: Check for initial installation done file
@@ -13,10 +14,10 @@
   register: mysql_root_password_set
 - name: Set root password
   community.mysql.mysql_user:
-    name: "{{ database.root.user }}"
-    host: localhost
-    password: "{{ database.root.password }}"
-    login_unix_socket: /var/run/mysqld/mysqld.sock
+    name: "{{ database.mysql.root.user }}"
+    host: "{{ database.mysql.ip4 }}"
+    password: "{{ database.mysql.root.password }}"
+    login_unix_socket: "{{ database.mysql.socket }}"
     check_implicit_admin: true
     column_case_sensitive: true
     priv: "*.*:ALL,GRANT"
@@ -27,3 +28,21 @@
     - Disable remote root login
     - Remove test database
     - Create initial installation done file
+- name: Install redis
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - redis-server
+      - redis-tools
+    update_cache: true
+  notify:
+    - Restart redis-server
+- name: Configure redis
+  ansible.builtin.template:
+    src: templates/redis/redis.conf.j2
+    dest: /etc/redis/redis.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart redis-server

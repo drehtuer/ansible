@@ -13,15 +13,15 @@
     name: ""
     host_all: true
     state: absent
-    login_user: "{{ database.root.user }}"
-    login_password: "{{ database.root.password }}"
+    login_user: "{{ database.mysql.root.user }}"
+    login_password: "{{ database.mysql.root.password }}"
 - name: Disable remote root login
   community.mysql.mysql_user:
-    name: "{{ database.root.user }}"
-    host: "{{ item }}"
+    name: "{{ database.mysql.root.user }}"
+    host: "{{ database.mysql.ip }}"
     state: absent
-    login_user: "{{ database.root.user }}"
-    login_password: "{{ database.root.password }}"
+    login_user: "{{ database.mysql.root.user }}"
+    login_password: "{{ database.mysql.root.password }}"
   loop:
     - "%"
     - "::1"
@@ -29,8 +29,8 @@
   community.mysql.mysql_db:
     name: test
     state: absent
-    login_user: "{{ database.root.user }}"
-    login_password: "{{ database.root.password }}"
+    login_user: "{{ database.mysql.root.user }}"
+    login_password: "{{ database.mysql.root.password }}"
 - name: Create initial installation done file
   ansible.builtin.file:
     path: /root/.mysql_root_password_set
@@ -39,3 +39,8 @@
     owner: root
     group: root
   when: not lookup('file', '/root/.mysql_root_password_set', errors='ignore')
+- name: Restart redis-server
+  ansible.builtin.systemd:
+    name: redis-server
+    state: restarted
+    enabled: true

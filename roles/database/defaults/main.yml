@@ -1,4 +1,14 @@
 database:
-  root:
-    user: root
-    password: ""
+  mysql:
+    ip4: 127.0.0.1
+    ip6: "::1"
+    port: 3306
+    socket: /var/run/mysqld/mysqld.sock
+    root:
+      user: root
+      password: ""
+  redis:
+    ip4: 127.0.0.1
+    ip6: "::1"
+    port: 6379
+    databases: 16
