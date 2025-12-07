@@ -1,0 +1,14 @@
+- name: Restart unbound
+  ansible.builtin.systemd:
+    name: unbound
+    state: restarted
+    enabled: true
+- name: Restart systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+    enabled: true
+- name: Create unbound key
+  ansible.builtin.command:
+    cmd: sudo -u unbound unbound-anchor -a /var/lib/unbound/root.key
+    creates: /var/lib/unbound/root.key

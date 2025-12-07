@@ -1,0 +1,33 @@
+- name: Install dns
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - unbound
+      - unbound-anchor
+      - dns-root-data
+      - bind9-dnsutils
+    update_cache: true
+  notify:
+    - Restart unbound
+- name: Check for root.key
+  ansible.builtin.command:
+    cmd: sudo -u unbound unbound-anchor -a /var/lib/unbound/root.key
+    creates: /var/lib/unbound/root.key
+- name: Configure dns
+  ansible.builtin.copy:
+    src: files/unbound.conf
+    dest: /etc/unbound/unbound.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart unbound
+- name: Configure resolved
+  ansible.builtin.copy:
+    src: files/resolved.conf
+    dest: /etc/systemd/resolved.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart systemd-resolved

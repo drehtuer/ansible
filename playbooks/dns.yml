@@ -1,0 +1,4 @@
+- name: DNS
+  hosts: all
+  roles:
+    - dns
