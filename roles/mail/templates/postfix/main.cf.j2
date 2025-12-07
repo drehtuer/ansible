@@ -53,9 +53,6 @@ virtual_transport = lmtp:unix:private/dovecot-lmtp
 mydestination = localhost
 virtual_mailbox_domains = $mydomain $myhostname
 
-# Logging
-maillog_file = /var/log/mail.log
-
 # Mail aliases
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases

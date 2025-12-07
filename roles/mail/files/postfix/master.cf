@@ -11,7 +11,6 @@
 # ==========================================================================
 smtp      inet  n       -       y       -       -       smtpd
   -o syslog_name=postfix/smtp
-  -o smtpd_milters=$smtpd_milters
   -o milter_macro_daemon_name=ORIGINATING
 submission inet n       -       y       -       -       smtpd
   -o syslog_name=postfix/submission
