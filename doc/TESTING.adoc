@@ -80,7 +80,13 @@ The Dev Container needs its own Docker daemon for this, provided by the `docker-
 
 === Which roles have scenarios
 
-`apt`, `cron` and `users` today. Adding one is a matter of creating `roles/<role>/molecule/default/` with a `molecule.yml` and a `converge.yml`; `invoke test-molecule` discovers scenarios rather than keeping a list. The CI matrix in `.github/workflows/test.yml` does keep a list, so add the role there too.
+`apt`, `cron` and `users` today. Adding one means creating `roles/<role>/molecule/default/` with three files:
+
+* `molecule.yml` — the container definition. Note the `ANSIBLE_ROLES_PATH` it sets: molecule does not put the repository's `roles/` directory on the roles path, so without it the role cannot be resolved by name and the run fails at the `syntax` stage.
+* `converge.yml` — the play that applies the role, with any variables it needs inline.
+* `prepare.yml` — refreshes the apt cache. The images ship with an empty one, and only the `apt` role refreshes it itself, so a role installing a package it does not already have cannot resolve it. See `doc/TODO.adoc`.
+
+`invoke test-molecule` discovers scenarios rather than keeping a list. The CI matrix in `.github/workflows/test.yml` does keep a list, so add the role there too.
 
 The rest are not covered, for concrete reasons rather than lack of effort:
 
