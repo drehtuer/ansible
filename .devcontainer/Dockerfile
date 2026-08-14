@@ -54,6 +54,21 @@ RUN   \
     ssh \
     sshpass \
     wget \
+    # GitHub CLI apt repo, added below,
+    # needs its keyring dir to exist first
+    && install -d -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install \
+    --no-install-recommends \
+    --yes \
+    -qq \
+    # GitHub CLI, not in Ubuntu's own repos
+    gh \
     # Generate en_US.UTF-8 locales
     && localedef \
     --inputfile=en_US \
@@ -70,7 +85,10 @@ RUN   \
     ${ARG_USER} \
     && inv \
     --print-completion-script=bash \
-    > /etc/bash_completion.d/invoke
+    > /etc/bash_completion.d/invoke \
+    && gh completion \
+    --shell bash \
+    > /etc/bash_completion.d/gh
 
 # Keep in sync with the version installed by
 # .github/workflows/lint.yml, so CI and the
