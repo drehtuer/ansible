@@ -5,5 +5,5 @@
 # named after the detected PHP version - the socket is
 # php<version>-fpm.sock, never php-fpm.sock.
 upstream php_default {
-    server unix:/run/php/php{{ php_version }}-fpm.sock;
+    server unix:/run/php/php{{ http_php_version }}-fpm.sock;
 }

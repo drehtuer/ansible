@@ -1,4 +1,4 @@
-time:
+time:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   ntp:
     server:
       - 0.de.pool.ntp.org

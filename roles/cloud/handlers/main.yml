@@ -5,6 +5,6 @@
     enabled: true
 - name: Reload PHP-FPM
   ansible.builtin.systemd_service:
-    name: "php{{ php_version }}-fpm"
+    name: "php{{ cloud_php_version }}-fpm"
     state: reloaded
     enabled: true

@@ -1,4 +1,4 @@
-firewall:
+firewall:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # Connection-rate limiting applied to rules marked `rate_limit`.
   rate_limit:
     seconds: 10

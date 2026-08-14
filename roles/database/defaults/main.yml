@@ -1,4 +1,4 @@
-database:
+database:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   mysql:
     ip4: 127.0.0.1
     socket: /var/run/mysqld/mysqld.sock

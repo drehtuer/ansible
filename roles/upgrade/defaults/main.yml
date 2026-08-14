@@ -2,7 +2,7 @@
 # upgrade.target_release is empty by default, which makes this role a
 # no-op. Set it (e.g. "26.04") in inventories/host_vars/<host>/upgrade.yml
 # when a release upgrade is actually wanted.
-upgrade:
+upgrade:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   target_release: ""
   # never | normal | lts - see /etc/update-manager/release-upgrades
   # "lts" only offers upgrades to the next LTS release, skipping

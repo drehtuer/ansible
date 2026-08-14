@@ -6,6 +6,7 @@
 # cleaned up by its cleanup.yml - ignored too in case a run is
 # interrupted before cleanup runs.
 /roles/sshd/files/ssh_moleculetest_*
+/molecule-verify.log
 
 # Python bytecode from `import tasks`
 __pycache__/

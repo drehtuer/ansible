@@ -1,4 +1,4 @@
-imap:
+imap:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   conf:
     ssl:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem

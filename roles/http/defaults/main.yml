@@ -1,6 +1,6 @@
 # `hostname_fqdn` has no default on purpose - it is host specific and
 # names the certificate lineage. See meta/argument_specs.yml.
-http:
+http:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   port_http: 80
   port_https: 443
   letsencrypt:

@@ -20,10 +20,10 @@
   ansible.builtin.command:
     cmd: php -r "echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;"
   changed_when: false
-  register: cloud_php_version
+  register: cloud_php_version_cmd
 - name: Set PHP facts
   ansible.builtin.set_fact:
-    php_version: "{{ cloud_php_version.stdout | trim }}"
+    cloud_php_version: "{{ cloud_php_version_cmd.stdout | trim }}"
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
     cloud_archive: "nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
 - name: Create Nextcloud database
@@ -92,7 +92,7 @@
 - name: Nextcloud PHP-FPM pool
   ansible.builtin.template:
     src: templates/php-fpm-pool.conf.j2
-    dest: "/etc/php/{{ php_version }}/fpm/pool.d/nextcloud.conf"
+    dest: "/etc/php/{{ cloud_php_version }}/fpm/pool.d/nextcloud.conf"
     owner: root
     group: root
     mode: "0644"
@@ -101,7 +101,7 @@
 - name: Nextcloud PHP configuration
   ansible.builtin.template:
     src: templates/php-nextcloud.ini.j2
-    dest: "/etc/php/{{ php_version }}/fpm/conf.d/99-nextcloud.ini"
+    dest: "/etc/php/{{ cloud_php_version }}/fpm/conf.d/99-nextcloud.ini"
     owner: root
     group: root
     mode: "0644"

@@ -1,4 +1,4 @@
-cloud:
+cloud:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   mysql:
     nextcloud:
       database: nextcloud

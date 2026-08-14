@@ -20,10 +20,10 @@
   ansible.builtin.command:
     cmd: php -r "echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;"
   changed_when: false
-  register: http_php_version
+  register: http_php_version_cmd
 - name: Set PHP version fact
   ansible.builtin.set_fact:
-    php_version: "{{ http_php_version.stdout | trim }}"
+    http_php_version: "{{ http_php_version_cmd.stdout | trim }}"
 - name: Create nginx configuration directories
   ansible.builtin.file:
     path: "{{ item }}"
