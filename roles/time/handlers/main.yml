@@ -1,6 +1,7 @@
 - name: Restart ntpd
   ansible.builtin.systemd_service:
-    name: ntpd
+    # The Debian/Ubuntu ntpsec package ships ntpsec.service.
+    name: ntpsec
     daemon_reload: true
     state: restarted
     enabled: true
@@ -11,5 +12,7 @@
   changed_when: true
 - name: Restart crond
   ansible.builtin.systemd_service:
-    name: crond
+    # Debian/Ubuntu call the cron service `cron`; `crond` is the
+    # Red Hat name and does not exist here.
+    name: cron
     state: restarted

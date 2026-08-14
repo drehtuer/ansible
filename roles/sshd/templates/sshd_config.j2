@@ -1,3 +1,8 @@
+{{ ansible_managed | comment }}
+# This file deliberately has no `Include /etc/ssh/sshd_config.d/*.conf`.
+# Drop-ins shipped by packages (cloud-init re-enabling password auth,
+# for example) must not be able to weaken the settings below.
+
 # Restrict key exchange, cipher, and MAC algorithms, as per sshaudit.com
 # hardening guide.
 KexAlgorithms sntrup761x25519-sha512@openssh.com,gss-curve25519-sha256-,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256,gss-group16-sha512-,diffie-hellman-group16-sha512
@@ -13,9 +18,16 @@ PubkeyAcceptedAlgorithms sk-ssh-ed25519-cert-v01@openssh.com,ssh-ed25519-cert-v0
 HostKey /etc/ssh/ssh_{{ hostname }}_ed25519_key
 HostKey /etc/ssh/ssh_{{ hostname }}_rsa_key
 
-KbdInteractiveAuthentication no
+# Authentication.
+#
+# Root may not log in over ssh at all. Ansible connects as an
+# unprivileged account and escalates with sudo instead.
+PermitRootLogin no
 
+# Public keys only.
+KbdInteractiveAuthentication no
 PasswordAuthentication no
+PermitEmptyPasswords no
 
 UsePAM yes
 

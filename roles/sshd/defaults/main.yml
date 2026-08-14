@@ -1,7 +1,11 @@
-hostname: localhost
+# `hostname` has no default on purpose: it selects which host key
+# pair is deployed, and a fallback would silently look for a key
+# that does not exist. It is a required input, see
+# meta/argument_specs.yml.
 sshd:
+  # Key types to deploy. For each entry the role expects a
+  # vault-encrypted files/ssh_<hostname>_<type>_key.aes256,
+  # produced by scripts/generate_keys.sh.
   host_keys:
-    - name: ed25519
-      sha256: 0
-    - name: rsa
-      sha256: 0
+    - ed25519
+    - rsa

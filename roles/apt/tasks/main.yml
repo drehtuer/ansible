@@ -2,11 +2,20 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
-  notify:
-    - Upgrade all packages
 - name: Install base packages
   ansible.builtin.apt:
-    autoclean: true
-    autoremove: true
     install_recommends: false
     name: "{{ apt.packages }}"
+- name: Upgrade all packages
+  # Explicitly requested only, never a side effect of an untagged run.
+  # Previously this hung off a handler notified by the cache refresh,
+  # which made a full upgrade depend on how long ago the play last
+  # ran rather than on intent. Routine security patching is handled by
+  # unattended-upgrades.
+  ansible.builtin.apt:
+    upgrade: "full"
+    autoremove: true
+    autoclean: true
+  tags:
+    - never
+    - package-upgrade

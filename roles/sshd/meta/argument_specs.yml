@@ -1,0 +1,27 @@
+argument_specs:
+  main:
+    short_description: Harden and configure OpenSSH server
+    description:
+      - Installs openssh-server, deploys the vault-encrypted host keys
+        for this host, and writes a hardened sshd_config that denies
+        root login and password authentication.
+    options:
+      hostname:
+        type: str
+        required: true
+        description:
+          - Short host name used to pick the host key files.
+            The role expects
+            files/ssh_<hostname>_<type>_key.aes256 to exist for every
+            entry in sshd.host_keys.
+      sshd:
+        type: dict
+        required: true
+        description: SSHd settings.
+        options:
+          host_keys:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Host key types to deploy, e.g. ed25519 and rsa.

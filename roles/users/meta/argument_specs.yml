@@ -1,0 +1,72 @@
+argument_specs:
+  main:
+    short_description: Manage local accounts, groups and authorized keys
+    description:
+      - Creates the groups and accounts listed in `users`, installs
+        their authorized keys, and grants the sudo group passwordless
+        escalation.
+    options:
+      users:
+        type: dict
+        required: true
+        description: User management settings.
+        options:
+          sudo_nopasswd:
+            type: bool
+            default: true
+            description:
+              - Grant %sudo passwordless sudo. Ansible escalates
+                non-interactively and depends on this.
+          authorized_keys_exclusive:
+            type: bool
+            default: true
+            description:
+              - Remove authorized keys that are not listed here.
+          users:
+            type: list
+            elements: dict
+            required: true
+            description: Accounts to manage.
+            options:
+              name:
+                type: str
+                required: true
+                description: Account name.
+              group:
+                type: str
+                required: true
+                description: Primary group.
+              groups:
+                type: str
+                required: true
+                description:
+                  - Comma separated supplementary groups. Managed
+                    authoritatively - groups removed here are removed
+                    from the account.
+              shell:
+                type: str
+                required: true
+                description: Login shell.
+              create_home:
+                type: bool
+                required: true
+                description: Whether to create the home directory.
+              password:
+                type: str
+                required: true
+                description:
+                  - Password hash, or "*" to disable password login.
+          authorized_keys:
+            type: list
+            elements: dict
+            required: true
+            description: SSH public keys per account.
+            options:
+              name:
+                type: str
+                required: true
+                description: Account the key belongs to.
+              public_key:
+                type: str
+                required: true
+                description: SSH public key.
