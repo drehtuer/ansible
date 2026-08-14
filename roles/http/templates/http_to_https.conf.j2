@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+# HTTP -> HTTPS redirect.
+#
+# The ACME challenge is served here rather than being redirected. A
+# certificate cannot be issued before nginx serves it, and nginx
+# cannot start the TLS vhosts before the certificate exists, so
+# redirecting the challenge to HTTPS deadlocks a fresh host.
+server {
+    listen {{ http.port_http }};
+    listen [::]:{{ http.port_http }};
+
+    server_name _;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root {{ http.letsencrypt.webroot_path }};
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+; Drop-in rather than edits to php.ini, which is package-owned and
+; reverted on upgrade.
+memory_limit = {{ cloud.php.memory_limit }}
+
+opcache.enable = {{ cloud.php.opcache.enable }}
+opcache.interned_strings_buffer = {{ cloud.php.opcache.interned_strings_buffer }}
+opcache.memory_consumption = {{ cloud.php.opcache.memory_consumption }}

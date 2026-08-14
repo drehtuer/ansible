@@ -1,0 +1,40 @@
+{{ ansible_managed | comment }}
+{#
+  One template for every static vhost. `server_name` is the cross
+  product of http.domains and the site's subdomains, so adding a
+  domain to the inventory extends every vhost automatically.
+#}
+{% set names = [] %}
+{% for d in http.domains %}
+{% for s in site.subdomains %}
+{% set _ = names.append(d if s == '' else s ~ '.' ~ d) %}
+{% endfor %}
+{% endfor %}
+server {
+    listen {{ http.port_https }} ssl http2;
+    listen [::]:{{ http.port_https }} ssl http2;
+    server_name {{ names | join(' ') }};
+    root {{ site.root }};
+    index index.html index.php;
+
+    include conf-server/ssl.conf;
+    include conf-server/security.conf;
+    include conf-server/general.conf;
+{% if site.include_locations | default(false) %}
+    # Locations contributed by other roles. A glob that matches
+    # nothing is fine, so this does not couple the http role to
+    # whichever of them have run.
+    include locations-enabled/*.conf;
+{% endif %}
+
+    # index.html fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # handle .php
+    location ~ \.php$ {
+        fastcgi_pass php_default;
+        include      conf-server/php-fpm.conf;
+    }
+}

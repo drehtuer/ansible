@@ -7,3 +7,25 @@ cloud:
     root:
       user: root
       password: ""
+  nextcloud:
+    # Pinned rather than tracking `latest`, so a rebuild produces the
+    # same version and the checksum below can be verified.
+    version: "34.0.3"
+    checksum: "d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d"
+    path: /var/www/nextcloud
+    # Nextcloud's own recommendation for the background job.
+    cron_minute: "*/5"
+  php:
+    memory_limit: 512M
+    opcache:
+      enable: 1
+      interned_strings_buffer: 12
+      memory_consumption: 128
+    # Dedicated pool, so Nextcloud's process limits are independent of
+    # the distribution's `www` pool. Sharing the pool name with it was
+    # a php-fpm startup error, not an override.
+    pool:
+      max_children: 5
+      start_servers: 2
+      min_spare_servers: 1
+      max_spare_servers: 3

@@ -1,0 +1,127 @@
+argument_specs:
+  main:
+    short_description: Nextcloud on nginx, PHP-FPM and MariaDB
+    description:
+      - Creates the Nextcloud database and user, installs a pinned
+        Nextcloud release, and adds its own PHP-FPM pool, nginx
+        upstream and vhost. The Nextcloud installer itself is not run,
+        see doc/TODO.adoc.
+    options:
+      http:
+        type: dict
+        required: true
+        description:
+          - Shared HTTP settings, owned by the http role. This vhost
+            reads `http.port_https` and `http.domains`, serving
+            cloud.<domain> for each.
+          - Deliberately declared without suboptions. Listing them
+            would make validation reject every other key the http role
+            puts in this dict, which fails the role outright.
+      cloud:
+        type: dict
+        required: true
+        description: Nextcloud settings.
+        options:
+          mysql:
+            type: dict
+            required: true
+            description: Database settings.
+            options:
+              nextcloud:
+                type: dict
+                required: true
+                description: Nextcloud's own database and account.
+                options:
+                  database:
+                    type: str
+                    required: true
+                    description: Database name.
+                  user:
+                    type: str
+                    required: true
+                    description: Database user.
+                  password:
+                    type: str
+                    required: true
+                    description: Database password.
+              root:
+                type: dict
+                required: true
+                description: Credentials used to create the above.
+                options:
+                  user:
+                    type: str
+                    required: true
+                    description: MariaDB administrative user.
+                  password:
+                    type: str
+                    required: true
+                    description: MariaDB administrative password.
+          nextcloud:
+            type: dict
+            required: true
+            description: Release and installation settings.
+            options:
+              version:
+                type: str
+                required: true
+                description: Pinned release, e.g. 34.0.3.
+              checksum:
+                type: str
+                required: true
+                description: SHA-256 of the release tarball.
+              path:
+                type: str
+                required: true
+                description: Installation directory.
+              cron_minute:
+                type: str
+                required: true
+                description: Cron schedule for the background job.
+          php:
+            type: dict
+            required: true
+            description: PHP settings for the Nextcloud pool.
+            options:
+              memory_limit:
+                type: str
+                required: true
+                description: PHP memory_limit.
+              opcache:
+                type: dict
+                required: true
+                description: Opcache tuning.
+                options:
+                  enable:
+                    type: int
+                    required: true
+                    description: opcache.enable.
+                  interned_strings_buffer:
+                    type: int
+                    required: true
+                    description: opcache.interned_strings_buffer, in MB.
+                  memory_consumption:
+                    type: int
+                    required: true
+                    description: opcache.memory_consumption, in MB.
+              pool:
+                type: dict
+                required: true
+                description: php-fpm process manager settings.
+                options:
+                  max_children:
+                    type: int
+                    required: true
+                    description: pm.max_children.
+                  start_servers:
+                    type: int
+                    required: true
+                    description: pm.start_servers.
+                  min_spare_servers:
+                    type: int
+                    required: true
+                    description: pm.min_spare_servers.
+                  max_spare_servers:
+                    type: int
+                    required: true
+                    description: pm.max_spare_servers.

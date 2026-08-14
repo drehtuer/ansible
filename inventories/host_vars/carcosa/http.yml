@@ -1,7 +1,15 @@
+# Overriding `http` replaces the role defaults wholesale rather than
+# merging into them, so every key the role needs is repeated here.
+# meta/argument_specs.yml fails the run if one goes missing.
 http:
-  root: /var/www/html
   port_http: 80
   port_https: 443
+  # Adding the second domain here is all that is needed to extend the
+  # certificate and every vhost to it. Deliberately not done yet -
+  # drehtuer.de is migrating to carcosa.drehtuer.net first, see
+  # doc/TODO.adoc.
+  domains:
+    - "{{ domain }}"
   letsencrypt:
     email: !vault |
       $ANSIBLE_VAULT;1.1;AES256
@@ -11,9 +19,29 @@ http:
       6461346638353536350a633433666635666461376234393063666630366338393962363038643632
       39313831353235346536663765383838393334613938393830303137383863666562
     webroot_path: /var/www/certbot
-    aliases:
+    # Keep in step with what mail/imap read from
+    # /etc/letsencrypt/live/<cert_name>/.
+    cert_name: "{{ hostname_fqdn }}"
+    subdomains:
       - cloud
       - mail
       - spam
       - status
       - www
+  sites:
+    - name: default
+      subdomains:
+        - ""
+        - www
+      root: /var/www/html
+      include_locations: true
+    - name: status
+      subdomains:
+        - status
+      root: /var/www/html
+      include_locations: false
+    - name: mail
+      subdomains:
+        - mail
+      root: /var/www/html
+      include_locations: false
