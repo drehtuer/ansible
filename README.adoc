@@ -8,9 +8,23 @@ include::doc/.attributes-page.adoc[]
 :url-ansible: https://www.ansible.com[Ansible^]
 :url-dev-container: https://containers.dev[Development Container^]
 :url-vscode: https://code.visualstudio.com[Visual Studio Code^]
+:url-invoke: https://docs.pyinvoke.org/en/stable[python-invoke^]
 
 This repo contains the configuration for the hosts link:{url-drehtuer-de}/link:{url-drehtuer-net} as link:{url-ansible} scripts.
 The environment is provided as configuration for link:{url-dev-container} and link:{url-vscode}.
+
+The goal is a complete, documentation-as-code setup of the server so that it can be rebuilt or migrated to another host with minimal manual effort. The server runs nginx (serving Nextcloud, with Let's Encrypt certificates), Postfix + Dovecot (with RSpamd for anti-spam filtering, including learning from user feedback), SSH, MariaDB, and Unbound (local DNS caching/resolving), plus supporting system services (firewall, fail2ban, cron, NTP).
+
+Secrets (passwords, private keys, personal data) are never stored unencrypted in this repository — they are encrypted with `ansible-vault`. The vault password itself is kept in `vault/secret.txt`, which is excluded from version control and must never be committed.
+
+Playbooks are run through `tasks.py` (link:{url-invoke}) rather than calling `ansible-playbook` directly, e.g.:
+
+[source, bash]
+----
+invoke run-playbook --playbook=playbooks/http.yml
+----
+
+See `invoke --list` for all available tasks.
 
 == License
 
@@ -28,3 +42,10 @@ include::LICENSE[]
 :url-doc-environment-setup: doc/environment-setup.adoc[Environment Setup]
 
 See link:{url-doc-environment-setup} for details.
+
+== Project Status
+
+:url-doc-status: doc/STATUS.adoc[Status]
+:url-doc-todo: doc/TODO.adoc[TODO]
+
+See link:{url-doc-status} for the current state of the implementation, and link:{url-doc-todo} for outstanding work.

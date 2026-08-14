@@ -1,0 +1,43 @@
+= CLAUDE.adoc
+:toc: auto
+
+Guidance for Claude Code when working in this repository.
+
+== What this repo is
+
+Ansible configuration that builds and documents the complete server stack for `drehtuer.net` (primary) and `drehtuer.de` (CNAME alias).
+The domain `drehtuer.de` is still pointing at another host, but the plan is to switch it over to this server once the configuration is complete and tested.
+The explicit goal is documentation-as-code: the repo should be complete enough that the whole server could be rebuilt from scratch on a new host.
+
+See `doc/STATUS.adoc` for the current implementation state and `doc/TODO.adoc` for known gaps and next steps. Keep both up to date as the repo evolves — update them in the same change that alters the behavior they describe, don't let them drift.
+
+== Hard rules
+
+* Never read, print, copy, or transmit the contents of `vault/secret.txt`. It is the Ansible Vault password and must never be committed, logged, or displayed. It is already covered by `.gitignore` (`/vault/`) — keep it that way.
+* Never commit anything under `roles/sshd/keys/` (unencrypted host key material, gitignored via `/roles/sshd/keys/`) or any other unencrypted secret. Only `*.aes256` vault-encrypted files belong in git.
+* Any new private data (passwords, tokens, private keys, personal names/emails, API secrets) must be stored with `!vault |` inline vault blocks (see any `inventories/**/*.yml` file for the pattern) or as vault-encrypted files (see `roles/spam/scripts/encrypt.sh` and `roles/sshd/scripts/generate_keys.sh` for the pattern used to produce `*.aes256` files). Never add plaintext secrets to tracked files.
+* Before running `git add -A`/`git add .` or committing, check `git status` output for anything under `vault/`, `roles/sshd/keys/`, or `log/` that shouldn't be there.
+
+== Repo layout
+
+* `playbooks/*.yml` — one thin playbook per role (`hosts: all` + a single role). There is currently no umbrella `site.yml`; each playbook is run individually via `invoke run-playbook`.
+* `roles/*` — standard Ansible role layout (`tasks`, `handlers`, `defaults`, `templates`, `files`). Static config lives under `files/`, Jinja-templated config under `templates/*.j2`.
+* `inventories/machines.yml` — host inventory. Currently a single host, `carcosa` (fqdn `carcosa.drehtuer.net`, aliases `drehtuer.de`).
+* `inventories/group_vars/all/*.yml` — variables shared by all hosts, one file per role/concern.
+* `inventories/host_vars/<host>/*.yml` — per-host variables, one file per role/concern, mirroring `group_vars`.
+* `tasks.py` + `invoke.yml` — `python-invoke` wrapper around `ansible`/`ansible-playbook` (see `pyproject.toml` for lint config). This is the documented, correct way to invoke Ansible for this repo — prefer it over calling `ansible-playbook` directly so flags stay consistent.
+* `doc/*.adoc` — AsciiDoc project documentation, included from `README.adoc`.
+* `.devcontainer/` — VS Code Dev Container definition; this is the intended development environment (see `doc/environment-setup.adoc`).
+
+== Conventions
+
+* YAML/Python indentation is 2 spaces throughout (see `pyproject.toml` `[tool.ruff]` `indent-width = 2`).
+* Documentation is AsciiDoc (`.adoc`), included into `README.adoc` or standalone under `doc/`. Only fall back to Markdown (`.md`) for a new doc file if AsciiDoc genuinely doesn't fit the content — this hasn't come up yet.
+* Role tasks follow a consistent shape: `apt` install (with `install_recommends: false`) → config file(s) via `copy`/`template` → handler notify for restart/reload. Match this shape for new roles.
+  * Try to keep each role limited to the minimum set of tasks needed to configure the service. If a role is getting large, consider splitting it into multiple roles (e.g. `spam` vs `spam-dkim`).
+* Handlers use `ansible.builtin.systemd_service` for start/enable and `ansible.builtin.systemd`/`state: reloaded` for config reloads — check existing handlers in the target role before adding a new one.
+* Commented-out tasks (e.g. DKIM tasks in `roles/spam/tasks/main.yml`) mark deliberately unfinished work, not dead code — check `doc/TODO.adoc` before deleting them.
+
+== Before making changes
+
+Per the top-level instructions given for the initial documentation pass: don't modify existing playbooks/roles/inventory as a side effect of a documentation task. When asked to implement something from `doc/TODO.adoc`, that's a normal code change — just keep the vault/secrets rules above in mind, and update `doc/STATUS.adoc`/`doc/TODO.adoc` to reflect the new state.
