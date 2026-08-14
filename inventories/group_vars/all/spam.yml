@@ -1,0 +1,7 @@
+# Promoted out of roles/spam/defaults/main.yml so that spam.milter_port
+# and spam.http_port are in scope for playbooks/mail.yml and
+# playbooks/imap.yml too - each playbook runs a single role, and role
+# defaults are only in scope for the play that actually runs that role.
+spam:
+  milter_port: 11332
+  http_port: 11334

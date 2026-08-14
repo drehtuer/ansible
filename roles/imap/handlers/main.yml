@@ -12,14 +12,12 @@
 - name: Compile sieve scripts (ham)
   ansible.builtin.command:
     cmd: sievec /etc/dovecot/sieve/learn-ham.sieve
-  args:
-    removes: /nonexistent-file-to-force-run
+  changed_when: true
   notify:
     - Reload dovecot
 - name: Compile sieve scripts (spam)
   ansible.builtin.command:
     cmd: sievec /etc/dovecot/sieve/learn-spam.sieve
-  args:
-    removes: /nonexistent-file-to-force-run
+  changed_when: true
   notify:
     - Reload dovecot

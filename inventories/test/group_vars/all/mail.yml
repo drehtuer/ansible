@@ -6,13 +6,6 @@ mail:
     - alias: root
       forwards:
         - testuser
-  virtual_aliases:
-    - alias: "test@test.invalid"
-      forwards:
-        - testuser
-  spam:
-    milter_port: 11332
   ssl:
     cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
     key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
-    ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem

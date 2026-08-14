@@ -1,0 +1,38 @@
+argument_specs:
+  main:
+    short_description: RSpamd, reverse-proxied web UI
+    description:
+      - Installs RSpamd, wires it to the shared Redis instance and the
+        local DNS resolver, and reverse-proxies its password-protected
+        controller UI through nginx at spam.<domain>.
+    options:
+      domain:
+        type: str
+        required: true
+        description: Primary domain, used for the spam.<domain> vhost.
+      spam:
+        type: dict
+        required: true
+        description: Spam filtering settings.
+        options:
+          milter_port:
+            type: int
+            required: true
+            description:
+              - Port RSpamd's milter/proxy worker listens on. Read by
+                the mail role to wire Postfix's smtpd_milters to it.
+          http_port:
+            type: int
+            required: true
+            description:
+              - Port RSpamd's controller worker listens on. Read by
+                the imap role's ham/spam learning scripts.
+      database:
+        type: dict
+        required: true
+        description:
+          - Shared with the database role, only database.redis.ip4
+            and database.redis.port are read here. Deliberately
+            declared without suboptions - listing them would make
+            validation reject every other key the database role
+            itself requires.

@@ -1,0 +1,56 @@
+argument_specs:
+  main:
+    short_description: Dovecot IMAP/LMTP/Sieve
+    description:
+      - Installs Dovecot core/IMAP/LMTP/Sieve and deploys Sieve-pipe
+        scripts that call RSpamd's ham/spam learning API, so moving
+        mail into or out of the Spam folder trains the filter.
+    options:
+      domain:
+        type: str
+        required: true
+        description: Primary domain, used as the LMTP postmaster address.
+      hostname_fqdn:
+        type: str
+        required: true
+        description: Fully qualified host name, used to locate the TLS cert.
+      imap:
+        type: dict
+        required: true
+        description: IMAP settings.
+        options:
+          conf:
+            type: dict
+            required: true
+            description: Dovecot config settings.
+            options:
+              ssl:
+                type: dict
+                required: true
+                description: TLS settings.
+                options:
+                  cert:
+                    type: str
+                    required: true
+                    description: Certificate path.
+                  key:
+                    type: str
+                    required: true
+                    description: Private key path.
+                  ca:
+                    type: str
+                    required: true
+                    description: CA chain path.
+                  dh:
+                    type: str
+                    required: true
+                    description: Diffie-Hellman parameters path.
+      spam:
+        type: dict
+        required: true
+        description:
+          - Shared with the spam role, only spam.http_port is read
+            here (RSpamd's controller, used to submit learn-ham/
+            learn-spam calls). Deliberately declared without
+            suboptions - listing them would make validation reject
+            every other key the spam role itself requires.

@@ -1,0 +1,63 @@
+argument_specs:
+  main:
+    short_description: Postfix, TLS-only submission via Dovecot SASL
+    description:
+      - Installs Postfix, renders local and virtual alias maps, and
+        wires RSpamd in as a milter on spam.milter_port
+        (milter_default_action = accept, i.e. fails open if RSpamd is
+        unreachable).
+    options:
+      domain:
+        type: str
+        required: true
+        description: Primary domain, used as $mydomain and in virtual aliases.
+      domain_aliases:
+        type: list
+        elements: str
+        required: true
+        description: Extra domains given a virtual catch-all alias.
+      hostname_fqdn:
+        type: str
+        required: true
+        description: Fully qualified host name, used as $myhostname.
+      mail:
+        type: dict
+        required: true
+        description: Mail settings.
+        options:
+          aliases:
+            type: list
+            elements: dict
+            required: true
+            description: Local and virtual aliases.
+            options:
+              alias:
+                type: str
+                required: true
+                description: Local address to forward.
+              forwards:
+                type: list
+                elements: str
+                required: true
+                description: Accounts/addresses receiving the mail.
+          ssl:
+            type: dict
+            required: true
+            description: TLS settings.
+            options:
+              cert:
+                type: str
+                required: true
+                description: Certificate path.
+              key:
+                type: str
+                required: true
+                description: Private key path.
+      spam:
+        type: dict
+        required: true
+        description:
+          - Shared with the spam role, only spam.milter_port is read
+            here. Deliberately declared without suboptions - listing
+            them would make validation reject every other key the
+            spam role itself requires.

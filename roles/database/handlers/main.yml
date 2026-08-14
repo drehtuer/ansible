@@ -18,7 +18,7 @@
 - name: Disable remote root login
   community.mysql.mysql_user:
     name: "{{ database.mysql.root.user }}"
-    host: "{{ database.mysql.ip }}"
+    host: "{{ item }}"
     state: absent
     login_user: "{{ database.mysql.root.user }}"
     login_password: "{{ database.mysql.root.password }}"

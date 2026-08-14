@@ -10,13 +10,11 @@
     enabled: true
 - name: Compile mail aliases
   ansible.builtin.command: newaliases
-  args:
-    creates: /always_run_this_command
+  changed_when: true
   notify:
     - Reload postfix
 - name: Compile virtual mail aliases
   ansible.builtin.command: postmap /etc/valiases
-  args:
-    creates: /always_run_this_command
+  changed_when: true
   notify:
     - Reload postfix

@@ -5,5 +5,3 @@ imap:
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
       ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
       dh: /etc/nginx/dhparam.pem
-  rspamd:
-    http_port: 11334

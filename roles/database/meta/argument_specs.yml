@@ -1,0 +1,62 @@
+argument_specs:
+  main:
+    short_description: MariaDB and Redis, both loopback-only
+    description:
+      - Installs MariaDB, secures the root account on first run (marker
+        file at /root/.mysql_root_password_set), and installs Redis.
+        Both are bound to 127.0.0.1/::1 only.
+    options:
+      database:
+        type: dict
+        required: true
+        description: Database settings.
+        options:
+          mysql:
+            type: dict
+            required: true
+            description: MariaDB settings.
+            options:
+              ip4:
+                type: str
+                required: true
+                description:
+                  - Loopback address the initial root grant is scoped
+                    to.
+              socket:
+                type: str
+                required: true
+                description: Unix socket used for the root login.
+              root:
+                type: dict
+                required: true
+                description: Root account settings.
+                options:
+                  user:
+                    type: str
+                    required: true
+                    description: Root account name.
+                  password:
+                    type: str
+                    required: true
+                    description: Root account password.
+          redis:
+            type: dict
+            required: true
+            description: Redis settings.
+            options:
+              ip4:
+                type: str
+                required: true
+                description: IPv4 bind address.
+              ip6:
+                type: str
+                required: true
+                description: IPv6 bind address.
+              port:
+                type: int
+                required: true
+                description: TCP port Redis listens on.
+              databases:
+                type: int
+                required: true
+                description: Number of logical databases.

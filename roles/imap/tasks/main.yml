@@ -16,22 +16,43 @@
     owner: root
     group: root
     mode: '0755'
+- name: Create sieve directory
+  ansible.builtin.file:
+    path: /etc/dovecot/sieve
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
 - name: Copy rspam learn ham script
   ansible.builtin.template:
     src: templates/rspamd-learn-ham.sh.j2
-    dest: /usr/local/bin/rspamd-learn-ham.sh
+    dest: /etc/dovecot/sieve-pipe/rspamd-learn-ham.sh
     owner: root
     group: root
     mode: '0755'
-  notify:
-    - Compile sieve scripts (ham)
 - name: Copy rspam learn spam script
   ansible.builtin.template:
     src: templates/rspamd-learn-spam.sh.j2
-    dest: /usr/local/bin/rspamd-learn-spam.sh
+    dest: /etc/dovecot/sieve-pipe/rspamd-learn-spam.sh
     owner: root
     group: root
     mode: '0755'
+- name: Copy learn-ham sieve script
+  ansible.builtin.copy:
+    src: files/learn-ham.sieve
+    dest: /etc/dovecot/sieve/learn-ham.sieve
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Compile sieve scripts (ham)
+- name: Copy learn-spam sieve script
+  ansible.builtin.copy:
+    src: files/learn-spam.sieve
+    dest: /etc/dovecot/sieve/learn-spam.sieve
+    owner: root
+    group: root
+    mode: '0644'
   notify:
     - Compile sieve scripts (spam)
 - name: Configure dovecot

@@ -37,7 +37,8 @@
         "tamasfe.even-better-toml",
         "ms-azuretools.vscode-containers",
         "ms-vscode-remote.remote-containers",
-        "Anthropic.claude-code"
+        "Anthropic.claude-code",
+        "Redis.redis-for-vscode"
       ],
       "settings": {
         // Use bash as default shell
