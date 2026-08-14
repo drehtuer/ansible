@@ -26,6 +26,40 @@ invoke run-playbook --playbook=playbooks/http.yml
 
 See `invoke --list` for all available tasks.
 
+== Linting
+
+:url-yamllint: https://yamllint.readthedocs.io/en/stable[yamllint^]
+:url-ansible-lint: https://ansible.readthedocs.io/projects/lint[ansible-lint^]
+:url-ruff: https://docs.astral.sh/ruff[ruff^]
+
+YAML is checked with link:{url-yamllint} (style, configured in `.yamllint`) and link:{url-ansible-lint} (Ansible practices, configured in `.ansible-lint`, strictest `production` profile).
+Python is checked and formatted with link:{url-ruff} (configured in `pyproject.toml`).
+All three are installed in the Dev Container.
+
+[source, bash]
+----
+# Everything
+invoke lint
+# Apply the fixes the linters can make themselves
+invoke lint --fix
+# Or one at a time
+invoke lint-yaml
+invoke lint-ansible
+invoke lint-python
+----
+
+The same checks run automatically in two places:
+
+* *Before each commit*, via the hook in `.githooks/pre-commit`, which lints the staged YAML and Python files. Git only picks the hook up once per clone:
++
+[source, bash]
+----
+invoke install-hooks
+----
++
+Use `git commit --no-verify` to bypass it for a single commit.
+* *On every push to `main` and every pull request*, via `.github/workflows/lint.yml`.
+
 == License
 
 The repo is published under the *MIT license*.

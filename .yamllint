@@ -1,0 +1,41 @@
+# https://yamllint.readthedocs.io/en/stable/configuration.html
+#
+# Shared YAML style for this repo. ansible-lint picks this file up
+# automatically and uses it instead of its own built-in yamllint
+# defaults, so `invoke lint-yaml` and `invoke lint-ansible` agree on
+# what valid YAML looks like here.
+
+extends: default
+
+# Skips log/, vault/ and roles/sshd/keys/ without repeating them here.
+ignore-from-file: .gitignore
+
+rules:
+  # This repo does not prefix its YAML files with `---`.
+  document-start: disable
+
+  # 2 spaces everywhere, list items indented below their key:
+  #   packages:
+  #     - bash
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+  # 80 is too tight for descriptive task names, `fail_msg` texts and
+  # Jinja expressions. 120 still keeps side-by-side diffs readable.
+  line-length:
+    max: 120
+
+  # Ansible expects true/false, not yes/no/on/off. Keys are exempt so
+  # that the GitHub Actions `on:` trigger is not flagged as a boolean.
+  truthy:
+    allowed-values:
+      - 'true'
+      - 'false'
+    check-keys: false
+
+  # File modes must be quoted strings (`mode: "0644"`); a bare 0644 is
+  # read as decimal 644 by YAML and silently applies the wrong mode.
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
