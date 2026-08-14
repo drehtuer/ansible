@@ -1,0 +1,12 @@
+# Values are inline rather than read from inventories/test, so the
+# scenario works with a bare `molecule test` from this directory.
+- name: Converge
+  hosts: all
+  vars:
+    time:
+      ntp:
+        server:
+          - 0.pool.ntp.org
+      timezone: Europe/Berlin
+  roles:
+    - time

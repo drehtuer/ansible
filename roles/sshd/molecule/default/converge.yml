@@ -1,0 +1,14 @@
+# Values are inline rather than read from inventories/test, so the
+# scenario works with a bare `molecule test` from this directory.
+# `hostname` matches the throwaway key pair prepare.yml generates,
+# not a real host.
+- name: Converge
+  hosts: all
+  vars:
+    hostname: moleculetest
+    sshd:
+      host_keys:
+        - ed25519
+        - rsa
+  roles:
+    - sshd

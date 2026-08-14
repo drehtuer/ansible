@@ -1,0 +1,39 @@
+# Molecule scenario for the `system` role. Run with
+# `invoke test-molecule --role=system`, or `molecule test` from
+# roles/system.
+#
+# The image is an init-enabled one: almost every role here uses
+# `systemd_service`, which does nothing useful in a container that is
+# not running systemd as PID 1. That is why a plain ubuntu:24.04
+# image will not do.
+driver:
+  name: docker
+platforms:
+  - name: ansible-test-system
+    image: geerlingguy/docker-ubuntu2404-ansible:latest
+    pre_build_image: true
+    command: /lib/systemd/systemd
+    privileged: true
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+provisioner:
+  name: ansible
+  env:
+    # Molecule does not add the repository's roles/ directory to
+    # the roles path, so the role under test cannot be resolved by
+    # name and the run fails at the syntax stage, before any
+    # container is created. MOLECULE_PROJECT_DIRECTORY is
+    # roles/<role>, so its parent is the roles directory.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
+  options:
+    # Setting the hostname needs a capability a test container should
+    # not have - sethostname() fails even under privileged: true
+    # ("Device or resource busy"). The task is tagged `hostname` (see
+    # roles/system/tasks/main.yml) purely so this scenario can skip
+    # it; the real playbooks never pass --skip-tags, so it still
+    # fires normally on a real host. Unlike a handler (see the time
+    # role), --skip-tags does reliably skip a regular tagged task.
+    skip-tags: hostname
+verifier:
+  name: ansible

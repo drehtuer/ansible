@@ -1,0 +1,8 @@
+# Values are inline rather than read from inventories/test, so the
+# scenario works with a bare `molecule test` from this directory.
+- name: Converge
+  hosts: all
+  vars:
+    hostname_fqdn: moleculetest.test.invalid
+  roles:
+    - system
