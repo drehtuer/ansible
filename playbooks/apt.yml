@@ -1,4 +1,7 @@
-- name: Apt update and installation
+- name: Apt role
   hosts: all
+  gather_facts: false
   roles:
-    - apt
+    - role: apt
+      tags:
+        - apt
