@@ -1,0 +1,27 @@
+argument_specs:
+  main:
+    short_description: Configure NTP and the system timezone
+    description:
+      - Installs ntpsec and cron, points ntpd at the configured
+        upstream servers, sets the timezone and syncs the hardware
+        clock.
+    options:
+      time:
+        type: dict
+        required: true
+        description: Time settings.
+        options:
+          timezone:
+            type: str
+            required: true
+            description: IANA timezone name, e.g. Europe/Berlin.
+          ntp:
+            type: dict
+            required: true
+            description: NTP settings.
+            options:
+              server:
+                type: list
+                elements: str
+                required: true
+                description: Upstream NTP servers.

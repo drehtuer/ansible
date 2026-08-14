@@ -7,15 +7,13 @@
 - name: Set hostname
   ansible.builtin.hostname:
     name: "{{ hostname_fqdn }}"
-- name: Copy locale.gen file
-  ansible.builtin.template:
-    src: templates/locale.gen.j2
-    dest: /etc/locale.gen
-    owner: root
-    group: root
-    mode: "0644"
-  register: result
+- name: Generate locales
+  # Edits /etc/locale.gen and runs locale-gen, but only for locales
+  # that are not built yet - unlike the previous template plus
+  # unconditional `locale-gen` command.
+  community.general.locale_gen:
+    name: "{{ item }}"
+  loop: "{{ system.locales.locale_gen }}"
   notify:
-    - Generate locales
     - Set default locales
     - Set LANG

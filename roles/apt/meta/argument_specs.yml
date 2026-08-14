@@ -1,0 +1,18 @@
+argument_specs:
+  main:
+    short_description: Refresh apt and install base packages
+    description:
+      - Refreshes the apt cache and installs the base package set.
+        A full package upgrade is available behind the
+        `package-upgrade` tag.
+    options:
+      apt:
+        type: dict
+        required: true
+        description: Apt settings.
+        options:
+          packages:
+            type: list
+            elements: str
+            required: true
+            description: Packages installed on every host.

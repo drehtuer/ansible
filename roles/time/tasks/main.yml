@@ -1,4 +1,4 @@
-- name: Install ntpsec
+- name: Install time packages
   ansible.builtin.apt:
     install_recommends: false
     name:
@@ -8,18 +8,27 @@
       - util-linux-extra
   notify:
     - Set HW clock
-- name: Config for ntpdate
+- name: Config for ntpd
   ansible.builtin.template:
     src: templates/ntp.conf.j2
-    dest: /etc/ntp.conf
+    # ntpsec reads its config from /etc/ntpsec, not /etc/ntp.conf.
+    dest: /etc/ntpsec/ntp.conf
     owner: root
     group: root
     mode: "0644"
   notify:
     - Restart ntpd
+    - Set HW clock
+- name: Remove stale /etc/ntp.conf
+  # This role used to write here. Nothing reads it, so leaving it
+  # behind only invites confusion when debugging the clock.
+  ansible.builtin.file:
+    path: /etc/ntp.conf
+    state: absent
 - name: Set timezone
   community.general.timezone:
     hwclock: "UTC"
     name: "{{ time.timezone }}"
   notify:
     - Restart crond
+    - Set HW clock

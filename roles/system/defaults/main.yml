@@ -1,8 +1,12 @@
+# `hostname_fqdn` has no default on purpose - it is host specific and
+# comes from the inventory. See meta/argument_specs.yml.
 system:
-  hostname:
   locales:
-    locale: en_US.UTF8
-    locale_time: en_GB.UTF8
+    # Normalised to the UTF-8 spelling so these match the names in
+    # locale_gen below.
+    locale: en_US.UTF-8
+    locale_time: en_GB.UTF-8
+    # Locales to generate, as passed to locale-gen.
     locale_gen:
-      - en_US.UTF-8 UTF-8
-      - en_GB.UTF-8 UTF-8
+      - en_US.UTF-8
+      - en_GB.UTF-8

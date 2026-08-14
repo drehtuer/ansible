@@ -1,0 +1,15 @@
+# Connection identity for this host.
+#
+# sshd denies root login, so Ansible logs in as the unprivileged
+# account managed by the `users` role and escalates via sudo
+# (`become` is enabled globally in ansible.cfg). That account is a
+# member of `sudo`, which the `users` role grants NOPASSWD.
+#
+# Keep this in sync with the matching entry in users.yml.
+ansible_user: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  34666662303638336131386636343034333837643165623234616537333932663139326636383639
+  6534633333323261393563383161633363643161633862320a343636323265383030356232393964
+  63633439626363343266346339376661323566643733336463366333663133613236636633363635
+  3930366437383765330a373539366435303234646235333231373866666133373332643563643531
+  6163

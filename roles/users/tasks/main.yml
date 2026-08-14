@@ -5,20 +5,33 @@
       - sudo
       - passwd
 - name: Add groups
+  # Primary groups and every supplementary group referenced by a
+  # user. `ansible.builtin.user` fails on a group that does not
+  # exist yet.
   ansible.builtin.group:
-    name: "{{ item.group }}"
-  loop: "{{ users.users }}"
-  loop_control:
-    label: "{{ item.group }}"
+    name: "{{ item }}"
+  # `map('string')` because vault-encrypted values are not plain str
+  # and string filters refuse to operate on them directly.
+  loop: >-
+    {{ ((users.users | map(attribute='group') | map('string') | list)
+        + (users.users | map(attribute='groups') | map('string')
+           | map('split', ',') | flatten | map('trim')
+           | reject('eq', '') | list)) | unique }}
 - name: Group sudo without password
-  ansible.builtin.lineinfile:
-    path: /etc/sudoers.d/sudo_nopasswd
-    create: true
+  # Load bearing: Ansible logs in as an unprivileged account and
+  # escalates through sudo non-interactively. Turning this off means
+  # supplying a become password by hand on every run.
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/sudo_nopasswd
+    content: |
+      %sudo ALL=(ALL) NOPASSWD: ALL
     owner: root
     group: root
-    mode: '0440'
-    line: "%sudo ALL=(ALL) NOPASSWD: ALL"
-    validate: 'visudo -cf %s'
+    mode: "0440"
+    validate: "visudo -cf %s"
+  # `| default` because inventory that overrides `users` replaces the
+  # whole dict rather than merging into the role defaults.
+  when: users.sudo_nopasswd | default(true)
 - name: Add users
   ansible.builtin.user:
     name: "{{ item.name }}"
@@ -27,6 +40,19 @@
     groups: "{{ item.groups }}"
     create_home: "{{ item.create_home }}"
     password: "{{ item.password }}"
+    # Deliberately additive, NOT authoritative.
+    #
+    # Supplementary group membership is currently split across roles:
+    # the `docker` role also adds accounts to the `docker` group. With
+    # `append: false` here the two roles would fight, and running this
+    # role would silently revoke docker access until docker.yml ran
+    # again.
+    #
+    # The trade-off is that a group removed from the inventory is not
+    # removed from the account. Fixing that properly means making this
+    # role the single owner of group membership - listing `docker` in
+    # `users.users[].groups` and dropping the user task from the
+    # docker role - before flipping this to false.
     append: true
   loop: "{{ users.users }}"
   loop_control:
@@ -35,6 +61,9 @@
   ansible.posix.authorized_key:
     user: "{{ item.name }}"
     key: "{{ item.public_key }}"
+    # Authoritative: a key revoked in the inventory is revoked on
+    # the host. See users.authorized_keys_exclusive.
+    exclusive: "{{ users.authorized_keys_exclusive | default(true) }}"
   loop: "{{ users.authorized_keys }}"
   loop_control:
     label: "{{ item.name }}"

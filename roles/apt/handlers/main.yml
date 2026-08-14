@@ -1,4 +1,0 @@
-- name: Upgrade all packages
-  ansible.builtin.apt:
-    autoremove: true
-    upgrade: "full"

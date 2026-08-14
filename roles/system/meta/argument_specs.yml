@@ -1,0 +1,36 @@
+argument_specs:
+  main:
+    short_description: Set hostname and system locales
+    description:
+      - Sets the system hostname and generates the configured
+        locales.
+    options:
+      hostname_fqdn:
+        type: str
+        required: true
+        description:
+          - Fully qualified domain name to set as the system
+            hostname.
+      system:
+        type: dict
+        required: true
+        description: System settings.
+        options:
+          locales:
+            type: dict
+            required: true
+            description: Locale settings.
+            options:
+              locale:
+                type: str
+                required: true
+                description: Default locale, used for LANG.
+              locale_time:
+                type: str
+                required: true
+                description: Locale used for LC_TIME.
+              locale_gen:
+                type: list
+                elements: str
+                required: true
+                description: Locales to generate.
