@@ -2,6 +2,8 @@ roles:
 
 collections:
   - name: community.general
+  # `authorized_key`, used by the users role.
+  - name: ansible.posix
   # Used by molecule's docker driver to create and destroy the test
   # containers. Not used by any role.
   - name: community.docker

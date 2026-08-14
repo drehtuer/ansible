@@ -146,7 +146,19 @@ RUN \
     ansible-galaxy \
     install \
     --role-file \
-    /ansible-galaxy.yml
+    /ansible-galaxy.yml \
+    # Collections go to a system-wide path rather than the default
+    # ~/.ansible of whoever runs this (root, at build time - the
+    # non-root user would never see them). /usr/share/ansible is
+    # searched by every ansible-core, including the one inside the
+    # molecule virtualenv, which has no collections of its own.
+    && ansible-galaxy \
+    collection \
+    install \
+    --requirements-file \
+    /ansible-galaxy.yml \
+    --collections-path \
+    /usr/share/ansible/collections
 
 
 USER ${ARG_USER}
