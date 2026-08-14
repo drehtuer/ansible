@@ -308,7 +308,7 @@ def clean(
   ctx_run(ctx, cmd)
 
 
-@task
+@task(pre=[clean])
 def ping(
   ctx: context,
   hosts: str = HOSTS_ALL,
@@ -332,7 +332,7 @@ def ping(
   ctx_run(ctx, cmd)
 
 
-@task
+@task(pre=[clean])
 def run_playbook(
   ctx: context,
   playbook: str,
@@ -375,7 +375,7 @@ def molecule_roles() -> list[str]:
   return sorted({path.parents[2].name for path in roles})
 
 
-@task
+@task(pre=[clean])
 def test_static(
   ctx: context,
   verbose: bool = False,
@@ -398,7 +398,7 @@ def test_static(
   ctx_run(ctx, cmd)
 
 
-@task(iterable=['role'])
+@task(pre=[clean], iterable=['role'])
 def test_molecule(
   ctx: context,
   role: list[str] = None,
@@ -437,7 +437,7 @@ def test_molecule(
     raise Exit(f'Molecule failed for: {", ".join(failed)}', code=1)
 
 
-@task
+@task(pre=[clean])
 def test(
   ctx: context,
 ) -> None:
@@ -446,12 +446,17 @@ def test(
 
   Static tests first, since they are quick and
   need no container, then the molecule scenarios.
+
+  Calls test_static/test_molecule as plain Python
+  functions rather than invoke sub-tasks, so their
+  own `pre=[clean]` does not fire a second time -
+  this task's own `pre=[clean]` already covers it.
   """
   test_static(ctx)
   test_molecule(ctx)
 
 
-@task
+@task(pre=[clean])
 def check_drift(
   ctx: context,
   hosts: str = HOSTS_ALL,

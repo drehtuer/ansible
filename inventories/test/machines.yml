@@ -16,5 +16,8 @@ all:
       domain_aliases:
         - alias.invalid
       hostname_fqdn: testhost.test.invalid
+      # See the matching comment in ../machines.yml - not read by any
+      # role yet, kept here so the test inventory stays a complete
+      # example of every host var a role might need.
       ip_v4: 192.0.2.1
       ip_v6: "2001:db8::1"

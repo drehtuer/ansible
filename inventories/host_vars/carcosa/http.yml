@@ -1,6 +1,3 @@
-# Overriding `http` replaces the role defaults wholesale rather than
-# merging into them, so every key the role needs is repeated here.
-# meta/argument_specs.yml fails the run if one goes missing.
 http:
   port_http: 80
   port_https: 443
