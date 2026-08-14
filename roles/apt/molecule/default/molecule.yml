@@ -19,5 +19,12 @@ platforms:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
 provisioner:
   name: ansible
+  env:
+    # Molecule does not add the repository's roles/ directory to
+    # the roles path, so the role under test cannot be resolved by
+    # name and the run fails at the syntax stage, before any
+    # container is created. MOLECULE_PROJECT_DIRECTORY is
+    # roles/<role>, so its parent is the roles directory.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/.."
 verifier:
   name: ansible
