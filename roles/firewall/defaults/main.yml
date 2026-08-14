@@ -1,8 +1,30 @@
 firewall:
+  # Connection-rate limiting applied to rules marked `rate_limit`.
+  rate_limit:
+    seconds: 10
+    hitcount: 10
+  docker:
+    # Docker's published ports bypass INPUT entirely, so when Docker
+    # is present the role also manages the DOCKER-USER chain. Turned
+    # off, nothing about Docker is written to the rules file.
+    enabled: false
+    # Interface facing the internet. The default route's interface is
+    # the right answer on a single-homed host.
+    #
+    # Deliberately no fallback: guessing wrong means the DROP below
+    # matches nothing and every published container port is exposed,
+    # which is silent. Failing to template is the safer error.
+    wan_interface: "{{ ansible_default_ipv4.interface }}"
+    # Container ports that may be reached from wan_interface.
+    # Everything else forwarded in from outside is dropped.
+    published:
+      tcp: []
+      udp: []
   rules:
     tcp:
       - port: 22
         comment: "SSH"
+        rate_limit: true
     udp:
       - port: 53
         comment: "DNS"

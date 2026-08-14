@@ -1,0 +1,5 @@
+{
+  "log-driver": {{ docker.daemon.log_driver | to_json }},
+  "log-opts": {{ docker.daemon.log_opts | to_json }},
+  "live-restore": {{ docker.daemon.live_restore | to_json }}
+}

@@ -4,6 +4,12 @@
     name:
       - iptables
       - iptables-persistent
+# Restoring the rules flushes the whole filter table, which takes
+# fail2ban's and Docker's chains with it. Both have to be put back
+# afterwards, but only if they are actually installed - this role has
+# to work on a host that runs neither.
+- name: Gather service facts
+  ansible.builtin.service_facts:
 - name: Config for iptables (v4)
   ansible.builtin.template:
     src: templates/iptables.rules.j2
@@ -11,21 +17,31 @@
     owner: root
     group: root
     mode: "0600"
+    # Refuse to install rules the kernel would reject. A bad rules
+    # file is the other way to lose access to a remote host.
+    validate: "iptables-restore --test %s"
+  vars:
+    ip_version: 4
   notify:
     - Reload iptables
-    - Reload docker
+    - Restart docker
+    - Restart fail2ban
 - name: Config for iptables (v6)
   ansible.builtin.template:
-    src: templates/ip6tables.rules.j2
+    src: templates/iptables.rules.j2
     dest: /etc/iptables/rules.v6
     owner: root
     group: root
     mode: "0600"
+    validate: "ip6tables-restore --test %s"
+  vars:
+    ip_version: 6
   notify:
     - Reload iptables
-    - Reload docker
+    - Restart docker
+    - Restart fail2ban
 - name: Ensure iptables (v4|v6) service is enabled and running
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: netfilter-persistent
     enabled: true
     state: started

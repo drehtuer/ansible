@@ -1,3 +1,16 @@
+# Group membership is deliberately not managed here. The `users` role
+# owns supplementary groups; list `docker` in `users.users[].groups`
+# to grant access. Two roles writing the same field meant neither
+# could be authoritative.
 docker:
-  users:
-    - name: root
+  daemon:
+    # Docker's default json-file driver rotates nothing, so container
+    # logs grow until the disk is full.
+    log_driver: json-file
+    log_opts:
+      max-size: 10m
+      max-file: "3"
+    # Leave containers running across a daemon restart. The firewall
+    # role restarts Docker whenever it reloads iptables, which would
+    # otherwise bounce every container.
+    live_restore: true

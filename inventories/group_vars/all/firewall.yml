@@ -1,8 +1,24 @@
+# Overriding `firewall` replaces the role defaults wholesale rather
+# than merging into them, so every key the role needs is repeated
+# here. meta/argument_specs.yml fails the run if one goes missing.
 firewall:
+  rate_limit:
+    seconds: 10
+    hitcount: 10
+  docker:
+    # carcosa runs Docker, so the DOCKER-USER chain is managed.
+    enabled: true
+    wan_interface: "{{ ansible_default_ipv4.interface }}"
+    # No containers publish ports yet. Anything forwarded in from the
+    # internet is dropped until a port is listed here.
+    published:
+      tcp: []
+      udp: []
   rules:
     tcp:
       - port: 22
         comment: "SSH"
+        rate_limit: true
       - port: 25
         comment: "SMTP(s)"
       - port: 80

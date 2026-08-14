@@ -14,7 +14,8 @@ The repo configures a single physical/virtual server, host `carcosa`, serving th
 * `tasks.py` (python-invoke) wraps `ansible`/`ansible-playbook` with the correct inventory, vault, and become flags. Documented tasks: `ping`, `run-playbook`, `login`, `clean`, plus the lint tasks below.
 * Linting is enforced, not advisory: `yamllint --strict` (`.yamllint`), `ansible-lint` at its strictest `production` profile (`.ansible-lint`) and `ruff` check + format (`pyproject.toml`). The whole repo passes all three. They run via `invoke lint` (`--fix` applies what the tools can fix themselves), via the `.githooks/pre-commit` hook on staged files (enable once per clone with `invoke install-hooks`), and in GitHub Actions on pushes to `main` and pull requests (`.github/workflows/lint.yml`). ansible-lint reads `.yamllint` as well, so both YAML tools agree on style. CI has no vault password — it points `ANSIBLE_VAULT_PASSWORD_FILE` at a placeholder file, which is enough because linting never decrypts vaulted values.
 * Secrets are stored either as inline `!vault |` values in `inventories/**/*.yml`, or as whole encrypted files (`*.aes256`) decrypted at deploy time via `decrypt: true`. The vault password lives in `vault/secret.txt`, referenced by `ansible.cfg` (`vault_password_file`), and is gitignored.
-* Host SSH keys are pre-generated with `roles/sshd/scripts/generate_keys.sh`, vault-encrypted into `roles/sshd/files/`, and the resulting SHA-256 hashes are recorded in `inventories/host_vars/<host>/sshd.yml` so the role can detect drift and only replace the key when its checksum changed.
+* Host SSH keys are pre-generated with `roles/sshd/scripts/generate_keys.sh` and vault-encrypted into `roles/sshd/files/`. The role copies them by content, so replacement is handled by `copy`'s own comparison rather than a separate checksum recorded in the inventory.
+* Every role declares its inventory inputs in `meta/argument_specs.yml`, so a missing or misshapen variable fails at the start of the role with a named error instead of part-way through a run. Note that overriding a role's top-level dict in inventory *replaces* the role default rather than merging into it, so an override has to repeat every key the role needs.
 
 == Services implemented
 
@@ -29,16 +30,20 @@ The repo configures a single physical/virtual server, host `carcosa`, serving th
 | Updates apt cache, installs a shared base package set (editors, shells, monitoring CLIs, unattended-upgrades, etc.).
 
 | `users`
-| Creates groups/users/passwords (all vault-encrypted) and passwordless-sudo for the `sudo` group; installs SSH `authorized_keys`.
+| Creates groups/users/passwords (all vault-encrypted) and passwordless-sudo for the `sudo` group; installs SSH `authorized_keys`. This role is the **single owner of supplementary group membership** — no other role may add an account to a group, since two roles writing the same field means neither can be authoritative. Membership and authorized keys are both managed authoritatively: dropping a group or a key from the inventory removes it from the host. The passwordless-sudo rule is load-bearing, because Ansible logs in unprivileged and escalates non-interactively.
 
 | `sshd`
-| Installs `openssh-server`; deploys vault-encrypted, per-host ed25519/RSA host keys (intended to be checksum-gated, but the gate is currently a no-op — see `doc/TODO.adoc`) and a shared screened `moduli` file; templates `sshd_config`.
+| Installs `openssh-server`; deploys vault-encrypted, per-host ed25519/RSA host keys and a shared screened `moduli` file; templates a hardened `sshd_config` that denies root login and password authentication, validated with `sshd -t` before it is installed. The config deliberately omits an `Include` of `sshd_config.d/`, so package drop-ins cannot weaken it.
 
 | `firewall`
-| `iptables`/`ip6tables` via `iptables-persistent`, default-deny INPUT/FORWARD, SSH connection-rate limiting, and a data-driven allow-list (`firewall.rules.tcp`/`.udp` in `inventories/group_vars/all/firewall.yml`) currently opening TCP 22/25/80/443/587/993 and UDP 53.
+| `iptables`/`ip6tables` via `iptables-persistent`, default-deny INPUT/FORWARD, connection-rate limiting on rules marked `rate_limit`, and a data-driven allow-list (`firewall.rules.tcp`/`.udp` in `inventories/group_vars/all/firewall.yml`) currently opening TCP 22/25/80/443/587/993 and UDP 53. Both address families render from one template, and each rules file is checked with `iptables-restore --test` before being installed.
+
+Also manages the `DOCKER-USER` chain when `firewall.docker.enabled` is set. This matters because published container ports are DNATed and traverse `FORWARD`, never `INPUT` — without it, `docker run -p` is reachable from the internet regardless of the allow-list above. Container ports have to be opened explicitly in `firewall.docker.published`; everything else arriving on `firewall.docker.wan_interface` is dropped.
+
+Restoring the rules flushes the whole `filter` table, which takes fail2ban's and Docker's own chains with it, so the role restarts both afterwards — each only if that service is actually installed on the host.
 
 | `fail2ban`
-| Installs fail2ban with a static `jail.local` covering `sshd`, `postfix`, `dovecot`, `nginx-http-auth`, `nginx-404`.
+| Installs fail2ban and templates `jail.local` from `fail2ban.jails`, covering `sshd`, `postfix`, `dovecot`, `nginx-http-auth`, `nginx-404`. Each jail sets `backend` to match how that service really logs: `systemd` for the journal (sshd, postfix), `auto` for the services this repo configures to write to files (dovecot via `roles/imap`, nginx via `roles/http`). Getting this wrong is silent — a journal-backed jail on a file-logging service simply never matches. Ships its own `filter.d/nginx-404.conf`, which the fail2ban package does not provide.
 
 | `time`
 | `ntpsec` with Hetzner NTP servers, hardware clock in UTC, timezone `Europe/Berlin`.
@@ -53,7 +58,7 @@ The repo configures a single physical/virtual server, host `carcosa`, serving th
 | MariaDB (root user/password vault-encrypted, idempotent via a `/root/.mysql_root_password_set` marker file) and Redis (loopback-only, 16 logical DBs), both bound to `127.0.0.1`/`::1` only.
 
 | `docker`
-| Installs Docker Engine + Buildx + Compose v2, enables `docker`/`containerd`, adds configured users to the `docker` group. No containers/compose stacks are defined yet — this is deliberate groundwork, laid so a dockerized service can be added later without a separate bootstrap step.
+| Installs Docker Engine + Buildx + Compose v2, enables `docker`/`containerd`, and writes `/etc/docker/daemon.json`: `json-file` logging capped at 10 MB × 3 (the driver rotates nothing by default, so container logs otherwise grow until the disk fills) and `live-restore`, which keeps containers up when the daemon restarts — including the restart the `firewall` role triggers on every rules change. Docker group access is granted through the `users` role, not here. No containers/compose stacks are defined yet — this is deliberate groundwork, laid so a dockerized service can be added later without a separate bootstrap step. Note that publishing a container port also needs a matching entry in `firewall.docker.published`.
 
 | `http`
 | nginx + certbot (`letsencrypt` apt package) + php-fpm. Builds a `conf-server`/`sites-available`/`sites-enabled`/`locations-available`/`locations-enabled` layout, generates a 4096-bit DH param, hardened SSL/security headers (HSTS, CSP, X-Frame-Options, etc.), and obtains a single Let's Encrypt certificate covering the primary domain, the host FQDN, and the `cloud`/`mail`/`spam`/`status`/`www` subdomain aliases (`http.letsencrypt.aliases`). Serves a `status.<domain>` vhost, an HTTP→HTTPS redirect vhost, and a `mail.<domain>` vhost (per-role site configs are added by the `cloud`/`spam` roles).
@@ -85,5 +90,6 @@ No operational runbook exists yet for day-2 tasks (deploying, rotating secrets, 
 
 == Known inconsistencies worth double-checking
 
-* `roles/fail2ban/files/jail.local` enables an `nginx-404` filter, but no corresponding `filter.d` definition is deployed by this repo; verify it exists in the target OS's fail2ban package before relying on it, or fail2ban may fail to start that jail.
 * The `http` role's certbot handlers restart/enable a `certbot` **service** (a one-shot unit), not the `certbot.timer` that Debian/Ubuntu's certbot package uses for scheduled renewal — worth confirming automatic renewal is actually active on the host.
+* `roles/fail2ban/files/filter.d/nginx-404.conf` is written against the `main` log format in `roles/http/files/nginx.conf`. Confirm it matches on the host with `fail2ban-regex /var/log/nginx/access.log /etc/fail2ban/filter.d/nginx-404.conf` — a filter that matches nothing fails silently rather than loudly.
+* `firewall.docker.wan_interface` defaults to the default route's interface fact. Confirm it resolves to the real internet-facing NIC on the host: if it names the wrong interface the `DOCKER-USER` drop matches nothing, which is also silent.

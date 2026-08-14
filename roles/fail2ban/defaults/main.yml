@@ -1,0 +1,42 @@
+# Override with own variables
+fail2ban:
+  # Applied to every jail unless the jail overrides it.
+  defaults:
+    bantime: 1h
+    findtime: 10m
+    maxretry: 5
+  jails:
+    # `backend` decides where fail2ban looks for failures, and it has
+    # to match how the service actually logs. sshd and postfix go to
+    # the journal; dovecot and nginx are configured by their roles to
+    # write to files, so those jails have to poll the file instead.
+    - name: sshd
+      port: ssh
+      filter: sshd
+      backend: systemd
+    - name: postfix
+      port: smtp,submission
+      filter: postfix
+      backend: systemd
+      options:
+        mode: normal
+    - name: dovecot
+      port: imaps
+      filter: dovecot
+      backend: auto
+      # Set by roles/imap (dovecot.conf.j2 `log_path`).
+      logpath: /var/log/dovecot.log
+    - name: nginx-http-auth
+      port: https
+      filter: nginx-http-auth
+      backend: auto
+      # Set by roles/http (nginx.conf `error_log`).
+      logpath: /var/log/nginx/error.log
+    - name: nginx-404
+      port: https
+      # Not shipped by the fail2ban package, deployed by this role.
+      filter: nginx-404
+      backend: auto
+      # Set by roles/http (nginx.conf `access_log`).
+      logpath: /var/log/nginx/access.log
+      maxretry: 20

@@ -1,12 +1,28 @@
+# Handlers run in the order they are defined here, not the order they
+# are notified. iptables has to be reloaded first so the services that
+# reinstall their own chains do so afterwards.
 - name: Reload iptables
   ansible.builtin.systemd_service:
     name: netfilter-persistent
     daemon_reload: true
     state: restarted
     enabled: true
-- name: Reload docker
+- name: Restart docker
+  # Recreates the DOCKER/DOCKER-ISOLATION chains that the restore
+  # flushed. Skipped when Docker is not installed, so the role stays
+  # usable on a host without it.
   ansible.builtin.systemd_service:
     name: docker
     daemon_reload: true
     state: restarted
     enabled: true
+  when: "'docker.service' in ansible_facts.services"
+- name: Restart fail2ban
+  # Same reason as Docker: the flush removes every f2b-* chain, and
+  # fail2ban only rebuilds them on start. Bans themselves survive in
+  # its database and are reapplied.
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    state: restarted
+    enabled: true
+  when: "'fail2ban.service' in ansible_facts.services"
