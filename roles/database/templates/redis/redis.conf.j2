@@ -1,3 +1,4 @@
 supervised systemd
 bind {{ database.redis.ip4 }} {{ database.redis.ip6 }}
+port {{ database.redis.port }}
 databases {{ database.redis.databases }}

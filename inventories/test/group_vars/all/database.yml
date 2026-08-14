@@ -1,8 +1,6 @@
 database:
   mysql:
     ip4: 127.0.0.1
-    ip6: "::1"
-    port: 3306
     socket: /var/run/mysqld/mysqld.sock
     root:
       user: root
