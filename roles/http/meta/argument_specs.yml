@@ -25,7 +25,9 @@ argument_specs:
           port_http:
             type: int
             required: true
-            description: Plain HTTP port, serving the ACME challenge and the redirect.
+            description:
+              - Plain HTTP port, serving the ACME challenge and the
+                redirect.
           port_https:
             type: int
             required: true
@@ -60,7 +62,9 @@ argument_specs:
                 type: list
                 elements: str
                 required: true
-                description: Subdomains added to the certificate for every domain.
+                description:
+                  - Subdomains added to the certificate for every
+                    domain.
           sites:
             type: list
             elements: dict

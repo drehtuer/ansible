@@ -6,5 +6,7 @@
     vtype: select
 - name: Set LANG
   ansible.builtin.command:
-    cmd: "localectl set-locale LANG={{ system.locales.locale }} LC_TIME={{ system.locales.locale_time }}"
+    cmd: >-
+      localectl set-locale LANG={{ system.locales.locale }}
+      LC_TIME={{ system.locales.locale_time }}
   changed_when: true

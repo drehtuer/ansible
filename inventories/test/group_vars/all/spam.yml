@@ -1,5 +1,6 @@
 spam:
   milter_port: 11332
   http_port: 11334
+  # Hash of a throwaway password, for these tests only.
   htpasswd_sha256: >-
     f8cd7b4de6d8cb904cd4d5b6317066c33de93d3fa6c0d2bcf02c113c50e2e5af

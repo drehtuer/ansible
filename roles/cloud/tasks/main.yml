@@ -25,6 +25,7 @@
   ansible.builtin.set_fact:
     php_version: "{{ cloud_php_version.stdout | trim }}"
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
+    cloud_archive: "nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
 - name: Create Nextcloud database
   community.mysql.mysql_db:
     name: "{{ cloud.mysql.nextcloud.database }}"
@@ -58,8 +59,9 @@
   register: cloud_installed
 - name: Download Nextcloud
   ansible.builtin.get_url:
-    url: "https://download.nextcloud.com/server/releases/nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
-    dest: "/tmp/nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
+    url: >-
+      https://download.nextcloud.com/server/releases/{{ cloud_archive }}
+    dest: "/tmp/{{ cloud_archive }}"
     checksum: "sha256:{{ cloud.nextcloud.checksum }}"
     owner: root
     group: root
@@ -67,7 +69,7 @@
   when: not cloud_installed.stat.exists
 - name: Extract Nextcloud
   ansible.builtin.unarchive:
-    src: "/tmp/nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
+    src: "/tmp/{{ cloud_archive }}"
     dest: "{{ cloud.nextcloud.path }}"
     remote_src: true
     extra_opts: [--strip-components=1]
@@ -85,7 +87,7 @@
   when: not cloud_installed.stat.exists
 - name: Remove downloaded Nextcloud archive
   ansible.builtin.file:
-    path: "/tmp/nextcloud-{{ cloud.nextcloud.version }}.tar.bz2"
+    path: "/tmp/{{ cloud_archive }}"
     state: absent
 - name: Nextcloud PHP-FPM pool
   ansible.builtin.template:
@@ -168,7 +170,9 @@
     minute: "0"
     hour: "3"
     weekday: "0"
-    job: "/usr/bin/find {{ cloud.nextcloud.path }} -type f -name '*.png' -exec mogrify -strip {} +"
+    job: >-
+      /usr/bin/find {{ cloud.nextcloud.path }} -type f -name '*.png'
+      -exec mogrify -strip {} +
     state: present
     cron_file: nextcloud_iccp_cleanup
 - name: Validate nginx configuration

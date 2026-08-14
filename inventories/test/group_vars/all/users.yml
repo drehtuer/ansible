@@ -1,0 +1,26 @@
+# Fake accounts. The password below is the hash of "test", generated
+# for these tests only and never used on a real host.
+users:
+  sudo_nopasswd: true
+  authorized_keys_exclusive: true
+  users:
+    - name: testuser
+      group: testuser
+      shell: /usr/bin/bash
+      groups: sudo
+      create_home: true
+      password: >-
+        $6$rounds=5000$testsalt$0Ym3v0dQ0Yy6QhVQ0Iu3n2mQyC0J1nS7Zc0Yx
+    - name: testadmin
+      group: testadmin
+      shell: /usr/bin/bash
+      groups: "sudo,adm"
+      create_home: true
+      password: "*"
+  authorized_keys:
+    - name: testuser
+      # Throwaway key pair, generated for these tests.
+      public_key: >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAIDRshVWyBz2ThntSsgOOSbfaqzW/tYGf5rd5cibx72bU
+        test@invalid

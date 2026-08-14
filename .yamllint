@@ -21,10 +21,12 @@ rules:
     spaces: 2
     indent-sequences: true
 
-  # 80 is too tight for descriptive task names, `fail_msg` texts and
-  # Jinja expressions. 120 still keeps side-by-side diffs readable.
+  # 80 columns, matching `.editorconfig` and ruff. The YAML in this
+  # repo already fits, so this is a floor to hold rather than a
+  # reformatting exercise. Long Jinja expressions are folded with
+  # `>-` instead of being allowed to run on.
   line-length:
-    max: 120
+    max: 80
 
   # Ansible expects true/false, not yes/no/on/off. Keys are exempt so
   # that the GitHub Actions `on:` trigger is not flagged as a boolean.

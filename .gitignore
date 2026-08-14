@@ -1,3 +1,6 @@
 /log/
 /vault/
 /roles/sshd/keys/
+
+# Python bytecode from `import tasks`
+__pycache__/

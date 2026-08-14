@@ -1,0 +1,16 @@
+fail2ban:
+  defaults:
+    bantime: 1h
+    findtime: 10m
+    maxretry: 5
+  jails:
+    - name: sshd
+      port: ssh
+      filter: sshd
+      backend: systemd
+    - name: nginx-404
+      port: https
+      filter: nginx-404
+      backend: auto
+      logpath: /var/log/nginx/access.log
+      maxretry: 20

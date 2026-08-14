@@ -167,7 +167,8 @@
              | map('reverse') | map('join', '.') | list))
          | map('regex_replace', '^', '-d ') | list }}
   args:
-    creates: "/etc/letsencrypt/live/{{ http.letsencrypt.cert_name }}/fullchain.pem"
+    creates: >-
+      /etc/letsencrypt/live/{{ http.letsencrypt.cert_name }}/fullchain.pem
 - name: Enable certbot renewal timer
   # certbot.service is a oneshot without an [Install] section - it can
   # be neither enabled nor reloaded. The timer is what schedules

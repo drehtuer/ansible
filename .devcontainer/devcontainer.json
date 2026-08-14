@@ -7,10 +7,18 @@
       "ARG_USER": "${localEnv:USER}"
     }
   },
+  // Molecule drives its test containers over the Docker socket, so
+  // the Dev Container needs a Docker daemon of its own. Without this,
+  // `invoke test-molecule` has nothing to talk to; `invoke
+  // test-static` does not need it. See doc/TESTING.adoc.
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
   "customizations": {
     "vscode": {
       // VS code extensions
       "extensions": [
+        "EditorConfig.EditorConfig",
         "redhat.ansible",
         "dhoeric.ansible-vault",
         "asciidoctor.asciidoctor-vscode",

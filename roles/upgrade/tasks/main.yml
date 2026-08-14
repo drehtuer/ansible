@@ -2,7 +2,9 @@
   ansible.builtin.assert:
     that:
       - ansible_distribution == "Ubuntu"
-    fail_msg: "The upgrade role only supports Ubuntu, found {{ ansible_distribution }}."
+    fail_msg: >-
+      The upgrade role only supports Ubuntu, found
+      {{ ansible_distribution }}.
 
 - name: Ensure a target release is configured
   ansible.builtin.assert:
@@ -14,7 +16,9 @@
 
 - name: Check whether the target release is already reached
   ansible.builtin.set_fact:
-    upgrade_target_reached: "{{ ansible_distribution_version is version(upgrade.target_release, '>=') }}"
+    upgrade_target_reached: >-
+      {{ ansible_distribution_version is
+      version(upgrade.target_release, '>=') }}
 
 - name: Report current vs. target release
   ansible.builtin.debug:
@@ -69,7 +73,10 @@
     - name: Verify the target release was reached
       ansible.builtin.assert:
         that:
-          - ansible_distribution_version is version(upgrade.target_release, '>=')
+          - >-
+            ansible_distribution_version is
+            version(upgrade.target_release, '>=')
         fail_msg: >-
-          After upgrade and reboot, release is still {{ ansible_distribution_version }},
-          expected at least {{ upgrade.target_release }}.
+          After upgrade and reboot, release is still
+          {{ ansible_distribution_version }}, expected at least
+          {{ upgrade.target_release }}.

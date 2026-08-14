@@ -60,6 +60,29 @@ invoke install-hooks
 Use `git commit --no-verify` to bypass it for a single commit.
 * *On every push to `main` and every pull request*, via `.github/workflows/lint.yml`.
 
+Editor-side formatting is described in `.editorconfig`, which mirrors the same rules (two spaces, 80 columns, final newline, no trailing whitespace). VS Code needs the EditorConfig extension for it to take effect; it is installed by the Dev Container.
+
+== Testing
+
+:url-doc-testing: doc/TESTING.adoc[Testing]
+
+Beyond linting there are static tests (argument specs and template rendering, no host involved), molecule scenarios that converge a role in a container and check it is idempotent, and a drift check against the real host.
+
+[source, bash]
+----
+# Static tests only: quick, no container needed
+invoke test-static
+# Molecule scenarios, needs Docker
+invoke test-molecule
+# Both
+invoke test
+# What differs between this repo and the real host?
+# Local only: needs the vault password.
+invoke check-drift
+----
+
+See link:{url-doc-testing} for what each layer catches, what it does not, and how to add a scenario for another role.
+
 == License
 
 The repo is published under the *MIT license*.

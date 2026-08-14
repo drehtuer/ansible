@@ -2,3 +2,6 @@ roles:
 
 collections:
   - name: community.general
+  # Used by molecule's docker driver to create and destroy the test
+  # containers. Not used by any role.
+  - name: community.docker

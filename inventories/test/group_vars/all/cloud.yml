@@ -1,0 +1,26 @@
+cloud:
+  mysql:
+    nextcloud:
+      database: nextcloud
+      user: nextcloud
+      password: test-nextcloud-password
+    root:
+      user: root
+      password: test-root-password
+  nextcloud:
+    version: "34.0.3"
+    checksum: >-
+      d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d
+    path: /var/www/nextcloud
+    cron_minute: "*/5"
+  php:
+    memory_limit: 512M
+    opcache:
+      enable: 1
+      interned_strings_buffer: 12
+      memory_consumption: 128
+    pool:
+      max_children: 5
+      start_servers: 2
+      min_spare_servers: 1
+      max_spare_servers: 3
