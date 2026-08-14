@@ -11,9 +11,13 @@
   // the Dev Container needs a Docker daemon of its own. Without this,
   // `invoke test-molecule` has nothing to talk to; `invoke
   // test-static` does not need it. See doc/TESTING.adoc.
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
-  },
+  //
+  // Docker itself is installed by the Dockerfile (Ubuntu 26.04's own
+  // docker.io package) and started by docker-init.sh, rather than
+  // via the devcontainers docker-in-docker feature: that feature's
+  // install script hardcodes which Ubuntu codenames it supports, and
+  // has not caught up with 26.04 ('resolute') yet.
+  "remoteUser": "${localEnv:USER}",
   "customizations": {
     "vscode": {
       // VS code extensions
@@ -43,7 +47,11 @@
     }
   },
   "runArgs": [
-    "--hostname=dev_host"
+    "--hostname=dev_host",
+    // dockerd (started by docker-init.sh) needs to create its
+    // own network namespaces, mounts and cgroups; without this
+    // it fails to start.
+    "--privileged"
   ],
   "mounts": [
     // Make user settings available in container
@@ -52,6 +60,8 @@
     "source=${localEnv:HOME}/.config,target=${localEnv:HOME}/.config,type=bind",
     // Mount ssh keys
     "source=${localEnv:HOME}/.ssh,target=${localEnv:HOME}/.ssh,type=bind",
+    // Claude
+    "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind",
     // Mount current workspace
     "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached"
   ]
