@@ -1,4 +1,4 @@
-mail:
+mail:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   aliases:
     - alias: postmaster
       forwards:

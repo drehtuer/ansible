@@ -1,5 +1,5 @@
 # Override with own variables
-users:
+users:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # Grant %sudo passwordless sudo. Ansible relies on this to escalate
   # non-interactively (see [privilege_escalation] in ansible.cfg);
   # disabling it means passing --ask-become-pass on every run.

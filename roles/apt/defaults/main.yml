@@ -1,5 +1,5 @@
 # Override with own variables
-apt:
+apt:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   packages:
     # Python3 should always be installed
     # on managed hosts when using ansible

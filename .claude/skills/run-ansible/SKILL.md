@@ -65,7 +65,7 @@ invoke lint                                   # yamllint --strict, ansible-lint 
 invoke lint --fix                             # same, applying what the tools can fix automatically
 ```
 
-`invoke test-static`, `invoke test-molecule` (all three scenarios, via `sudo`) and the `ruff`/`yamllint` parts of `invoke lint` were run in this session and pass. `invoke lint` as a whole currently fails on the `ansible-lint` step — see Troubleshooting.
+`invoke test-static`, `invoke test-molecule` and `invoke lint` (all three tools, including `ansible-lint` at the `production` profile) were run in this session and pass.
 
 ## Run (human path)
 
@@ -92,4 +92,3 @@ invoke check-drift   # --check --diff against inventories/machines.yml, local on
 - **`ansible_compat.errors.InvalidPrerequisiteError: Collection 'community.docker' not found in [...]`**: see the collections-path Gotcha above — `sudo ansible-galaxy collection install --requirements-file .devcontainer/ansible-galaxy.yml --collections-path /usr/share/ansible/collections --force`.
 - **`Failed to import the required Python library (requests) on dev_host's Python /usr/bin/python3`**, surfacing on the `destroy` step after `converge`/`idempotence` already passed: `sudo apt-get install -y python3-requests python3-docker`.
 - **`ERROR Unable to contact the Docker daemon`**: `sudo -n docker info` itself is failing, i.e. the socket genuinely isn't mounted/reachable even as root — this is a container-configuration problem (check `devcontainer.json`'s docker.sock mount), not something a workaround in this repo fixes.
-- **`invoke lint` fails with 18× `var-naming[no-role-prefix]`** (e.g. `roles/http/tasks/main.yml:24` on `set_fact: php_version`, and one per role's `defaults/main.yml`), and reports `Profile 'production' was required, but 'min' profile passed`, even though `doc/STATUS.adoc` claims the whole repo passes `production`. `ansible-lint` is installed unpinned in the Dockerfile (`RUN ... ansible-lint`, no version), so this is very likely version drift between what's on `PATH` here (`ansible-lint 26.1.1`) and whatever version the repo was last actually green against, rather than a real regression to fix as part of an unrelated change. `yamllint --strict` and both `ruff` checks pass cleanly on their own.

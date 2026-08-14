@@ -25,9 +25,9 @@ RUN   \
     --no-install-recommends \
     --yes \
     -qq \
-    # Ansible
+    # Ansible. ansible-lint is not installed here - see the pinned
+    # pip install below.
     ansible \
-    ansible-lint \
     # Let's be on the safe side,
     # our default shell should be
     # available
@@ -107,6 +107,42 @@ RUN   \
     && gh completion \
     --shell bash \
     > /etc/bash_completion.d/gh
+
+# Keep in sync with the versions installed by
+# .github/workflows/lint.yml, so CI and the Dev
+# Container lint with the same ansible-lint.
+# Ubuntu's own ansible-lint package has no version
+# pin, which previously let it drift out from under
+# the repo silently - see doc/TODO.adoc. yamllint is
+# pinned alongside it: Ubuntu only ships it as a
+# dependency of the (now unused) ansible-lint
+# package, and ansible-lint itself requires a newer
+# yamllint than Ubuntu 26.04 packages.
+ARG   ANSIBLE_LINT_VERSION=26.8.0
+ARG   YAMLLINT_VERSION=1.38.0
+
+RUN   \
+    # --system-site-packages, not a fully isolated
+    # venv like molecule's below: ansible-lint has to
+    # see the same ansible-core and collections the
+    # rest of the toolchain uses, not a separate copy
+    # of its own, or it aborts with "versions do not
+    # match". Installing straight into the system
+    # Python instead of a venv was tried first and
+    # rejected - Ubuntu's `ansible` package pulls in
+    # python3-ansible-compat as a dependency, which
+    # has no pip RECORD file and can't be upgraded in
+    # place, so pip aborts.
+    python3 -m venv \
+    --system-site-packages \
+    /opt/ansible-lint \
+    && /opt/ansible-lint/bin/pip install \
+    --quiet \
+    --no-cache-dir \
+    "ansible-lint==${ANSIBLE_LINT_VERSION}" \
+    "yamllint==${YAMLLINT_VERSION}" \
+    && ln -s /opt/ansible-lint/bin/ansible-lint /usr/local/bin/ansible-lint \
+    && ln -s /opt/ansible-lint/bin/yamllint /usr/local/bin/yamllint
 
 # Keep in sync with the version installed by
 # .github/workflows/lint.yml, so CI and the

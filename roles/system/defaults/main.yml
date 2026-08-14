@@ -1,6 +1,6 @@
 # `hostname_fqdn` has no default on purpose - it is host specific and
 # comes from the inventory. See meta/argument_specs.yml.
-system:
+system:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   locales:
     # Normalised to the UTF-8 spelling so these match the names in
     # locale_gen below.

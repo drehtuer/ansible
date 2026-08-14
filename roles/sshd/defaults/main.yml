@@ -2,7 +2,7 @@
 # pair is deployed, and a fallback would silently look for a key
 # that does not exist. It is a required input, see
 # meta/argument_specs.yml.
-sshd:
+sshd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # Key types to deploy. For each entry the role expects a
   # vault-encrypted files/ssh_<hostname>_<type>_key.aes256,
   # produced by scripts/generate_keys.sh.

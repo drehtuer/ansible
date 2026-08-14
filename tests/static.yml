@@ -35,7 +35,8 @@
     # Values a role sets at run time, which templates therefore
     # cannot get from the inventory. Applied to every template;
     # harmless for the ones that do not use them.
-    php_version: "8.3"
+    cloud_php_version: "8.3"
+    http_php_version: "8.3"
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
     ip_version: 4
     site:

@@ -19,15 +19,13 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
 
-      # Same Ubuntu packages as the Dev Container, so CI and a local
-      # run use the same linter versions.
-      - name: Install linters
+      # Same Ubuntu package as the Dev Container, so CI and a local
+      # run use the same ansible version. yamllint is not installed
+      # here - see the pinned venv install below.
+      - name: Install ansible
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes \
-            ansible \
-            ansible-lint \
-            yamllint
+          sudo apt-get install --no-install-recommends --yes ansible
 
       # The runner image ships its own, newer ansible-core outside
       # /usr/bin. ansible-lint would call that CLI while importing the
@@ -35,6 +33,20 @@ jobs:
       # put /usr/bin first and keep the whole toolchain on one version.
       - name: Prefer the apt-installed ansible
         run: echo "/usr/bin" >> "${GITHUB_PATH}"
+
+      # Keep in sync with ANSIBLE_LINT_VERSION/YAMLLINT_VERSION in
+      # .devcontainer/Dockerfile, including the reasoning there for
+      # why this is a --system-site-packages venv rather than a
+      # system-Python or fully isolated install. Ubuntu's own
+      # ansible-lint package has no version pin, which previously let
+      # it drift out from under the repo silently - see doc/TODO.adoc.
+      - name: Install ansible-lint and yamllint
+        run: |
+          python3 -m venv --system-site-packages /opt/ansible-lint
+          /opt/ansible-lint/bin/pip install --quiet --no-cache-dir \
+            "ansible-lint==26.8.0" \
+            "yamllint==1.38.0"
+          echo "/opt/ansible-lint/bin" >> "${GITHUB_PATH}"
 
       # ansible.cfg points at vault/secret.txt, which is deliberately
       # never committed. ansible-lint only needs the file to exist, it

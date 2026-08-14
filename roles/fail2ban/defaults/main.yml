@@ -1,5 +1,5 @@
 # Override with own variables
-fail2ban:
+fail2ban:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # Applied to every jail unless the jail overrides it.
   defaults:
     bantime: 1h

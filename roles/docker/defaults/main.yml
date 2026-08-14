@@ -2,7 +2,7 @@
 # owns supplementary groups; list `docker` in `users.users[].groups`
 # to grant access. Two roles writing the same field meant neither
 # could be authoritative.
-docker:
+docker:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   daemon:
     # Docker's default json-file driver rotates nothing, so container
     # logs grow until the disk is full.
