@@ -1,0 +1,13 @@
+# Override with own variables.
+# upgrade.target_release is empty by default, which makes this role a
+# no-op. Set it (e.g. "26.04") in inventories/host_vars/<host>/upgrade.yml
+# when a release upgrade is actually wanted.
+upgrade:
+  target_release: ""
+  # never | normal | lts - see /etc/update-manager/release-upgrades
+  # "lts" only offers upgrades to the next LTS release, skipping
+  # interim (non-LTS) releases in between.
+  prompt: lts
+  async_timeout: 5400
+  poll_interval: 30
+  reboot_timeout: 1800

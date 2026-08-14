@@ -1,0 +1,10 @@
+- name: OS release upgrade
+  hosts: all
+  # Disruptive and long-running: never runs as a side effect of an
+  # untagged run or `--tags all`, only when release-upgrade is
+  # explicitly requested.
+  tags:
+    - never
+    - release-upgrade
+  roles:
+    - upgrade

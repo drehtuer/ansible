@@ -90,6 +90,17 @@ def check_verbose(
     cmd.append(VERBOSE)
 
 
+def check_tags(
+  cmd: list[str],
+  tags: str,
+) -> None:
+  """
+  If not empty, append tags to command.
+  """
+  if tags:
+    cmd.append(f"--tags '{tags}'")
+
+
 @task
 def login(
   ctx: context,
@@ -161,6 +172,7 @@ def run_playbook(
   ask_pass: bool = False,
   ask_become_pass: bool = False,
   verbose: bool = False,
+  tags: str = None,
 ) -> None:
   """
   Run a playbook on machines.
@@ -176,5 +188,6 @@ def run_playbook(
   check_ask_become_pass(cmd, ask_become_pass)
   check_host(cmd, hosts)
   check_verbose(cmd, verbose)
+  check_tags(cmd, tags)
 
   ctx_run(ctx, cmd)
