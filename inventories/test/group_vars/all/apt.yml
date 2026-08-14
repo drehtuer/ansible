@@ -1,0 +1,4 @@
+apt:
+  packages:
+    - bash
+    - python3

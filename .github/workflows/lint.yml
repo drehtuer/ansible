@@ -41,8 +41,9 @@ jobs:
       # does not decrypt any vaulted values while linting.
       - name: Provide a placeholder vault password file
         run: |
-          echo "not-the-real-vault-password" > "${RUNNER_TEMP}/vault-password"
-          echo "ANSIBLE_VAULT_PASSWORD_FILE=${RUNNER_TEMP}/vault-password" >> "${GITHUB_ENV}"
+          vault_file="${RUNNER_TEMP}/vault-password"
+          echo "not-the-real-vault-password" > "${vault_file}"
+          echo "ANSIBLE_VAULT_PASSWORD_FILE=${vault_file}" >> "${GITHUB_ENV}"
 
       - name: yamllint
         run: yamllint --strict .

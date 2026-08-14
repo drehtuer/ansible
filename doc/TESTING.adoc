@@ -1,0 +1,143 @@
+= Testing
+include::.attributes-page.adoc[]
+
+How this repository is tested, what each layer actually catches, and what it deliberately does not.
+
+Nothing here replaces reading the output of a real run. The point of the automated layers is to make the *first* real run boring.
+
+== Layers
+
+[cols="1,3,1", options="header,autowidth"]
+|===
+| Layer | What it does | Where it runs
+
+| Linting
+| `yamllint`, `ansible-lint` (`production` profile) and `ruff`. Style and Ansible idiom only — it never evaluates a variable or renders a template.
+| CI + local
+
+| Static tests
+| Validates every `meta/argument_specs.yml` and renders every template against a fake inventory. No host is contacted, nothing is installed.
+| CI + local
+
+| Molecule
+| Converges a role inside a systemd container and runs it a second time to prove it is idempotent.
+| CI + local
+
+| Drift check
+| Runs the real playbooks against the real hosts in `--check --diff` mode and reports what differs.
+| Local only
+
+| Manual
+| A real run against `carcosa`, and whatever cannot be automated at all.
+| Local only
+|===
+
+== Test data
+
+Everything the tests need lives in `inventories/test/`, and all of it is fake and deliberately *not* vault-encrypted:
+
+* `testhost` does not exist, the domain is `test.invalid`, and the addresses are from the documentation ranges (RFC 5737 / RFC 3849).
+* Passwords are throwaway strings, and the SSH key is a throwaway pair.
+
+That is what lets the tests run in CI, which has no access to `vault/secret.txt`. It also means **the test inventory must be kept complete**: templates are rendered from it alone, without role defaults, so a template referencing a variable the test inventory does not define fails the static tests. That is intentional — it keeps the file a working example of what every role expects as input.
+
+The molecule scenarios carry their own small set of values inline in `converge.yml`, so that `molecule test` works on its own from a role directory. That is a little duplication, accepted in exchange for each scenario being self-contained.
+
+== Static tests
+
+[source, bash]
+----
+invoke test-static
+----
+
+Two checks, both in `tests/static.yml`:
+
+*Argument specs.* Every `roles/*/meta/argument_specs.yml` is validated against the test inventory. This catches a role and its inventory drifting apart, and in particular the trap that has caused the most trouble here: overriding a role's top-level dictionary in `group_vars` *replaces* the role default rather than merging into it, so an override that forgets a single key breaks the role at run time.
+
+*Template rendering.* Every `*.j2` in every role is rendered. This catches Jinja errors and undefined variables without needing a host. The firewall rules are rendered twice, for IPv4 and IPv6, and the test asserts that the two outputs actually differ — that specific branch previously compared a string against an integer and silently emitted the IPv4 ruleset into the IPv6 file.
+
+These tests are quick and need no container, which is why CI runs them before anything else.
+
+== Molecule
+
+[source, bash]
+----
+# Every role that has a scenario
+invoke test-molecule
+# Or a single role
+invoke test-molecule --role=users
+# Or directly, from the role directory
+cd roles/users && molecule test
+----
+
+`molecule test` creates a container, converges the role, **converges it a second time and fails if anything reports changed**, then destroys the container. That idempotence step is the most valuable thing here: it is what catches a `creates:` guard that never matches, a `command` without `changed_when`, or a `when` condition that is always true.
+
+=== Why the container image matters
+
+Almost every role uses `systemd_service`, which does nothing useful in a container that is not running systemd as PID 1. The scenarios therefore use an init-enabled image (`geerlingguy/docker-ubuntu2404-ansible`) started with `/lib/systemd/systemd`, `privileged: true` and the host cgroup namespace. A plain `ubuntu:24.04` image will not work.
+
+The Dev Container needs its own Docker daemon for this, provided by the `docker-in-docker` feature in `.devcontainer/devcontainer.json`. `invoke test-static` does not need it.
+
+=== Which roles have scenarios
+
+`apt`, `cron` and `users` today. Adding one is a matter of creating `roles/<role>/molecule/default/` with a `molecule.yml` and a `converge.yml`; `invoke test-molecule` discovers scenarios rather than keeping a list. The CI matrix in `.github/workflows/test.yml` does keep a list, so add the role there too.
+
+The rest are not covered, for concrete reasons rather than lack of effort:
+
+[cols="1,3", options="header,autowidth"]
+|===
+| Role | Blocker
+
+| `sshd`
+| Deploys vault-encrypted host keys named after the host (`ssh_<hostname>_*.aes256`). A container would need its own test keys, and they cannot be vault-encrypted if CI is to run them.
+
+| `time`
+| `hwclock --systohc` has no real-time clock to write to in a container.
+
+| `system`
+| Setting the hostname needs capabilities a test container should not have.
+
+| `firewall`, `docker`
+| netfilter and Docker-in-Docker-in-Docker. These want a VM.
+
+| `http`, `cloud`, `mail`, `imap`, `spam`, `dns`, `database`
+| Need real certificates and real services talking to each other. See <<Not covered>>.
+
+| `upgrade`
+| Runs `do-release-upgrade` and reboots. Not meaningfully automatable.
+|===
+
+== Drift check
+
+[source, bash]
+----
+invoke check-drift
+# Or a single playbook
+invoke check-drift --playbook=playbooks/sshd.yml
+----
+
+Runs the real playbooks against the real hosts with `--check --diff`, changing nothing. Anything reported is a difference between this repository and the host — usually a manual change made during an incident that was never written back. Running it weekly is a reasonable habit.
+
+*This cannot run in CI*, because it needs the vault password and SSH access to the host. It is a local task on purpose.
+
+Read the output rather than only the exit code. Check mode is not a clean pass/fail signal: a task whose result depends on an earlier task having actually run — a `command` guarded by `creates:`, or anything reading a file a previous task would have written — is reported as changed, or fails outright, on a host where that earlier task really did already run. The task exits non-zero if any playbook reports problems, which is a prompt to look, not proof of drift.
+
+== Not covered
+
+Worth being explicit, so the green ticks are not read as more than they are.
+
+*Cross-role interaction.* Every layer above tests a role, or a template, in isolation. The bugs that have actually cost the most here were interactions: `iptables-restore` flushing fail2ban's chains, the `http` role's certificate bootstrap deadlocking against nginx, one role's certificate lineage name disagreeing with what three other roles read. Catching those needs a full run against a throwaway VM, which is the obvious next step and is not built yet — see `doc/TODO.adoc`.
+
+*Anything requiring a real certificate.* Certbot cannot work against a container. A VM-based layer would need a test subdomain pointed at it and Let's Encrypt staging, or a local ACME server such as Pebble.
+
+*Whether the services actually work.* Molecule proves a role converges and is idempotent. It does not prove nginx serves the right vhost, that mail is delivered, or that a fail2ban jail matches anything. A `fail2ban-client status <jail>` assertion after a real run is worth more than any of the above for that particular class of problem.
+
+== Running everything
+
+[source, bash]
+----
+invoke lint    # style and idiom
+invoke test    # static tests, then molecule
+----
+
+CI runs both on every push to `main` and on every pull request: `.github/workflows/lint.yml` and `.github/workflows/test.yml`.

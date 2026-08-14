@@ -1,0 +1,4 @@
+sshd:
+  host_keys:
+    - ed25519
+    - rsa

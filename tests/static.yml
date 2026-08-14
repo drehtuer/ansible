@@ -1,0 +1,130 @@
+# Static tests. No host is contacted and nothing is installed.
+#
+# Two checks, both of which only need `inventories/test`, so they run
+# in CI without the vault password:
+#
+#   1. Every meta/argument_specs.yml is validated. This catches a role
+#      and its inventory drifting apart - in particular that
+#      overriding a role's top-level dict REPLACES the role default
+#      rather than merging into it, so an override that forgets one
+#      key breaks the role at run time.
+#
+#   2. Every template in every role is rendered. This catches Jinja
+#      errors and undefined variables without needing a host. It has
+#      already caught a comparison against the wrong type that
+#      silently rendered an IPv4 ruleset into the IPv6 file.
+#
+# Variables come from the test inventory only, not from role
+# defaults - so a template referencing something the inventory does
+# not define fails here. That is deliberate: it keeps
+# `inventories/test` a complete, working example of what every role
+# expects.
+#
+# Run with `invoke test-static`.
+- name: Static checks
+  hosts: testhost
+  gather_facts: false
+  # ansible.cfg escalates by default, for the real hosts. Nothing
+  # here touches a real host or needs root, and escalating would just
+  # prompt for a sudo password.
+  become: false
+  vars:
+    repo: "{{ playbook_dir | dirname }}"
+    rendered: /tmp/ansible-render-test
+    hostvars_plain: "{{ hostvars[inventory_hostname] | to_json | from_json }}"
+    # Values a role sets at run time, which templates therefore
+    # cannot get from the inventory. Applied to every template;
+    # harmless for the ones that do not use them.
+    php_version: "8.3"
+    cloud_fpm_socket: /run/php/nextcloud-fpm.sock
+    ip_version: 4
+    site:
+      name: default
+      subdomains:
+        - ""
+        - www
+      root: /var/www/html
+      include_locations: true
+  tasks:
+    - name: Find roles that declare an argument spec
+      ansible.builtin.find:
+        paths: "{{ repo }}/roles"
+        patterns: argument_specs.yml
+        recurse: true
+      register: specs
+
+    - name: Fail if no argument specs were found
+      # A path typo would otherwise make this playbook pass by
+      # checking nothing at all.
+      ansible.builtin.assert:
+        that:
+          - specs.files | length > 0
+        fail_msg: "No meta/argument_specs.yml found under roles/"
+
+    - name: Validate argument specs against the test inventory
+      vars:
+        spec: "{{ lookup('ansible.builtin.file', item.path) | from_yaml }}"
+      ansible.builtin.validate_argument_spec:
+        argument_spec: "{{ spec.argument_specs.main.options }}"
+        provided_arguments: >-
+          {{ hostvars_plain | dict2items
+             | selectattr('key', 'in',
+                          spec.argument_specs.main.options.keys() | list)
+             | items2dict }}
+      loop: "{{ specs.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path | dirname | dirname | basename }}"
+
+    - name: Find every template
+      ansible.builtin.find:
+        paths: "{{ repo }}/roles"
+        patterns: "*.j2"
+        recurse: true
+      register: templates
+
+    - name: Fail if no templates were found
+      ansible.builtin.assert:
+        that:
+          - templates.files | length > 0
+        fail_msg: "No templates found under roles/"
+
+    - name: Create the render directory
+      ansible.builtin.file:
+        path: "{{ rendered }}"
+        state: directory
+        mode: "0700"
+
+    - name: Render every template
+      ansible.builtin.template:
+        src: "{{ item.path }}"
+        dest: >-
+          {{ rendered }}/{{ item.path | relpath(repo) | replace('/', '_') }}
+        mode: "0600"
+      loop: "{{ templates.files | sort(attribute='path') }}"
+      loop_control:
+        label: "{{ item.path | relpath(repo) }}"
+
+    - name: Render the firewall rules for IPv6 as well
+      # The only template rendered twice: the v4/v6 branch is exactly
+      # where a silent wrong-output bug lived before.
+      ansible.builtin.template:
+        src: "{{ repo }}/roles/firewall/templates/iptables.rules.j2"
+        dest: "{{ rendered }}/firewall_rules.v6"
+        mode: "0600"
+      vars:
+        ip_version: 6
+
+    - name: Confirm the two address families really differ
+      ansible.builtin.command:
+        cmd: >-
+          diff -q {{ rendered }}/roles_firewall_templates_iptables.rules.j2
+          {{ rendered }}/firewall_rules.v6
+      register: firewall_diff
+      changed_when: false
+      failed_when: firewall_diff.rc == 0
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >-
+          {{ specs.files | length }} argument specs validated,
+          {{ templates.files | length }} templates rendered

@@ -1,0 +1,11 @@
+# Values are inline rather than read from inventories/test, so the
+# scenario works with a bare `molecule test` from this directory.
+- name: Converge
+  hosts: all
+  vars:
+    apt:
+      packages:
+        - bash
+        - python3
+  roles:
+    - apt

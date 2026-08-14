@@ -15,7 +15,9 @@ argument_specs:
           rate_limit:
             type: dict
             required: true
-            description: Connection-rate limit applied to rules marked rate_limit.
+            description:
+              - Connection-rate limit applied to rules marked
+                rate_limit.
             options:
               seconds:
                 type: int

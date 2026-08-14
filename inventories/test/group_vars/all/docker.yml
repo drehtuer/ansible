@@ -1,0 +1,7 @@
+docker:
+  daemon:
+    log_driver: json-file
+    log_opts:
+      max-size: 10m
+      max-file: "3"
+    live_restore: true

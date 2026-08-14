@@ -1,0 +1,20 @@
+# Inventory used by the static tests and by molecule.
+#
+# Everything in this tree is deliberately fake and deliberately NOT
+# vault-encrypted, so the tests run without the vault password. That
+# is what lets them run in CI, which has no access to it.
+#
+# Nothing here is ever deployed: `testhost` does not exist and no
+# playbook is pointed at this inventory outside `invoke test-*`.
+all:
+  hosts:
+    testhost:
+      ansible_host: testhost
+      ansible_connection: local
+      hostname: testhost
+      domain: test.invalid
+      domain_aliases:
+        - alias.invalid
+      hostname_fqdn: testhost.test.invalid
+      ip_v4: 192.0.2.1
+      ip_v6: "2001:db8::1"

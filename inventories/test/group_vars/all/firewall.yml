@@ -1,0 +1,22 @@
+firewall:
+  rate_limit:
+    seconds: 10
+    hitcount: 10
+  docker:
+    enabled: true
+    # A literal here rather than the default-route fact, so the static
+    # tests do not depend on the machine they run on.
+    wan_interface: eth0
+    published:
+      tcp: []
+      udp: []
+  rules:
+    tcp:
+      - port: 22
+        comment: "SSH"
+        rate_limit: true
+      - port: 443
+        comment: "HTTPS"
+    udp:
+      - port: 53
+        comment: "DNS"

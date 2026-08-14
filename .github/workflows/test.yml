@@ -1,0 +1,89 @@
+# Runs the same tests as `invoke test`, on the committed state.
+# See doc/TESTING.adoc for what each tier covers and why.
+name: Test
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Static
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Same Ubuntu packages as the Dev Container, so CI and a local
+      # run use the same ansible version.
+      - name: Install ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ansible
+
+      - name: Prefer the apt-installed ansible
+        run: echo "/usr/bin" >> "${GITHUB_PATH}"
+
+      # The static tests read inventories/test, which is deliberately
+      # not vault-encrypted, so no real vault password is needed. The
+      # file only has to exist because ansible.cfg points at it.
+      - name: Provide a placeholder vault password file
+        run: |
+          vault_file="${RUNNER_TEMP}/vault-password"
+          echo "not-the-real-vault-password" > "${vault_file}"
+          echo "ANSIBLE_VAULT_PASSWORD_FILE=${vault_file}" >> "${GITHUB_ENV}"
+
+      - name: Static tests
+        run: >-
+          ansible-playbook tests/static.yml
+          --inventory inventories/test/machines.yml
+
+  molecule:
+    name: Molecule
+    runs-on: ubuntu-24.04
+    # The static tests are far quicker; no point spinning up
+    # containers if a template does not even render.
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        role:
+          - apt
+          - cron
+          - users
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # Keep the versions in sync with .devcontainer/Dockerfile.
+      - name: Install molecule
+        run: |
+          pip install \
+            'molecule==26.8.0' \
+            'molecule-plugins[docker]==26.7.15' \
+            ansible-core
+          ansible-galaxy collection install community.docker
+
+      - name: Provide a placeholder vault password file
+        run: |
+          vault_file="${RUNNER_TEMP}/vault-password"
+          echo "not-the-real-vault-password" > "${vault_file}"
+          echo "ANSIBLE_VAULT_PASSWORD_FILE=${vault_file}" >> "${GITHUB_ENV}"
+
+      # `molecule test` includes an idempotence step: it converges
+      # twice and fails if the second run reports any change. That is
+      # the check that catches tasks which are not actually
+      # idempotent.
+      - name: molecule test
+        working-directory: roles/${{ matrix.role }}
+        run: molecule test

@@ -1,0 +1,23 @@
+# Molecule scenario for the `apt` role. Run with
+# `invoke test-molecule --role=apt`, or `molecule test` from
+# roles/apt.
+#
+# The image is an init-enabled one: almost every role here uses
+# `systemd_service`, which does nothing useful in a container that is
+# not running systemd as PID 1. That is why a plain ubuntu:24.04
+# image will not do.
+driver:
+  name: docker
+platforms:
+  - name: ansible-test-apt
+    image: geerlingguy/docker-ubuntu2404-ansible:latest
+    pre_build_image: true
+    command: /lib/systemd/systemd
+    privileged: true
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+provisioner:
+  name: ansible
+verifier:
+  name: ansible

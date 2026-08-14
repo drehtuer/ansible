@@ -38,3 +38,23 @@ The controller node maps configuration files from the host to provide the same e
 |===
 
 The file `.devcontainer/devcontainer.json` may be adapted easily to accomodate other config files (e.g. `zsh` settings).
+
+=== Docker in Docker
+
+:url-doc-testing: TESTING.adoc[Testing]
+
+The container enables the `docker-in-docker` feature, so it runs a Docker daemon of its own. This exists for `molecule`, which creates and destroys the containers the role tests run in — see link:{url-doc-testing}.
+
+It is only needed for `invoke test-molecule`. Everything else, including `invoke lint` and `invoke test-static`, works without it. The feature adds noticeable time to the first container build; removing the `features` block in `.devcontainer/devcontainer.json` is a reasonable trade if the role tests are not going to be run locally, since CI runs them anyway.
+
+=== Tooling not packaged for Ubuntu 24.04
+
+Two tools are installed outside `apt` because Ubuntu 24.04 does not package them, and both are pinned in `.devcontainer/Dockerfile`:
+
+[cols="h,m,d", options="autowidth"]
+|===
+| `ruff` | `RUFF_VERSION` | Release binary, fetched from GitHub.
+| `molecule` | `MOLECULE_VERSION` | Installed into its own virtualenv at `/opt/molecule`, because pip refuses to install into the system Python (PEP 668). The entry point is linked into `/usr/local/bin`.
+|===
+
+Keep both in step with the versions installed by the workflows in `.github/workflows/`, so that CI and a local run use the same tools.

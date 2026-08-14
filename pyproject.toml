@@ -8,6 +8,8 @@ exclude = [
 ]
 
 indent-width = 2
+# Matches `.editorconfig` and the `line-length` rule in `.yamllint`.
+line-length = 80
 target-version = "py312"
 
 [tool.ruff.lint]

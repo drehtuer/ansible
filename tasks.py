@@ -8,6 +8,7 @@ correct parameters as well as shorthand
 for complex parameters.
 """
 
+from pathlib import Path
 from shutil import which
 
 from invoke import Exit, context, task
@@ -17,14 +18,24 @@ ANSIBLE_PLAYBOOK_BIN = 'ansible-playbook'
 ANSIBLE_LINT_BIN = 'ansible-lint'
 YAMLLINT_BIN = 'yamllint'
 RUFF_BIN = 'ruff'
+MOLECULE_BIN = 'molecule'
 INVENTORY_DIR = 'inventories'
 INVENTORY = f'{INVENTORY_DIR}/machines.yml'
+# Fake, non-vaulted inventory used by the tests, so they run without
+# the vault password. See doc/TESTING.adoc.
+TEST_INVENTORY = f'{INVENTORY_DIR}/test/machines.yml'
+TESTS_DIR = 'tests'
+STATIC_TESTS = f'{TESTS_DIR}/static.yml'
+ROLES_DIR = 'roles'
+PLAYBOOKS_DIR = 'playbooks'
 HOSTS_ALL = 'all'
 LOG_DIR = 'log'
 HOOKS_DIR = '.githooks'
 ASK_PASS = '--ask-pass'
 ASK_BECOME_PASS = '--ask-become-pass'
 VERBOSE = '-vvv'
+CHECK = '--check'
+DIFF = '--diff'
 
 
 def ctx_run(
@@ -349,3 +360,144 @@ def run_playbook(
   check_tags(cmd, tags)
 
   ctx_run(ctx, cmd)
+
+
+def molecule_roles() -> list[str]:
+  """
+  Roles that carry a molecule scenario.
+
+  Discovered rather than listed, so adding
+  `roles/<role>/molecule/` is all it takes to
+  include a new role.
+  """
+  roles = Path(ROLES_DIR).glob('*/molecule/*/molecule.yml')
+
+  return sorted({path.parents[2].name for path in roles})
+
+
+@task
+def test_static(
+  ctx: context,
+  verbose: bool = False,
+) -> None:
+  """
+  Run the static tests: no host is contacted.
+
+  Validates every role's `meta/argument_specs.yml`
+  and renders every template against
+  `inventories/test`. Needs no vault password, so
+  it also runs in CI.
+  """
+  cmd: list[str] = [
+    ANSIBLE_PLAYBOOK_BIN,
+    STATIC_TESTS,
+    f'--inventory {TEST_INVENTORY}',
+  ]
+  check_verbose(cmd, verbose)
+
+  ctx_run(ctx, cmd)
+
+
+@task(iterable=['role'])
+def test_molecule(
+  ctx: context,
+  role: list[str] = None,
+) -> None:
+  """
+  Run molecule scenarios in Docker containers.
+
+  Without `--role`, every role that has a scenario
+  is tested. Repeat `--role` to select several.
+  Needs a working Docker daemon.
+  """
+  available = molecule_roles()
+  if not available:
+    raise Exit('No molecule scenarios found', code=1)
+
+  selected = list(role) if role else available
+  unknown = sorted(set(selected) - set(available))
+  if unknown:
+    raise Exit(
+      f'No molecule scenario for: {", ".join(unknown)}. '
+      f'Available: {", ".join(available)}',
+      code=1,
+    )
+
+  failed: list[str] = []
+  for name in selected:
+    print(f'molecule: {name}')
+    result = ctx.run(
+      f'cd {ROLES_DIR}/{name} && {MOLECULE_BIN} test',
+      warn=True,
+    )
+    if not result.ok:
+      failed.append(name)
+
+  if failed:
+    raise Exit(f'Molecule failed for: {", ".join(failed)}', code=1)
+
+
+@task
+def test(
+  ctx: context,
+) -> None:
+  """
+  Run every automated test.
+
+  Static tests first, since they are quick and
+  need no container, then the molecule scenarios.
+  """
+  test_static(ctx)
+  test_molecule(ctx)
+
+
+@task
+def check_drift(
+  ctx: context,
+  hosts: str = HOSTS_ALL,
+  playbook: str = None,
+) -> None:
+  """
+  Report drift on the real hosts, changing nothing.
+
+  Runs the playbooks in `--check --diff` mode, so
+  anything reported is a difference between the
+  repository and the host - usually a manual change
+  that was never written back.
+
+  This needs the vault password and so cannot run
+  in CI. Run it locally, e.g. weekly.
+
+  Check mode is not perfect: tasks whose result
+  depends on an earlier task having actually run
+  are reported as changed or fail outright. Read
+  the output, do not just look at the exit code.
+  """
+  playbooks = (
+    [playbook]
+    if playbook
+    else sorted(str(path) for path in Path(PLAYBOOKS_DIR).glob('*.yml'))
+  )
+
+  drifted: list[str] = []
+  for book in playbooks:
+    print(f'check: {book}')
+    cmd: list[str] = [
+      ANSIBLE_PLAYBOOK_BIN,
+      book,
+      f'--inventory {INVENTORY}',
+      '--become',
+      CHECK,
+      DIFF,
+    ]
+    check_host(cmd, hosts)
+    if not ctx.run(' '.join(cmd), warn=True).ok:
+      drifted.append(book)
+
+  if drifted:
+    raise Exit(
+      'Check mode reported problems for: '
+      f'{", ".join(drifted)}. See the output above; some tasks '
+      'cannot run in check mode and fail for that reason alone.',
+      code=1,
+    )

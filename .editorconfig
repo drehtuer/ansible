@@ -1,0 +1,64 @@
+# https://editorconfig.org
+#
+# Editor-side formatting conventions. These mirror what the linters
+# already enforce rather than adding a third opinion: YAML style comes
+# from `.yamllint`, Python style from `[tool.ruff]` in
+# `pyproject.toml`. Keep all three in step when changing any of them.
+#
+# VS Code needs the EditorConfig extension for this file to have any
+# effect; it is listed in `.devcontainer/devcontainer.json`.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 80
+
+# Same 80 columns as above, restated because `.yamllint` and ruff
+# enforce it for these two and an editor should agree with them.
+[*.{yml,yaml}]
+max_line_length = 80
+
+[*.py]
+max_line_length = 80
+
+# Service configuration and the templates that render it.
+#
+# The column limit does not apply: these follow the syntax of the
+# software that reads them, and some of their lines cannot be wrapped
+# at all. `sshd_config` has no line-continuation syntax, so a single
+# `KexAlgorithms` line is 200 characters by necessity, and the nginx
+# `gzip_types` lists taken from the Nextcloud documentation run past
+# 500. Indentation is still two spaces for anything written here.
+[*.{conf,cf,inc,j2,sieve}]
+max_line_length = off
+
+# Prose, wrapped by paragraph rather than at a column.
+[*.adoc]
+max_line_length = off
+
+# Encrypted and generated artefacts. Nothing should reformat these:
+# rewriting a vault blob or the screened moduli would corrupt them.
+[*.aes256]
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+max_line_length = off
+
+[roles/sshd/files/moduli]
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+max_line_length = off
+
+# Gitignored, but present in a working tree.
+[roles/sshd/keys/**]
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+max_line_length = off

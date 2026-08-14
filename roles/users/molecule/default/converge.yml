@@ -1,0 +1,32 @@
+# Values are inline rather than read from inventories/test, so the
+# scenario works with a bare `molecule test` from this directory.
+# Everything here is fake and used only inside the container.
+- name: Converge
+  hosts: all
+  vars:
+    users:
+      sudo_nopasswd: true
+      authorized_keys_exclusive: true
+      users:
+        - name: testuser
+          group: testuser
+          shell: /bin/bash
+          groups: sudo
+          create_home: true
+          password: "*"
+        - name: testadmin
+          group: testadmin
+          shell: /bin/bash
+          # Two supplementary groups, so the task that creates them
+          # is actually exercised.
+          groups: "sudo,adm"
+          create_home: true
+          password: "*"
+      authorized_keys:
+        - name: testuser
+          public_key: >-
+            ssh-ed25519
+            AAAAC3NzaC1lZDI1NTE5AAAAIDRshVWyBz2ThntSsgOOSbfaqzW/tYGf5rd5cibx72bU
+            test@invalid
+  roles:
+    - users

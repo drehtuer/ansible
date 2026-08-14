@@ -42,6 +42,11 @@ RUN   \
     python-is-python3 \
     # Invoke to organize cmd commands
     python3-invoke \
+    # Molecule and its Docker driver, for the role
+    # tests. pip is needed because neither is
+    # packaged for Ubuntu 24.04.
+    python3-pip \
+    python3-venv \
     # User may become root
     sudo \
     # Editor
@@ -112,6 +117,25 @@ RUN   \
     --directory=/usr/local/bin \
     --strip-components=1 \
     "ruff-$(uname -m)-unknown-linux-gnu/ruff"
+
+# Keep in sync with the versions installed by
+# .github/workflows/test.yml, so CI and the Dev
+# Container test with the same molecule.
+ARG   MOLECULE_VERSION=26.8.0
+ARG   MOLECULE_PLUGINS_VERSION=26.7.15
+
+RUN   \
+    # Neither is packaged for Ubuntu 24.04, and pip
+    # refuses to install into the system Python
+    # (PEP 668), so molecule gets its own virtualenv
+    # with the entry point linked onto PATH.
+    python3 -m venv /opt/molecule \
+    && /opt/molecule/bin/pip install \
+    --quiet \
+    --no-cache-dir \
+    "molecule==${MOLECULE_VERSION}" \
+    "molecule-plugins[docker]==${MOLECULE_PLUGINS_VERSION}" \
+    && ln -s /opt/molecule/bin/molecule /usr/local/bin/molecule
 
 COPY \
     --chmod=644 \

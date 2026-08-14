@@ -1,0 +1,29 @@
+http:
+  port_http: 80
+  port_https: 443
+  # Two domains on purpose: the static tests then cover the
+  # multi-domain rendering path, which production does not use yet.
+  domains:
+    - "{{ domain }}"
+    - second.invalid
+  letsencrypt:
+    email: postmaster@test.invalid
+    webroot_path: /var/www/certbot
+    cert_name: "{{ hostname_fqdn }}"
+    subdomains:
+      - cloud
+      - mail
+      - status
+      - www
+  sites:
+    - name: default
+      subdomains:
+        - ""
+        - www
+      root: /var/www/html
+      include_locations: true
+    - name: status
+      subdomains:
+        - status
+      root: /var/www/html
+      include_locations: false
