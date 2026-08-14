@@ -59,9 +59,11 @@ RUN   \
     ssh \
     sshpass \
     wget \
-    # Docker, so molecule's docker driver can create and destroy
-    # test containers. Ubuntu 26.04 packages its own build, so no
-    # extra apt repo (and its distro-version gating) is needed.
+    # Docker CLI, so molecule's docker driver can create and destroy
+    # test containers over the host's docker socket, bind-mounted in
+    # by devcontainer.json - no daemon runs in the container itself.
+    # Ubuntu 26.04 packages its own build, so no extra apt repo (and
+    # its distro-version gating) is needed.
     docker.io \
     docker-compose-v2 \
     # GitHub CLI apt repo, added below,
@@ -86,15 +88,19 @@ RUN   \
     --force \
     --charmap=UTF-8 \
     en_US.UTF-8 \
-    # Add non-root user,
-    # password needed for `sudo`. Also in the docker
-    # group, so it can use the daemon without sudo.
+    # Add non-root user
     && useradd \
     --create-home \
     --user-group \
-    --groups docker \
     --shell /usr/bin/bash \
     ${ARG_USER} \
+    # Passwordless sudo: this is a single-user dev environment, not a
+    # multi-user host, and fix-docker-gid.sh (run every container
+    # start, see devcontainer.json) needs it to fix up group
+    # membership for the bind-mounted host docker socket.
+    && echo "${ARG_USER} ALL=(ALL) NOPASSWD:ALL" \
+    > /etc/sudoers.d/${ARG_USER} \
+    && chmod 440 /etc/sudoers.d/${ARG_USER} \
     && inv \
     --print-completion-script=bash \
     > /etc/bash_completion.d/invoke \
@@ -170,18 +176,17 @@ RUN \
 
 COPY \
     --chmod=755 \
-    docker-init.sh \
-    /usr/local/share/docker-init.sh
+    fix-docker-gid.sh \
+    /usr/local/share/fix-docker-gid.sh
 
-# Can't set the container's default user here, USER
-# takes only a string, but our user name is stored in
-# a secret file. Don't want to add an additional
-# environment variable, we set the user in
-# devcontainer.json via 'remoteUser', which also takes
-# care of mapping uid:gid correctly. The container
-# itself stays root: docker-init.sh needs it to start
-# dockerd.
-ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
+USER ${ARG_USER}
+
+# Can't set default user here, USER takes
+# only a string, but our user name is stored
+# in a secret file. Don't want to add an additional
+# environment variable, we set the user
+# in devcontainer.json via 'remoteUser'.
+# This also takes care of mapping uid:gid correctly.
 
 # Keep container running, vscode needs
 # to attach to it

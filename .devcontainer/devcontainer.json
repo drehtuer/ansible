@@ -8,16 +8,20 @@
     }
   },
   // Molecule drives its test containers over the Docker socket, so
-  // the Dev Container needs a Docker daemon of its own. Without this,
-  // `invoke test-molecule` has nothing to talk to; `invoke
-  // test-static` does not need it. See doc/TESTING.adoc.
+  // the Dev Container needs access to one. Without this, `invoke
+  // test-molecule` has nothing to talk to; `invoke test-static` does
+  // not need it. See doc/TESTING.adoc.
   //
-  // Docker itself is installed by the Dockerfile (Ubuntu 26.04's own
-  // docker.io package) and started by docker-init.sh, rather than
-  // via the devcontainers docker-in-docker feature: that feature's
-  // install script hardcodes which Ubuntu codenames it supports, and
-  // has not caught up with 26.04 ('resolute') yet.
+  // The Dockerfile installs only the Docker CLI (Ubuntu 26.04's own
+  // docker.io package); the host's own daemon is used via the
+  // bind-mounted socket below, rather than running a nested dockerd
+  // (the devcontainers docker-in-docker feature's approach) or
+  // relying on a third-party apt repo.
   "remoteUser": "${localEnv:USER}",
+  // Fixes up group membership for the socket mount below - the
+  // host's docker group GID varies by machine, so it can't be baked
+  // into the image and has to be handled at container start instead.
+  "postStartCommand": "/usr/local/share/fix-docker-gid.sh",
   "customizations": {
     "vscode": {
       // VS code extensions
@@ -47,11 +51,7 @@
     }
   },
   "runArgs": [
-    "--hostname=dev_host",
-    // dockerd (started by docker-init.sh) needs to create its
-    // own network namespaces, mounts and cgroups; without this
-    // it fails to start.
-    "--privileged"
+    "--hostname=dev_host"
   ],
   "mounts": [
     // Make user settings available in container
@@ -62,6 +62,9 @@
     "source=${localEnv:HOME}/.ssh,target=${localEnv:HOME}/.ssh,type=bind",
     // Claude
     "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind",
+    // Mount the host's docker socket, so molecule's docker driver
+    // can talk to the host's daemon directly.
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
     // Mount current workspace
     "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached"
   ]
