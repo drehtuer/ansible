@@ -1,0 +1,93 @@
+argument_specs:
+  main:
+    short_description: Default-deny iptables/ip6tables firewall
+    description:
+      - Renders rules.v4 and rules.v6 from a single template and
+        persists them with iptables-persistent. Optionally manages the
+        DOCKER-USER chain, without which published container ports
+        bypass the INPUT allow-list.
+    options:
+      firewall:
+        type: dict
+        required: true
+        description: Firewall settings.
+        options:
+          rate_limit:
+            type: dict
+            required: true
+            description: Connection-rate limit applied to rules marked rate_limit.
+            options:
+              seconds:
+                type: int
+                required: true
+                description: Window in seconds.
+              hitcount:
+                type: int
+                required: true
+                description: New connections allowed within the window.
+          docker:
+            type: dict
+            required: true
+            description: Docker interaction.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description:
+                  - Manage the DOCKER-USER chain. Enable on any host
+                    that runs Docker.
+              wan_interface:
+                type: str
+                required: true
+                description: Internet-facing interface.
+              published:
+                type: dict
+                required: true
+                description:
+                  - Container ports reachable from wan_interface.
+                    Anything not listed is dropped.
+                options:
+                  tcp:
+                    type: list
+                    elements: dict
+                    description: Published TCP ports.
+                  udp:
+                    type: list
+                    elements: dict
+                    description: Published UDP ports.
+          rules:
+            type: dict
+            required: true
+            description: Host ports to open.
+            options:
+              tcp:
+                type: list
+                elements: dict
+                required: true
+                description: TCP ports to accept on INPUT.
+                options:
+                  port:
+                    type: int
+                    required: true
+                    description: Port number.
+                  comment:
+                    type: str
+                    required: true
+                    description: Shown in the rule comment.
+                  rate_limit:
+                    type: bool
+                    default: false
+                    description: Apply connection-rate limiting.
+              udp:
+                type: list
+                elements: dict
+                description: UDP ports to accept on INPUT.
+                options:
+                  port:
+                    type: int
+                    required: true
+                    description: Port number.
+                  comment:
+                    type: str
+                    required: true
+                    description: Shown in the rule comment.

@@ -1,0 +1,76 @@
+argument_specs:
+  main:
+    short_description: Install and configure fail2ban
+    description:
+      - Installs fail2ban, deploys any filters the package does not
+        ship, and generates jail.local from the configured jails.
+    options:
+      fail2ban:
+        type: dict
+        required: true
+        description: fail2ban settings.
+        options:
+          defaults:
+            type: dict
+            required: true
+            description: Values inherited by every jail.
+            options:
+              bantime:
+                type: str
+                required: true
+                description: How long an offender stays banned.
+              findtime:
+                type: str
+                required: true
+                description: Window in which failures are counted.
+              maxretry:
+                type: int
+                required: true
+                description: Failures tolerated within findtime.
+          jails:
+            type: list
+            elements: dict
+            required: true
+            description: Jails to enable.
+            options:
+              name:
+                type: str
+                required: true
+                description: Jail name.
+              port:
+                type: str
+                required: true
+                description: Port or service name the jail protects.
+              filter:
+                type: str
+                required: true
+                description: Filter used to parse the log source.
+              backend:
+                type: str
+                required: true
+                choices:
+                  - systemd
+                  - auto
+                  - polling
+                  - pyinotify
+                description:
+                  - Where failures are read from. `systemd` reads the
+                    journal and ignores logpath, so services that log
+                    to a file must not use it.
+              logpath:
+                type: str
+                description:
+                  - File to watch. Required for every backend other
+                    than systemd.
+              bantime:
+                type: str
+                description: Overrides defaults.bantime.
+              findtime:
+                type: str
+                description: Overrides defaults.findtime.
+              maxretry:
+                type: int
+                description: Overrides defaults.maxretry.
+              options:
+                type: dict
+                description: Extra key/value lines for this jail.

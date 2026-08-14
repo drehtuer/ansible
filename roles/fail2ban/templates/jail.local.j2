@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+# `backend` decides where each jail reads failures from and has to
+# match how the service actually logs: `systemd` reads the journal and
+# ignores logpath entirely, so a service writing to a file must use
+# `auto` instead or the jail silently matches nothing.
+
+[DEFAULT]
+bantime = {{ fail2ban.defaults.bantime }}
+findtime = {{ fail2ban.defaults.findtime }}
+maxretry = {{ fail2ban.defaults.maxretry }}
+
+{% for jail in fail2ban.jails %}
+[{{ jail.name }}]
+enabled = true
+backend = {{ jail.backend }}
+{% if jail.logpath is defined %}
+logpath = {{ jail.logpath }}
+{% endif %}
+port = {{ jail.port }}
+filter = {{ jail.filter }}
+bantime = {{ jail.bantime | default(fail2ban.defaults.bantime) }}
+findtime = {{ jail.findtime | default(fail2ban.defaults.findtime) }}
+maxretry = {{ jail.maxretry | default(fail2ban.defaults.maxretry) }}
+{% for key, value in (jail.options | default({})).items() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+{% endfor %}

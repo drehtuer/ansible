@@ -1,3 +1,12 @@
+{#
+  Shared by rules.v4 and rules.v6. `ip_version` (4 or 6) is set by the
+  task that renders it - keeping one template means a fix cannot land
+  for one address family and be forgotten for the other.
+#}
+{# `| int` so a templated "6" compares equal to 6 rather than silently
+   falling through to the IPv4 branch. #}
+{% set v6 = (ip_version | int) == 6 %}
+{{ ansible_managed | comment }}
 *filter
 
 # Drop by default
@@ -10,6 +19,13 @@
 # Protocol chains
 :TCP - [0:0]
 :UDP - [0:0]
+{% if firewall.docker.enabled %}
+
+# Docker consults DOCKER-USER before its own rules, and it is the only
+# chain here Docker will not overwrite. Declaring it keeps
+# iptables-restore from deleting it while Docker is running.
+:DOCKER-USER - [0:0]
+{% endif %}
 
 # Allow established and related connections
 -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
@@ -17,11 +33,24 @@
 # Allow loopback interface
 -A INPUT -i lo -j ACCEPT
 
-# Invalid states
--A INPUT -p tcp -m conntrack --ctstate INVALID -j DROP
+# Invalid states, for every protocol rather than just tcp
+-A INPUT -m conntrack --ctstate INVALID -j DROP
 
+{% if v6 %}
+# ICMP
+-A INPUT -p ipv6-icmp --icmpv6-type packet-too-big -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type time-exceeded -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type parameter-problem -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type echo-request -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type router-solicitation -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type router-advertisement -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type neighbor-solicitation -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type neighbor-advertisement -j ACCEPT
+-A INPUT -p ipv6-icmp --icmpv6-type redirect -j ACCEPT
+{% else %}
 # ICMP ping
 -A INPUT -p icmp -m icmp --icmp-type echo-request -m conntrack --ctstate NEW -j ACCEPT
+{% endif %}
 
 # Forward to chains
 -A INPUT -p tcp --tcp-flags FIN,SYN,RST,ACK SYN -m conntrack --ctstate NEW -j TCP
@@ -29,23 +58,44 @@
 
 # Reject all other traffic
 -A INPUT -p tcp -j REJECT --reject-with tcp-reset
--A INPUT -p udp -j REJECT --reject-with icmp-port-unreachable
--A INPUT -j REJECT --reject-with icmp-proto-unreachable
+-A INPUT -p udp -j REJECT --reject-with {{ 'icmp6-port-unreachable' if v6 else 'icmp-port-unreachable' }}
+-A INPUT -j REJECT --reject-with {{ 'icmp6-adm-prohibited' if v6 else 'icmp-proto-unreachable' }}
 
 # TCP rules
-# Rate limiting SSH https://www.ssh-audit.com/hardening_guides.html#ubuntu_24_04_lts
--A TCP -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set
--A TCP -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 10 --hitcount 10 -j DROP
+# Rate limiting, e.g. for SSH
+# https://www.ssh-audit.com/hardening_guides.html#ubuntu_24_04_lts
+#
+# Driven by `rate_limit` on the rule itself so that moving a service
+# to another port cannot leave the limiter pointing at the old one.
+{% for tcp in firewall.rules.tcp if tcp.rate_limit | default(false) %}
+-A TCP -p tcp --dport {{ tcp.port }} -m conntrack --ctstate NEW -m recent --name ratelimit{{ tcp.port }} --set
+-A TCP -p tcp --dport {{ tcp.port }} -m conntrack --ctstate NEW -m recent --name ratelimit{{ tcp.port }} --update --seconds {{ firewall.rate_limit.seconds }} --hitcount {{ firewall.rate_limit.hitcount }} -j DROP
+{% endfor %}
 
 {% for tcp in firewall.rules.tcp %}
--A TCP -p tcp --dport {{ tcp.port }} -m state --state NEW -j ACCEPT -m comment --comment "{{ tcp.comment }}"
+-A TCP -p tcp --dport {{ tcp.port }} -m conntrack --ctstate NEW -m comment --comment "{{ tcp.comment }}" -j ACCEPT
 {% endfor %}
 
 # UDP rules
-{% if firewall.rules.udp is defined %}
-{% for udp in firewall.rules.udp %}
--A UDP -p udp --dport {{ udp.port }} -m state --state NEW -j ACCEPT -m comment --comment "{{ udp.comment }}"
+{% for udp in firewall.rules.udp | default([]) %}
+-A UDP -p udp --dport {{ udp.port }} -m conntrack --ctstate NEW -m comment --comment "{{ udp.comment }}" -j ACCEPT
 {% endfor %}
+{% if firewall.docker.enabled %}
+
+# Container traffic
+#
+# Published container ports are DNATed and traverse FORWARD, never
+# INPUT, so the allow-list above does not apply to them. Without the
+# drop below, `docker run -p 5432:5432` is reachable from the
+# internet no matter what INPUT says.
+-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+{% for tcp in firewall.docker.published.tcp | default([]) %}
+-A DOCKER-USER -i {{ firewall.docker.wan_interface }} -p tcp --dport {{ tcp.port }} -m comment --comment "{{ tcp.comment }}" -j RETURN
+{% endfor %}
+{% for udp in firewall.docker.published.udp | default([]) %}
+-A DOCKER-USER -i {{ firewall.docker.wan_interface }} -p udp --dport {{ udp.port }} -m comment --comment "{{ udp.comment }}" -j RETURN
+{% endfor %}
+-A DOCKER-USER -i {{ firewall.docker.wan_interface }} -j DROP
 {% endif %}
 
 COMMIT

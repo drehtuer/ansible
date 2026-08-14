@@ -40,20 +40,13 @@
     groups: "{{ item.groups }}"
     create_home: "{{ item.create_home }}"
     password: "{{ item.password }}"
-    # Deliberately additive, NOT authoritative.
+    # Authoritative: a group dropped from the inventory is dropped
+    # from the account too, instead of lingering forever.
     #
-    # Supplementary group membership is currently split across roles:
-    # the `docker` role also adds accounts to the `docker` group. With
-    # `append: false` here the two roles would fight, and running this
-    # role would silently revoke docker access until docker.yml ran
-    # again.
-    #
-    # The trade-off is that a group removed from the inventory is not
-    # removed from the account. Fixing that properly means making this
-    # role the single owner of group membership - listing `docker` in
-    # `users.users[].groups` and dropping the user task from the
-    # docker role - before flipping this to false.
-    append: true
+    # This role is the single owner of supplementary group membership.
+    # No other role may add accounts to a group - `docker` is granted
+    # by listing it in `users.users[].groups` here.
+    append: false
   loop: "{{ users.users }}"
   loop_control:
     label: "{{ item.name }}"
