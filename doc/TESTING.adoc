@@ -76,7 +76,7 @@ cd roles/users && molecule test
 
 Almost every role uses `systemd_service`, which does nothing useful in a container that is not running systemd as PID 1. The scenarios therefore use an init-enabled image (`geerlingguy/docker-ubuntu2404-ansible`) started with `/lib/systemd/systemd`, `privileged: true` and the host cgroup namespace. A plain `ubuntu:24.04` image will not work.
 
-The Dev Container needs its own Docker daemon for this, provided by the `docker-in-docker` feature in `.devcontainer/devcontainer.json`. `invoke test-static` does not need it.
+The Dev Container needs access to a Docker daemon for this — the host's own, reached over a bind-mounted socket (see `doc/environment-setup.adoc`), not one running inside the container. `invoke test-static` does not need it. Talking to that socket needs `sudo` unless the current shell postdates the container's group-membership fixup; see the same doc.
 
 === Which roles have scenarios
 

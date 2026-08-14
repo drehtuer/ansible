@@ -39,13 +39,15 @@ The controller node maps configuration files from the host to provide the same e
 
 The file `.devcontainer/devcontainer.json` may be adapted easily to accomodate other config files (e.g. `zsh` settings).
 
-=== Docker in Docker
+=== Docker
 
 :url-doc-testing: TESTING.adoc[Testing]
 
-The container enables the `docker-in-docker` feature, so it runs a Docker daemon of its own. This exists for `molecule`, which creates and destroys the containers the role tests run in — see link:{url-doc-testing}.
+The container does not run its own Docker daemon. `devcontainer.json` bind-mounts the host's `/var/run/docker.sock` instead, and the Dockerfile installs only the Docker CLI to talk to it. This exists for `molecule`, which creates and destroys the containers the role tests run in — see link:{url-doc-testing}.
 
-It is only needed for `invoke test-molecule`. Everything else, including `invoke lint` and `invoke test-static`, works without it. The feature adds noticeable time to the first container build; removing the `features` block in `.devcontainer/devcontainer.json` is a reasonable trade if the role tests are not going to be run locally, since CI runs them anyway.
+It is only needed for `invoke test-molecule`. Everything else, including `invoke lint` and `invoke test-static`, works without it.
+
+The socket's group ownership depends on the host machine's `docker` GID, which can't be baked into the image, so `devcontainer.json`'s `postStartCommand` runs `.devcontainer/fix-docker-gid.sh` on every container start to add the user to a matching group. That only takes effect in a *new* login shell — a terminal already open when the container started keeps its old group list and gets `permission denied` talking to the socket. The Dockerfile also configures passwordless `sudo` for exactly this gap: `sudo docker ...` / `sudo molecule test` works regardless of session age, so that's the reliable way to invoke anything that touches Docker. `sudo` resets `PATH`, so use `sudo -E env "PATH=$PATH" invoke test-molecule` rather than a bare `sudo invoke test-molecule` (which fails with `invoke: command not found`).
 
 === Tooling not packaged for Ubuntu 24.04
 
