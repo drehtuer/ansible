@@ -68,6 +68,9 @@ The repo configures a single physical/virtual server, host `carcosa`, serving th
 
 | `spam`
 | RSpamd: installs the package, wires it to the shared Redis instance, configures `actions.conf` and the controller web UI (password-protected via a vault-encrypted `htpasswd`, reverse-proxied through nginx at `spam.<domain>`). Not yet fully working end-to-end — the Postfix milter connection is currently broken (see `mail` above) — and **DKIM signing/key-generation, SPF, and several other RSpamd module configs are present as templates/scripts but are commented out** in `roles/spam/tasks/main.yml`, so outbound mail is not currently DKIM-signed either. See `doc/TODO.adoc`.
+
+| `upgrade`
+| Ubuntu release upgrade (e.g. 24.04 → 26.04). Generic, not tied to any specific release: the target is read from `upgrade.target_release` (unset by default, so the role is a no-op until a host explicitly sets it), and the actual version to move to is resolved by Ubuntu's own `do-release-upgrade` tooling rather than being passed literally. Fully updates and dist-upgrades the current release first, then runs `do-release-upgrade` non-interactively (via `async`/`poll`, since the command can run for over an hour and briefly disrupts networking), reboots, and re-verifies the release afterwards. Deliberately **not** wired into any other playbook: `playbooks/upgrade.yml` tags its tasks `never`/`release-upgrade`, so it only runs when explicitly requested with `--tags release-upgrade` (`invoke run-playbook --playbook=playbooks/upgrade.yml --tags=release-upgrade`, after setting `upgrade.target_release` in the target host's `host_vars`).
 |===
 
 == Documentation

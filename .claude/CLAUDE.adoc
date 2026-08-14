@@ -37,6 +37,7 @@ See `doc/STATUS.adoc` for the current implementation state and `doc/TODO.adoc` f
   * Try to keep each role limited to the minimum set of tasks needed to configure the service. If a role is getting large, consider splitting it into multiple roles (e.g. `spam` vs `spam-dkim`).
 * Handlers use `ansible.builtin.systemd_service` for start/enable and `ansible.builtin.systemd`/`state: reloaded` for config reloads — check existing handlers in the target role before adding a new one.
 * Commented-out tasks (e.g. DKIM tasks in `roles/spam/tasks/main.yml`) mark deliberately unfinished work, not dead code — check `doc/TODO.adoc` before deleting them.
+* A role that's disruptive, long-running, or otherwise unsafe to run as a side effect of a routine playbook run (e.g. `upgrade`, an OS release upgrade) gets its playbook tagged `never` + a specific opt-in tag (see `playbooks/upgrade.yml`), so it only executes when that tag is passed explicitly (`--tags <name>`). Give `tasks.py`'s `run_playbook` task whatever flag support (e.g. `--tags`) is needed to actually invoke it through the normal `invoke` workflow.
 
 == Before making changes
 
