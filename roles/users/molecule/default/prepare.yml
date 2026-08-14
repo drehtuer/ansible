@@ -1,0 +1,12 @@
+# The test images ship with an empty apt cache, so a role installing
+# a package that is not already present cannot resolve it. On a real
+# host the `apt` role refreshes the cache before the other roles run;
+# molecule converges a role on its own, so it has to happen here.
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
