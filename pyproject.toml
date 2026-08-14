@@ -34,6 +34,10 @@ select = [
 ignore = [
   # pydocstyle
   "D200",
+  # Mutually exclusive with D211, which is the
+  # one this repo follows. Listing it keeps ruff
+  # from warning about the conflict on every run.
+  "D203",
   "D205",
   "D212",
 ]

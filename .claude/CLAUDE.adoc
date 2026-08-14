@@ -28,6 +28,7 @@ See `doc/STATUS.adoc` for the current implementation state and `doc/TODO.adoc` f
 * `tasks.py` + `invoke.yml` — `python-invoke` wrapper around `ansible`/`ansible-playbook` (see `pyproject.toml` for lint config). This is the documented, correct way to invoke Ansible for this repo — prefer it over calling `ansible-playbook` directly so flags stay consistent.
 * `doc/*.adoc` — AsciiDoc project documentation, included from `README.adoc`.
 * `.devcontainer/` — VS Code Dev Container definition; this is the intended development environment (see `doc/environment-setup.adoc`).
+* `.yamllint`, `.ansible-lint`, `pyproject.toml` — lint rules for YAML, Ansible and Python. `.githooks/pre-commit` runs them on staged files, `.github/workflows/lint.yml` runs them in CI.
 
 == Conventions
 
@@ -38,6 +39,7 @@ See `doc/STATUS.adoc` for the current implementation state and `doc/TODO.adoc` f
 * Handlers use `ansible.builtin.systemd_service` for start/enable and `ansible.builtin.systemd`/`state: reloaded` for config reloads — check existing handlers in the target role before adding a new one.
 * Commented-out tasks (e.g. DKIM tasks in `roles/spam/tasks/main.yml`) mark deliberately unfinished work, not dead code — check `doc/TODO.adoc` before deleting them.
 * A role that's disruptive, long-running, or otherwise unsafe to run as a side effect of a routine playbook run (e.g. `upgrade`, an OS release upgrade) gets its playbook tagged `never` + a specific opt-in tag (see `playbooks/upgrade.yml`), so it only executes when that tag is passed explicitly (`--tags <name>`). Give `tasks.py`'s `run_playbook` task whatever flag support (e.g. `--tags`) is needed to actually invoke it through the normal `invoke` workflow.
+* Run `invoke lint` before finishing a change that touches YAML or Python. The repo is clean under `yamllint --strict`, `ansible-lint` (`production` profile) and `ruff`, and the same checks run in the `pre-commit` hook and in CI — keep it that way. Fix the code rather than loosening `.yamllint`, `.ansible-lint` or the `ruff` config; only relax a rule if it is genuinely wrong for this repo, and say so in a comment next to it.
 
 == Before making changes
 

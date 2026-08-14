@@ -72,6 +72,29 @@ RUN   \
     --print-completion-script=bash \
     > /etc/bash_completion.d/invoke
 
+# Keep in sync with the version installed by
+# .github/workflows/lint.yml, so CI and the
+# Dev Container lint with the same ruff.
+ARG   RUFF_VERSION=0.16.3
+
+RUN   \
+    # Python linter/formatter, not packaged for
+    # Ubuntu 24.04, so install the pinned release
+    # binary. uname -m maps to the x86_64/aarch64
+    # build names used by upstream.
+    curl \
+    --location \
+    --fail \
+    --silent \
+    --show-error \
+    "https://github.com/astral-sh/ruff/releases/download/${RUFF_VERSION}/ruff-$(uname -m)-unknown-linux-gnu.tar.gz" \
+    | tar \
+    --extract \
+    --gzip \
+    --directory=/usr/local/bin \
+    --strip-components=1 \
+    "ruff-$(uname -m)-unknown-linux-gnu/ruff"
+
 COPY \
     --chmod=644 \
     ansible-galaxy.yml \

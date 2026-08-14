@@ -1,0 +1,19 @@
+# https://ansible.readthedocs.io/projects/lint/configuring/
+#
+# The repo passes the strictest built-in profile today - keep it that
+# way rather than lowering the profile to make a new task pass.
+profile: production
+
+exclude_paths:
+  # Dev Container definition, not Ansible content. ansible-galaxy.yml in
+  # here is a requirements file and is linted via the galaxy profile
+  # anyway, so only the container config itself is skipped.
+  - .devcontainer/devcontainer.json
+  # CI workflows are GitHub Actions YAML, covered by yamllint alone.
+  - .github/
+  # Runtime output and secrets, both gitignored.
+  - log/
+  - vault/
+
+# YAML style rules come from .yamllint in the repo root so that
+# ansible-lint and a plain `yamllint .` run cannot disagree.

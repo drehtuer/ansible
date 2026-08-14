@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# Lint staged YAML and Python before the commit is created.
+#
+# Enable with `invoke install-hooks` (points core.hooksPath here),
+# bypass a single commit with `git commit --no-verify`.
+#
+# Note: the linters read the files as they are in the working tree,
+# not the staged content. With a partially staged file the hook can
+# therefore pass or fail on lines that are not part of this commit.
+# CI (.github/workflows/lint.yml) always checks the committed state.
+
+set -uo pipefail
+
+status=0
+
+# Added, copied, modified or renamed - deleted files have nothing
+# left to lint.
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR)
+((${#staged[@]})) || exit 0
+
+yaml_files=()
+py_files=()
+for file in "${staged[@]}"; do
+  # Staged but no longer in the working tree, e.g. deleted after
+  # `git add`.
+  [[ -f ${file} ]] || continue
+
+  case "${file}" in
+    *.yml | *.yaml) yaml_files+=("${file}") ;;
+    *.py) py_files+=("${file}") ;;
+  esac
+done
+
+# Run a linter if it is installed, remember any failure.
+run_linter() {
+  local binary="$1"
+
+  if ! command -v "${binary}" > /dev/null; then
+    printf 'pre-commit: %s not found, rebuild the Dev Container\n' "${binary}" >&2
+    status=1
+    return
+  fi
+
+  printf 'pre-commit: %s\n' "$*"
+  "$@" || status=1
+}
+
+if ((${#yaml_files[@]})); then
+  run_linter yamllint --strict "${yaml_files[@]}"
+  run_linter ansible-lint "${yaml_files[@]}"
+fi
+
+if ((${#py_files[@]})); then
+  run_linter ruff check "${py_files[@]}"
+  run_linter ruff format --check "${py_files[@]}"
+fi
+
+((status == 0)) || printf 'pre-commit: linting failed, commit aborted\n' >&2
+
+exit "${status}"
