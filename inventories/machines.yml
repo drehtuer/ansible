@@ -9,5 +9,9 @@ all:
       domain_aliases:
         - drehtuer.de
       hostname_fqdn: carcosa.drehtuer.net
+      # Not read by any role yet. Kept for documentation and for a
+      # role that needs to bind to this host's actual address rather
+      # than the 0.0.0.0/:: wildcard (e.g. the `dns` role, once it
+      # serves the zone authoritatively - see doc/TODO.adoc).
       ip_v4: 88.198.12.17
       ip_v6: 2a01:4f8:222:1fcb::2

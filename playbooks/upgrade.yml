@@ -1,8 +1,10 @@
-- name: OS release upgrade
+- name: Upgrade role
   hosts: all
   # Disruptive and long-running: never runs as a side effect of an
   # untagged run or `--tags all`, only when release-upgrade is
-  # explicitly requested.
+  # explicitly requested. Deliberately not also tagged `upgrade` -
+  # that would let a generic `--tags upgrade` trigger it too,
+  # defeating the point of requiring the specific opt-in tag.
   tags:
     - never
     - release-upgrade

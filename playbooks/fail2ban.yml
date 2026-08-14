@@ -1,4 +1,9 @@
-- name: Fail2Ban
+# On a fresh host, run playbooks/apt.yml first - the apt role is the
+# only one that refreshes the apt cache. See doc/TODO.adoc.
+- name: Fail2ban role
   hosts: all
+  gather_facts: false
   roles:
-    - fail2ban
+    - role: fail2ban
+      tags:
+        - fail2ban
