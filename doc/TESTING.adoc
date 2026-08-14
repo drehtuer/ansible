@@ -80,7 +80,7 @@ The Dev Container needs access to a Docker daemon for this — the host's own, r
 
 === Which roles have scenarios
 
-`apt`, `cron` and `users` today. Adding one means creating `roles/<role>/molecule/default/` with three files:
+`apt`, `cron`, `users`, `sshd`, `time` and `system` today. Adding one means creating `roles/<role>/molecule/default/` with three files:
 
 * `molecule.yml` — the container definition. Note the `ANSIBLE_ROLES_PATH` it sets: molecule does not put the repository's `roles/` directory on the roles path, so without it the role cannot be resolved by name and the run fails at the `syntax` stage.
 * `converge.yml` — the play that applies the role, with any variables it needs inline.
@@ -88,20 +88,16 @@ The Dev Container needs access to a Docker daemon for this — the host's own, r
 
 `invoke test-molecule` discovers scenarios rather than keeping a list. The CI matrix in `.github/workflows/test.yml` does keep a list, so add the role there too.
 
+Two more patterns worth knowing about, both used to keep a role's *production* behavior completely unchanged while still letting it converge in a container:
+
+* **A container-only test fixture, generated and torn down by the scenario itself.** `sshd` needs `files/ssh_<hostname>_*.aes256` to exist, and the real ones are vault-encrypted (CI has no vault password). `roles/sshd/molecule/default/prepare.yml` generates a throwaway key pair straight into the role's `files/` directory instead — `copy`'s `decrypt: true` is a no-op on content that is not actually vault-encrypted, so a plain key works despite the `.aes256` name. `cleanup.yml` removes it again; that stage runs both before `create` and after `verify` in the standard sequence, so an interrupted previous run self-heals rather than leaving stray keys behind. `.gitignore` covers the same filename as a second line of defense.
+* **Skipping one production task inside the container only, via a tag.** `system`'s "Set hostname" task fails even under `privileged: true` (`sethostname()`: "Device or resource busy" — a real Docker limitation, not a config gap). It carries a dedicated tag, and the scenario's `provisioner.options.skip-tags` skips it — the real playbooks never pass `--skip-tags`, so it fires normally on a real host. This only works for *tasks*: a *handler* keeps running when notified even if its own tag is in `--skip-tags` (verified against ansible-core 2.20.1 — tag filtering only ever gates whether a task runs and can notify, not whether a notified handler itself runs). `time`'s "Set HW clock" handler was assumed to need this same treatment, but turned out not to: `hwclock --systohc` works fine here, because these containers already run `privileged: true` with the host's device nodes, RTC included — a plain, unprivileged container is what the old blocker below actually described.
+
 The rest are not covered, for concrete reasons rather than lack of effort:
 
 [cols="1,3", options="header,autowidth"]
 |===
 | Role | Blocker
-
-| `sshd`
-| Deploys vault-encrypted host keys named after the host (`ssh_<hostname>_*.aes256`). A container would need its own test keys, and they cannot be vault-encrypted if CI is to run them.
-
-| `time`
-| `hwclock --systohc` has no real-time clock to write to in a container.
-
-| `system`
-| Setting the hostname needs capabilities a test container should not have.
 
 | `firewall`, `docker`
 | netfilter and Docker-in-Docker-in-Docker. These want a VM.
@@ -112,6 +108,8 @@ The rest are not covered, for concrete reasons rather than lack of effort:
 | `upgrade`
 | Runs `do-release-upgrade` and reboots. Not meaningfully automatable.
 |===
+
+Roles needing a VM or remote host rather than a container are tracked in `doc/TODO.adoc` (*Molecule roles needing a VM*) so they get picked up later rather than forgotten.
 
 == Drift check
 

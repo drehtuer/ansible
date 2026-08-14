@@ -56,6 +56,9 @@ jobs:
           - apt
           - cron
           - users
+          - sshd
+          - time
+          - system
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7

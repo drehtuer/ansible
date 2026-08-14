@@ -1,0 +1,41 @@
+# The test images ship with an empty apt cache, so a role installing
+# a package that is not already present cannot resolve it. On a real
+# host the `apt` role refreshes the cache before the other roles run;
+# molecule converges a role on its own, so it has to happen here.
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+# Generates a throwaway host key pair for this scenario alone. The
+# role expects files/ssh_<hostname>_<type>_key.aes256 to exist, and
+# the real ones are vault-encrypted - CI has no vault password (see
+# doc/TESTING.adoc), so they cannot be used here. `copy`'s
+# `decrypt: true` (in roles/sshd/tasks/main.yml) is a no-op on
+# content that is not actually vault-encrypted, so a plain key works
+# fine despite the .aes256 name - that name is only needed to match
+# the path the role looks up. cleanup.yml removes these again.
+- name: Generate a throwaway host key pair
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    files_dir: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/files"
+  tasks:
+    - name: Generate throwaway host keys
+      ansible.builtin.command:
+        cmd: >-
+          ssh-keygen -q -t {{ item.type }} {{ item.args | default('') }}
+          -N '' -C molecule-test
+          -f {{ files_dir }}/ssh_moleculetest_{{ item.type }}_key.aes256
+        creates: "{{ files_dir }}/ssh_moleculetest_{{ item.type }}_key.aes256"
+      loop:
+        - type: ed25519
+        - type: rsa
+          args: "-b 4096"
+      loop_control:
+        label: "{{ item.type }}"

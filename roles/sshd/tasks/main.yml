@@ -24,6 +24,16 @@
     group: root
     mode: "0644"
   notify: Restart sshd
+- name: Ensure the privilege separation directory exists
+  # Normally created by sshd's own service startup. Validating the
+  # config below needs it to exist first, and nothing has started the
+  # service yet at this point in the role.
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 - name: SSHd config
   ansible.builtin.template:
     src: templates/sshd_config.j2

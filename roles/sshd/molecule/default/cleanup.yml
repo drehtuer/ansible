@@ -1,0 +1,19 @@
+# Removes the throwaway host key pair prepare.yml generates, so
+# nothing molecule creates ends up committed. Runs both before create
+# and after verify (see the standard molecule sequence), so a run
+# that failed partway through self-heals on the next one instead of
+# leaving stale keys behind.
+- name: Cleanup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    files_dir: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/files"
+  tasks:
+    - name: Remove throwaway host key pair
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ lookup('ansible.builtin.fileglob', files_dir ~ '/ssh_moleculetest_*',
+        wantlist=true) }}

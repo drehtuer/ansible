@@ -5,8 +5,13 @@
       - hostname
       - locales
 - name: Set hostname
+  # Tagged so molecule can skip it - `sethostname()` fails even in a
+  # privileged container ("Device or resource busy"). See
+  # roles/system/molecule/default/molecule.yml.
   ansible.builtin.hostname:
     name: "{{ hostname_fqdn }}"
+  tags:
+    - hostname
 - name: Generate locales
   # Edits /etc/locale.gen and runs locale-gen, but only for locales
   # that are not built yet - unlike the previous template plus
