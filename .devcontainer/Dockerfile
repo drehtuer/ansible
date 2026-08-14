@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 # https://docs.docker.com/reference/dockerfile/
-FROM  ubuntu:24.04
+FROM  ubuntu:26.04
 
 LABEL name="Ansible controller" \
-    description="Control node running Ubuntu 24.04" \
-    version="1.10"
+    description="Control node running Ubuntu 26.04" \
+    version="1.11"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 ARG   ARG_USER
@@ -38,13 +38,13 @@ RUN   \
     # locales support
     locales \
     # Python support
-    python3.12 \
+    python3.14 \
     python-is-python3 \
     # Invoke to organize cmd commands
     python3-invoke \
     # Molecule and its Docker driver, for the role
     # tests. pip is needed because neither is
-    # packaged for Ubuntu 24.04.
+    # packaged for Ubuntu 26.04.
     python3-pip \
     python3-venv \
     # User may become root
@@ -59,6 +59,11 @@ RUN   \
     ssh \
     sshpass \
     wget \
+    # Docker, so molecule's docker driver can create and destroy
+    # test containers. Ubuntu 26.04 packages its own build, so no
+    # extra apt repo (and its distro-version gating) is needed.
+    docker.io \
+    docker-compose-v2 \
     # GitHub CLI apt repo, added below,
     # needs its keyring dir to exist first
     && install -d -m 755 /etc/apt/keyrings \
@@ -74,18 +79,20 @@ RUN   \
     -qq \
     # GitHub CLI, not in Ubuntu's own repos
     gh \
-    # Generate en_US.UTF-8 locales
+    # Generate en_US.UTF-8 locales. No --alias-file: Ubuntu's
+    # locales package no longer ships /usr/share/locale/locale.alias.
     && localedef \
     --inputfile=en_US \
     --force \
     --charmap=UTF-8 \
-    --alias-file=/usr/share/locale/locale.alias \
     en_US.UTF-8 \
     # Add non-root user,
-    # password needed for `sudo`
+    # password needed for `sudo`. Also in the docker
+    # group, so it can use the daemon without sudo.
     && useradd \
     --create-home \
     --user-group \
+    --groups docker \
     --shell /usr/bin/bash \
     ${ARG_USER} \
     && inv \
@@ -102,7 +109,7 @@ ARG   RUFF_VERSION=0.16.3
 
 RUN   \
     # Python linter/formatter, not packaged for
-    # Ubuntu 24.04, so install the pinned release
+    # Ubuntu 26.04, so install the pinned release
     # binary. uname -m maps to the x86_64/aarch64
     # build names used by upstream.
     curl \
@@ -125,7 +132,7 @@ ARG   MOLECULE_VERSION=26.8.0
 ARG   MOLECULE_PLUGINS_VERSION=26.7.15
 
 RUN   \
-    # Neither is packaged for Ubuntu 24.04, and pip
+    # Neither is packaged for Ubuntu 26.04, and pip
     # refuses to install into the system Python
     # (PEP 668), so molecule gets its own virtualenv
     # with the entry point linked onto PATH.
@@ -161,14 +168,20 @@ RUN \
     /usr/share/ansible/collections
 
 
-USER ${ARG_USER}
+COPY \
+    --chmod=755 \
+    docker-init.sh \
+    /usr/local/share/docker-init.sh
 
-# Can't set default user here, USER takes
-# only a string, but our user name is stored
-# in a secret file. Don't want to add an additional
-# environment variable, we set the user
-# in devcontainer.json via 'remoteUser'.
-# This also takes care of mapping uid:gid correctly.
+# Can't set the container's default user here, USER
+# takes only a string, but our user name is stored in
+# a secret file. Don't want to add an additional
+# environment variable, we set the user in
+# devcontainer.json via 'remoteUser', which also takes
+# care of mapping uid:gid correctly. The container
+# itself stays root: docker-init.sh needs it to start
+# dockerd.
+ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
 
 # Keep container running, vscode needs
 # to attach to it
