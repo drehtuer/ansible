@@ -1,0 +1,18 @@
+{{ ansible_managed | comment }}
+; Dedicated pool for Nextcloud. The name must not be `www`, which is
+; the pool the distribution already ships - two pools of one name is a
+; php-fpm startup error.
+[nextcloud]
+user = www-data
+group = www-data
+env[PATH] = /usr/bin:/bin
+
+listen = {{ cloud_fpm_socket }}
+listen.owner = www-data
+listen.group = www-data
+
+pm = dynamic
+pm.max_children = {{ cloud.php.pool.max_children }}
+pm.start_servers = {{ cloud.php.pool.start_servers }}
+pm.min_spare_servers = {{ cloud.php.pool.min_spare_servers }}
+pm.max_spare_servers = {{ cloud.php.pool.max_spare_servers }}

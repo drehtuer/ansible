@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# http-level definitions used by both the cloud vhost and the
+# path-based /nextcloud location. Owned by this role rather than the
+# http role, which previously carried them and so could not be run on
+# a host where Nextcloud was not installed.
+upstream php-handler {
+    server unix:{{ cloud_fpm_socket }};
+}
+
+# Set the `immutable` cache control option only for assets carrying a
+# cache busting `v` argument.
+map $arg_v $asset_immutable {
+    "" "";
+    default ", immutable";
+}

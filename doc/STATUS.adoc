@@ -61,10 +61,22 @@ Restoring the rules flushes the whole `filter` table, which takes fail2ban's and
 | Installs Docker Engine + Buildx + Compose v2, enables `docker`/`containerd`, and writes `/etc/docker/daemon.json`: `json-file` logging capped at 10 MB × 3 (the driver rotates nothing by default, so container logs otherwise grow until the disk fills) and `live-restore`, which keeps containers up when the daemon restarts — including the restart the `firewall` role triggers on every rules change. Docker group access is granted through the `users` role, not here. No containers/compose stacks are defined yet — this is deliberate groundwork, laid so a dockerized service can be added later without a separate bootstrap step. Note that publishing a container port also needs a matching entry in `firewall.docker.published`.
 
 | `http`
-| nginx + certbot (`letsencrypt` apt package) + php-fpm. Builds a `conf-server`/`sites-available`/`sites-enabled`/`locations-available`/`locations-enabled` layout, generates a 4096-bit DH param, hardened SSL/security headers (HSTS, CSP, X-Frame-Options, etc.), and obtains a single Let's Encrypt certificate covering the primary domain, the host FQDN, and the `cloud`/`mail`/`spam`/`status`/`www` subdomain aliases (`http.letsencrypt.aliases`). Serves a `status.<domain>` vhost, an HTTP→HTTPS redirect vhost, and a `mail.<domain>` vhost (per-role site configs are added by the `cloud`/`spam` roles).
+| nginx + certbot + php-fpm. Builds a `conf-server`/`sites-available`/`sites-enabled`/`locations-available`/`locations-enabled` layout, generates a 4096-bit DH param, and applies hardened SSL/security headers (HSTS, CSP, X-Frame-Options, etc.).
+
+**Multi-domain.** `http.domains` lists every domain this host serves. The certificate and all static vhosts are derived from it, so adding a domain is a one-line inventory change. Only `drehtuer.net` is listed today — `drehtuer.de` is migrating to `carcosa.drehtuer.net` first, see `doc/TODO.adoc`. Static vhosts are declared in `http.sites` and rendered from a single template; `server_name` is the cross product of the domains and each site's subdomains. Application roles (`cloud`, `spam`) add their own vhost rather than appearing there.
+
+**Certificate.** One certificate covers every domain, each `http.letsencrypt.subdomains` entry per domain, and the host FQDN. Its lineage name is pinned to `http.letsencrypt.cert_name` (the FQDN) rather than being derived from the first `-d`, which is what other roles read out of `/etc/letsencrypt/live/<name>/`. Renewal is scheduled by `certbot.timer`, and a deploy hook reloads nginx/postfix/dovecot after a renewal actually happens.
+
+**Bootstrap order matters and is encoded in the task order.** The port-80 vhost serves the ACME challenge directly instead of redirecting it, goes up before certbot runs, and the TLS vhosts are written only afterwards — otherwise nginx cannot start without a certificate that cannot be issued without nginx. `nginx -t` runs before the port-80 server is started and again at the end of the role.
+
+**PHP.** The version is detected at run time and used for the service name, socket and config paths, rather than being hardcoded — the `upgrade` role changes it.
 
 | `cloud`
-| Installs Nextcloud PHP dependencies, creates its MariaDB database/user, downloads and extracts the *latest* Nextcloud release tarball to `/var/www/nextcloud`, wires up PHP-FPM pool + nginx vhost/location, tunes PHP memory limit and opcache, and adds Nextcloud's own background-job and PNG-iCCP-cleanup cron jobs. Does **not** run the Nextcloud web/`occ` installer (admin account, `config.php`, trusted domains, Redis caching) — that step is currently manual. See `doc/TODO.adoc`.
+| Installs Nextcloud PHP dependencies, creates its MariaDB database/user, and installs a **pinned** Nextcloud release (`cloud.nextcloud.version`, verified against `cloud.nextcloud.checksum`) to `cloud.nextcloud.path`. Adds its own PHP-FPM pool — named `nextcloud`, not `www`, on its own socket — plus the matching nginx upstream, a `cloud.<domain>` vhost for every configured domain, and the path-based `/nextcloud` location. PHP tuning is a `conf.d` drop-in rather than edits to the package-owned `php.ini`. Adds the Nextcloud background job and a PNG-iCCP-cleanup cron job.
+
+Install only, never upgrade: the download is gated on `version.php` being absent, because unpacking a newer release over a live installation without `occ upgrade` breaks it. Bumping the pinned version therefore does *not* upgrade an existing host.
+
+Does **not** run the Nextcloud web/`occ` installer (admin account, `config.php`, trusted domains, Redis caching) — that step is currently manual. See `doc/TODO.adoc`.
 
 | `mail`
 | Postfix: TLS-only submission using the Let's Encrypt cert, SASL auth via Dovecot, alias + virtual-alias maps (vault-encrypted where they contain personal data), mail routed to Dovecot over LMTP, and RSpamd wired in as a milter on `mail.spam.milter_port` (`milter_default_action = accept`, i.e. fails open if RSpamd is unreachable). **The milter connection between Postfix and RSpamd is not working correctly yet** — under active troubleshooting, see `doc/TODO.adoc`.
@@ -90,6 +102,7 @@ No operational runbook exists yet for day-2 tasks (deploying, rotating secrets, 
 
 == Known inconsistencies worth double-checking
 
-* The `http` role's certbot handlers restart/enable a `certbot` **service** (a one-shot unit), not the `certbot.timer` that Debian/Ubuntu's certbot package uses for scheduled renewal — worth confirming automatic renewal is actually active on the host.
+* OCSP stapling now has a `resolver` pointing at the local unbound from `roles/dns`. Confirm it actually staples with `openssl s_client -connect <host>:443 -status`; without a working resolver nginx only warns and serves without stapling.
+* The `http` and `cloud` roles both run `nginx -t`, but nothing renders and parses the config off-host, so a template change is only proven correct when the role runs. Watch the first run after touching a vhost template.
 * `roles/fail2ban/files/filter.d/nginx-404.conf` is written against the `main` log format in `roles/http/files/nginx.conf`. Confirm it matches on the host with `fail2ban-regex /var/log/nginx/access.log /etc/fail2ban/filter.d/nginx-404.conf` — a filter that matches nothing fails silently rather than loudly.
 * `firewall.docker.wan_interface` defaults to the default route's interface fact. Confirm it resolves to the real internet-facing NIC on the host: if it names the wrong interface the `DOCKER-USER` drop matches nothing, which is also silent.

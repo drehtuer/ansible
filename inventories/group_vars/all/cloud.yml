@@ -31,3 +31,26 @@ cloud:
         66633066316261373733373463626138323638653530666632346539613731383539366264353961
         3366653332393132360a663230303634623832373066356265353132646530373732356461626133
         38306331666665333839646534326263646335663564646130636133336465663065
+  # Overriding `cloud` replaces the role defaults wholesale rather than
+  # merging into them, so the non-secret keys are repeated here too.
+  # meta/argument_specs.yml fails the run if one goes missing.
+  nextcloud:
+    # Pinned rather than tracking `latest`, so a rebuild produces the
+    # same version and the checksum can be verified. Bumping this does
+    # not upgrade an existing installation - that needs `occ upgrade`,
+    # which is not automated yet (doc/TODO.adoc).
+    version: "34.0.3"
+    checksum: "d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d"
+    path: /var/www/nextcloud
+    cron_minute: "*/5"
+  php:
+    memory_limit: 512M
+    opcache:
+      enable: 1
+      interned_strings_buffer: 12
+      memory_consumption: 128
+    pool:
+      max_children: 5
+      start_servers: 2
+      min_spare_servers: 1
+      max_spare_servers: 3

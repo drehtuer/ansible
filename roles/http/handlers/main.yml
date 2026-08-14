@@ -5,24 +5,17 @@
     state: restarted
     enabled: true
 - name: Reload nginx
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: nginx
     state: reloaded
     enabled: true
-- name: Restart certbot
-  ansible.builtin.systemd_service:
-    name: certbot
-    daemon_reload: true
-    state: restarted
-    enabled: true
-- name: Reload certbot
-  ansible.builtin.systemd:
-    name: certbot
-    state: reloaded
-    enabled: true
+# No certbot handlers: certbot.service is a oneshot with no [Install]
+# section, so `enabled` and `reloaded` both fail on it. Renewal is
+# scheduled by certbot.timer, enabled as a task, and the deploy hook
+# reloads whatever is using the certificate.
 - name: Restart php-fpm
   ansible.builtin.systemd_service:
-    name: php8.3-fpm
+    name: "php{{ php_version }}-fpm"
     daemon_reload: true
     state: restarted
     enabled: true

@@ -1,0 +1,90 @@
+argument_specs:
+  main:
+    short_description: nginx, PHP-FPM and Let's Encrypt certificates
+    description:
+      - Installs nginx, certbot and PHP-FPM, obtains a certificate
+        covering every configured domain, and renders the static
+        vhosts. Application roles add their own vhost rather than
+        appearing in `sites`.
+    options:
+      domain:
+        type: str
+        required: true
+        description: Primary domain, used as the default entry in http.domains.
+      hostname_fqdn:
+        type: str
+        required: true
+        description:
+          - Fully qualified host name. Included in the certificate and
+            used as its lineage name.
+      http:
+        type: dict
+        required: true
+        description: HTTP settings.
+        options:
+          port_http:
+            type: int
+            required: true
+            description: Plain HTTP port, serving the ACME challenge and the redirect.
+          port_https:
+            type: int
+            required: true
+            description: HTTPS port.
+          domains:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Every domain served by this host. Extends both the
+                certificate and every vhost.
+          letsencrypt:
+            type: dict
+            required: true
+            description: Certificate settings.
+            options:
+              email:
+                type: str
+                required: true
+                description: Registration contact address.
+              webroot_path:
+                type: str
+                required: true
+                description: Directory served at /.well-known/acme-challenge.
+              cert_name:
+                type: str
+                required: true
+                description:
+                  - Lineage name, i.e. the directory under
+                    /etc/letsencrypt/live that other roles read.
+              subdomains:
+                type: list
+                elements: str
+                required: true
+                description: Subdomains added to the certificate for every domain.
+          sites:
+            type: list
+            elements: dict
+            required: true
+            description: Static vhosts to render.
+            options:
+              name:
+                type: str
+                required: true
+                description: Config file name under sites-available.
+              subdomains:
+                type: list
+                elements: str
+                required: true
+                description:
+                  - Subdomains this vhost answers for, per domain.
+                    An empty string means the domain itself.
+              root:
+                type: str
+                required: true
+                description: Document root.
+              include_locations:
+                type: bool
+                default: false
+                description:
+                  - Include locations-enabled/*.conf, i.e. location
+                    blocks contributed by other roles.

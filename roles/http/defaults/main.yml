@@ -1,8 +1,33 @@
-hostname_fqdn: localhost
+# `hostname_fqdn` has no default on purpose - it is host specific and
+# names the certificate lineage. See meta/argument_specs.yml.
 http:
-  root: /var/www/html
+  port_http: 80
+  port_https: 443
   letsencrypt:
     email: postmaster@localhost
     webroot_path: /var/www/certbot
-    aliases:
+    # Lineage name, i.e. the directory under /etc/letsencrypt/live.
+    # Pinned explicitly rather than letting certbot derive it from the
+    # first -d, which is what made the path everything else reads
+    # (`hostname_fqdn`) disagree with the one certbot created.
+    cert_name: "{{ hostname_fqdn }}"
+    # Included in the certificate for every entry in `domains`.
+    subdomains:
       - www
+  # Every domain this host serves. Adding one here extends the
+  # certificate and every vhost below - nothing else has to change.
+  # A second domain is expected later, see doc/TODO.adoc.
+  domains:
+    - "{{ domain }}"
+  # Static vhosts, all rendered from templates/site.conf.j2. Roles
+  # that bring their own application (cloud, spam) add their own vhost
+  # instead of appearing here.
+  sites:
+    - name: default
+      # "" is the domain itself, anything else is prefixed to it.
+      subdomains:
+        - ""
+        - www
+      root: /var/www/html
+      # Pull in whatever other roles enabled in locations-enabled.
+      include_locations: true
