@@ -1,7 +1,7 @@
 compatibility_level = 3.6
 
+myhostname = mail.{{ domain }}
 mydomain = {{ domain }}
-myhostname = {{ hostname_fqdn }}
 myorigin = $mydomain
 inet_interfaces = all
 inet_protocols = all
@@ -50,7 +50,8 @@ smtpd_banner = $mydomain ESMTP
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 # local_transport = error:local delivery disabled
 
-mydestination = localhost
+mydestination = $myhostname, localhost.$mydomain, localhost
+relay_domains = 
 virtual_mailbox_domains = $mydomain $myhostname
 
 # Mail aliases
@@ -59,7 +60,7 @@ alias_database = hash:/etc/aliases
 virtual_alias_maps = hash:/etc/valiases
 
 # RSpamd
-smtpd_milters = inet:127.0.0.1:{{ mail.rspamd.milter_port }}
-non_smtpd_milters = inet:127.0.0.1:{{ mail.rspamd.milter_port }}
+smtpd_milters = inet:127.0.0.1:{{ mail.spam.milter_port }}
+non_smtpd_milters = inet:127.0.0.1:{{ mail.spam.milter_port }}
 milter_default_action = accept
 milter_protocol = 6

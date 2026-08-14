@@ -1,0 +1,127 @@
+- name: Install rspamd
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - rspamd
+    update_cache: true
+  notify:
+    - Restart rspamd
+# - name: Copy DKIM key script
+#   ansible.builtin.template:
+#     src: templates/rspamd/dkim_keygen.sh.j2
+#     dest: /usr/local/bin/dkim_keygen.sh
+#     owner: root
+#     group: root
+#     mode: "0755"
+# - name: Run DKIM script
+#   ansible.builtin.command: /usr/local/bin/dkim_keygen.sh
+#   args:
+#     creates: /var/lib/rspamd/dkim/{{ domain }}.mail.key
+#   notify:
+#     - Reload rspamd
+# - name: Configure rspamd (milter_headers.conf)
+#   ansible.builtin.copy:
+#     src: files/rspamd/milter_headers.conf
+#     dest: /etc/rspamd/local.d/milter_headers.conf
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   notify:
+#     - Reload rspamd
+- name: Configure rspamd (actions.conf)
+  ansible.builtin.copy:
+    src: files/rspamd/actions.conf
+    dest: /etc/rspamd/local.d/actions.conf
+    owner: root
+    group: root
+    mode: "0644"
+- name: Configure rspamd (redis.conf)
+  ansible.builtin.template:
+    src: templates/rspamd/redis.conf.j2
+    dest: /etc/rspamd/local.d/redis.conf
+    owner: root
+    group: root
+    mode: "0644"
+- name: Configure rspamd (worker-controller.inc)
+  ansible.builtin.template:
+    src: templates/rspamd/worker-controller.inc.j2
+    dest: /etc/rspamd/local.d/worker-controller.inc
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload rspamd
+# - name: Configure rspamd (spf.conf)
+#   ansible.builtin.copy:
+#     src: files/rspamd/spf.conf
+#     dest: /etc/rspamd/local.d/spf.conf
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   notify:
+#     - Reload rspamd
+# - name: Configure rspamd (dkim.conf)
+#   ansible.builtin.copy:
+#     src: files/rspamd/dkim.conf
+#     dest: /etc/rspamd/local.d/dkim.conf
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   notify:
+#     - Reload rspamd
+# - name: Configure rspamd (groups.conf)
+#   ansible.builtin.copy:
+#     src: files/rspamd/groups.conf
+#     dest: /etc/rspamd/local.d/groups.conf
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   notify:
+#     - Reload rspamd
+# - name: Configure rspamd (dkim_signing.conf)
+#   ansible.builtin.template:
+#     src: templates/rspamd/dkim_signing.conf.j2
+#     dest: /etc/rspamd/local.d/dkim_signing.conf
+#     owner: root
+#     group: root
+#     mode: "0644"
+#   notify:
+#     - Reload rspamd
+- name: Check spam web ui htpasswd
+  ansible.builtin.stat:
+    path: "/etc/nginx/sites-available/spam.htpasswd"
+    get_checksum: true
+    checksum_algorithm: "sha256"
+  register: spam_htpasswd_checksum
+- name: Add htaccess for spam web ui
+  ansible.builtin.copy:
+    src: files/nginx/spam.htpasswd.aes256
+    dest: /etc/nginx/sites-available/spam.htpasswd
+    decrypt: true
+    owner: root
+    group: root
+    mode: "0644"
+  when: spam_htpasswd_checksum != spam.htpasswd_sha256
+- name: Enable spam htpasswd in nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/spam.htpasswd
+    dest: /etc/nginx/sites-enabled/spam.htpasswd
+    state: link
+  notify:
+    - Reload nginx
+- name: Add spam rproxy in nginx
+  ansible.builtin.template:
+    src: templates/nginx/spam.conf.j2
+    dest: /etc/nginx/sites-available/spam.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Enable spam site in nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/spam.conf
+    dest: /etc/nginx/sites-enabled/spam.conf
+    state: link
+  notify:
+    - Reload nginx

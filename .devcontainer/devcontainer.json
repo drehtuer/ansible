@@ -20,7 +20,8 @@
         "ms-python.python",
         "tamasfe.even-better-toml",
         "ms-azuretools.vscode-containers",
-        "ms-vscode-remote.remote-containers"
+        "ms-vscode-remote.remote-containers",
+        "Anthropic.claude-code"
       ],
       "settings": {
         // Use bash as default shell
@@ -33,6 +34,9 @@
       }
     }
   },
+  "runArgs": [
+    "--hostname=dev_host"
+  ],
   "mounts": [
     // Make user settings available in container
     "source=${localEnv:HOME}/.bashrc,target=${localEnv:HOME}/.bashrc,type=bind",

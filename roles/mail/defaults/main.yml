@@ -6,6 +6,8 @@ mail:
     - name: www-data
       forwards:
         - root
+  spam:
+    milter_port: 11332
   ssl:
     cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
     key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem

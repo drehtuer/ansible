@@ -2,22 +2,12 @@
 # by ansible
 all:
   hosts:
-    nyarlathotep:
-      ansible_host: !vault |
-        $ANSIBLE_VAULT;1.1;AES256
-        35353462616637326133633532353565383161616431633236353435306335663637666339656462
-        6366313839356137393966613534356333346333393832360a333131376463383064316464666538
-        31613630313838643966633533313930303335386639376632376566666362323664326134373132
-        6337333537623936350a656233313332333537613139386638303130313535383137633138643361
-        6336
-      hostname: nyarlathotep
-      domains:
-        - local
-      ip_v4: 192.168.89.41
     carcosa:
       ansible_host: carcosa
       hostname: carcosa
       domain: drehtuer.net
+      domain_aliases:
+        - drehtuer.de
       hostname_fqdn: carcosa.drehtuer.net
       ip_v4: 88.198.12.17
       ip_v6: 2a01:4f8:222:1fcb::2

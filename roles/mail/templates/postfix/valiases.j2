@@ -1,4 +1,9 @@
+# Catch-all for hosts
+@{{ domain }} user
+{% for domain in domain_aliases %}
+@{{ domain }} user
+{% endfor %}
 # Virtual aliases for Postfix
 {% for entry in mail.aliases %}
-{{ entry.alias }}@{{ domain }}  {{ entry.forwards | map('regex_replace', '^(.*)$', '\\1@' ~ domain) | join(', ') }}
-{%endfor %}
+{{ entry.alias }}@{{ domain }} {{ entry.forwards | map('regex_replace', '^(.*)$', '\\1@' ~ domain) | join(', ') }}
+{% endfor %}

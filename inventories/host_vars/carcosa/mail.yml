@@ -30,11 +30,9 @@ mail:
           66636634313662356633656165653062366437353163343862643237323533613764613034306539
           6431316630306233360a343763636162383634383335303564316461323632633133333738326434
           3163
+  spam:
+    milter_port: 11332
   ssl:
     cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
     key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
     ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
-  rspamd:
-    milter_port: 11332
-    http_port: 11334
-    htaccess_sha256: "4611135e55fbfd8fed7731c5a616fe87eef0d7be6e2d94757164efbc9b83d7bf"

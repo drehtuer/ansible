@@ -1,0 +1,37 @@
+upstream php-handler {
+    server unix:/run/php/php-fpm.sock;
+}
+
+# Set the `immutable` cache control options only for assets with a cache busting `v` argument
+map $arg_v $asset_immutable {
+    "" "";
+    default ", immutable";
+}
+
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ domain }} www.{{ domain }};
+    root /var/www/html;
+    index index.html index.php;
+
+    include conf-server/ssl.conf;
+    include conf-server/security.conf;
+    include conf-server/general.conf;
+    include locations-enabled/letsencrypt.conf;
+    # TODO: Remove after moving to cloud subdomain
+    include locations-enabled/nextcloud.conf;
+
+    # index.html fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # handle .php
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php-fpm.sock;
+        include      conf-server/php-fpm.conf;
+    }
+
+}

@@ -45,7 +45,7 @@
     owner: root
     group: root
     mode: "0755"
-- name: Create DH parameters for nginx (takes a while)
+- name: Create DH parameters for nginx (may take a while)
   ansible.builtin.command:
     cmd: >
       openssl dhparam -out /etc/nginx/dhparam.pem 4096
@@ -59,6 +59,15 @@
   ansible.builtin.file:
     path: /etc/nginx/conf.d/default.conf
     state: absent
+- name: Shared general configuration for nginx
+  ansible.builtin.copy:
+    src: files/general.conf
+    dest: /etc/nginx/conf-server/general.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
 - name: Shared security configuration for nginx
   ansible.builtin.copy:
     src: files/security.conf
@@ -68,10 +77,10 @@
     mode: "0644"
   notify:
     - Reload nginx
-- name: Shared general configuration for nginx
-  ansible.builtin.copy:
-    src: files/general.conf
-    dest: /etc/nginx/conf-server/general.conf
+- name: Shared ssl configuration for nginx
+  ansible.builtin.template:
+    src: templates/ssl.conf.j2
+    dest: /etc/nginx/conf-server/ssl.conf
     owner: root
     group: root
     mode: "0644"
@@ -96,18 +105,6 @@
     mode: "0644"
   notify:
     - Reload nginx
-- name: Register certbot
-  ansible.builtin.command:
-    cmd: >
-      certbot certonly
-      -w {{ http.letsencrypt.webroot_path }}
-      -d {{ hostname_fqdn }}
-      -d {{ domain }}
-      --non-interactive
-      --agree-tos
-      --email {{ http.letsencrypt.email }}
-  args:
-    creates: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
 - name: PHP-FPM configuration for nginx
   ansible.builtin.copy:
     src: files/php-fpm.conf
@@ -135,19 +132,67 @@
   notify:
     - Reload certbot
     - Run certbot
-- name: Root server for nginx
+- name: Default server for nginx
   ansible.builtin.template:
-    src: templates/root.conf.j2
-    dest: /etc/sites-available/root.conf
+    src: templates/default.conf.j2
+    dest: /etc/nginx/sites-available/default.conf
     owner: root
     group: root
     mode: "0644"
   notify:
     - Reload nginx
-- name: Create symlink for nginx sites-enabled
+- name: Create symlink for default sites-enabled
   ansible.builtin.file:
-    src: /etc/sites-available/root.conf
-    dest: /etc/nginx/sites-enabled/root.conf
+    src: /etc/nginx/sites-available/default.conf
+    dest: /etc/nginx/sites-enabled/default.conf
+    state: link
+  notify:
+    - Reload nginx
+- name: Status server for nginx
+  ansible.builtin.template:
+    src: templates/status.conf.j2
+    dest: /etc/nginx/sites-available/status.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Create symlink for status sites-enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/status.conf
+    dest: /etc/nginx/sites-enabled/status.conf
+    state: link
+  notify:
+    - Reload nginx
+- name: Mail server for nginx
+  ansible.builtin.template:
+    src: templates/mail.conf.j2
+    dest: /etc/nginx/sites-available/mail.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Create symlink for mail sites-enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/mail.conf
+    dest: /etc/nginx/sites-enabled/mail.conf
+    state: link
+  notify:
+    - Reload nginx
+- name: Forward http2https for nginx
+  ansible.builtin.copy:
+    src: files/http_to_https.conf
+    dest: /etc/nginx/sites-available/http_to_https.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Create symlink for http2https sites-enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/http_to_https.conf
+    dest: /etc/nginx/sites-enabled/http_to_https.conf
     state: link
   notify:
     - Reload nginx
@@ -171,3 +216,16 @@
     mode: "0644"
   notify:
     - Reload nginx
+- name: Register certbot
+  ansible.builtin.command:
+    cmd: >
+      certbot certonly
+      -w {{ http.letsencrypt.webroot_path }}
+      -d {{ domain }}
+      -d {{ hostname_fqdn }}
+      {{ http.letsencrypt.aliases | map('regex_replace', '^(.*)$', '-d \\\1.' ~ domain) | join(' ') }}
+      --non-interactive
+      --agree-tos
+      --email {{ http.letsencrypt.email }}
+  args:
+    creates: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem

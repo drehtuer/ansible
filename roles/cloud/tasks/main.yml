@@ -18,20 +18,20 @@
       - imagemagick
 - name: Create Nextcloud database
   community.mysql.mysql_db:
-    name: "{{ nextcloud.mysql.nextcloud.database }}"
+    name: "{{ cloud.mysql.nextcloud.database }}"
     state: present
-    login_user: "{{ nextcloud.mysql.root.user }}"
-    login_password: "{{ nextcloud.mysql.root.password }}"
+    login_user: "{{ cloud.mysql.root.user }}"
+    login_password: "{{ cloud.mysql.root.password }}"
 - name: Create Nextcloud database user
   community.mysql.mysql_user:
-    name: "{{ nextcloud.mysql.nextcloud.user }}"
-    password: "{{ nextcloud.mysql.nextcloud.password }}"
+    name: "{{ cloud.mysql.nextcloud.user }}"
+    password: "{{ cloud.mysql.nextcloud.password }}"
     host: localhost
     column_case_sensitive: false
-    priv: "{{ nextcloud.mysql.nextcloud.database }}.*:ALL"
+    priv: "{{ cloud.mysql.nextcloud.database }}.*:ALL"
     state: present
-    login_user: "{{ nextcloud.mysql.root.user }}"
-    login_password: "{{ nextcloud.mysql.root.password }}"
+    login_user: "{{ cloud.mysql.root.user }}"
+    login_password: "{{ cloud.mysql.root.password }}"
 - name: Nextcloud folder
   ansible.builtin.file:
     path: /var/www/nextcloud
@@ -44,6 +44,15 @@
     - Extract Nextcloud
     - Set ownership for Nextcloud files
     - Add cron job for Nextcloud
+- name: Nextcloud PHP configuration
+  ansible.builtin.copy:
+    src: files/php-fpm/nextcloud.conf
+    dest: /etc/php/8.3/fpm/pool.d/nextcloud.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload PHP-FPM
 - name: Nextcloud nginx location
   ansible.builtin.copy:
     src: files/nextcloud.conf
@@ -63,15 +72,25 @@
     mode: "0644"
   notify:
     - Reload nginx
-- name: Nextcloud PHP configuration
-  ansible.builtin.copy:
-    src: files/php-fpm/nextcloud.conf
-    dest: /etc/php/8.3/fpm/pool.d/nextcloud.conf
+- name: Cloud nginx location
+  ansible.builtin.template:
+    src: templates/cloud.conf.j2
+    dest: /etc/nginx/sites-available/cloud.conf
     owner: root
     group: root
     mode: "0644"
   notify:
-    - Reload PHP-FPM
+    - Reload nginx
+- name: Enable cloud nginx location
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/cloud.conf
+    dest: /etc/nginx/sites-enabled/cloud.conf
+    state: link
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
 - name: Increase PHP memory limit
   ansible.builtin.lineinfile:
     path: /etc/php/8.3/fpm/php.ini

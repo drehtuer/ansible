@@ -1,4 +1,4 @@
-nextcloud:
+cloud:
   mysql:
     nextcloud:
       database: nextcloud

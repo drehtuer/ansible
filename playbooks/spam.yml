@@ -1,0 +1,4 @@
+- name: Anti-Spam
+  hosts: all
+  roles:
+    - spam

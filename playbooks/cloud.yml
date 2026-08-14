@@ -1,0 +1,4 @@
+- name: Cloud server
+  hosts: all
+  roles:
+    - cloud
