@@ -29,6 +29,14 @@ argument_specs:
             description:
               - Addresses allowed to AXFR the zones and notified on
                 change. Everything else is refused.
+          notify:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Addresses told when the zone changes. IPv4 only for
+                Hetzner, which refuses a NOTIFY sent from this host's
+                IPv6 address whatever key signs it.
           tsig:
             type: dict
             required: true

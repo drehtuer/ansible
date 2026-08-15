@@ -23,6 +23,12 @@ nsd:
     - 2a01:4f8:0:1::5ddc:2
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
+  # IPv4 only - Hetzner refuses a NOTIFY from this host's IPv6 address
+  # whatever key signs it. See nsd.notify in roles/nsd/defaults.
+  notify:
+    - 213.239.242.238      # ns1.first-ns.de
+    - 213.133.100.103      # robotns2.second-ns.de
+    - 193.47.99.3          # robotns3.second-ns.com
   # Shared secret authenticating the AXFR to Hetzner's secondaries, so
   # they can verify the zone came from here unaltered.
   #

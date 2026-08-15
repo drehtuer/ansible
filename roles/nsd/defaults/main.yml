@@ -3,8 +3,9 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # loopback. Empty by default so the role cannot accidentally bind
   # every interface on a host that has not declared its addresses.
   listen: []
-  # Addresses permitted to pull the zone by AXFR and sent NOTIFY when
-  # it changes: Hetzner's three secondary nameservers, v4 and v6.
+  # Addresses permitted to pull the zone by AXFR: Hetzner's three
+  # secondary nameservers, both families, since a transfer may reach
+  # this host over either.
   # https://docs.hetzner.com/de/networking/dns/overview
   secondaries:
     - 213.239.242.238      # ns1.first-ns.de
@@ -13,6 +14,27 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     - 2a01:4f8:0:1::5ddc:2
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
+  # Addresses told when the zone changes, so they fetch it promptly
+  # instead of waiting out the SOA refresh interval.
+  #
+  # The same three servers, but their IPv4 addresses only, and that is
+  # deliberate. Hetzner answers a NOTIFY arriving from this host's IPv6
+  # address with REFUSED no matter which key signs it - established by
+  # probing each candidate key against each address: a key they do not
+  # know is answered NOTAUTH, whereas the working key over IPv6 is
+  # answered REFUSED, so the key verifies and the notify is turned down
+  # on policy. Notifying over IPv6 as well therefore achieved nothing
+  # except 18 error lines in the log per zone change, which is how a
+  # log stops being worth reading.
+  #
+  # Nothing is lost by leaving them out: these are the same three
+  # servers, so notifying their IPv4 addresses tells every secondary
+  # there is. If Hetzner ever accepts it, adding the addresses back
+  # here is the whole change.
+  notify:
+    - 213.239.242.238      # ns1.first-ns.de
+    - 213.133.100.103      # robotns2.second-ns.de
+    - 193.47.99.3          # robotns3.second-ns.com
   # Shared secret authenticating the zone transfer, so a secondary can
   # verify the zone it received really came from this host and was not
   # altered in transit (TSIG, RFC 8945). This is *not* DNSSEC: TSIG
