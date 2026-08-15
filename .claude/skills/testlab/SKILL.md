@@ -7,7 +7,7 @@ Two disposable test hosts, both in the inventory's `testlab` group. Nothing on e
 
 | | `testlab_vm` (default) | `testlab_metal` |
 |---|---|---|
-| Host | `yuggoth` | `nyarlathotep` |
+| Host | `yuggoth` (+ `hastur`) | `nyarlathotep` |
 | What | QEMU/KVM guest **inside this dev container** | ZOTAC ZBOX on the LAN, `192.168.89.41` |
 | Reset | seconds, to a pristine cloud image | ~3 min, to an LVM snapshot |
 | Console | `vm.sh console` — always available | **none** |
@@ -48,9 +48,11 @@ lab.sh deploy          # every playbook, dependency order
 lab.sh verify          # units, sockets, config validators, firewall, TLS
 ```
 
+There are two guests: `yuggoth`, the default, and `hastur`, which carries `upgrade.target_release` and exists to rehearse the release upgrade. Both run **24.04**, the release production runs — the lab is meant to mirror carcosa, not to run ahead of it. Select one with `LAB_VM_HOST=hastur`, and check a newer release ad hoc with `LAB_VM_RELEASE=26.04 vm.sh reset`.
+
 The disk is a qcow2 overlay on an untouched base image, so `reset` is "delete the overlay and re-run cloud-init". That is a real from-scratch provision every time — the thing `doc/TODO.adoc` has wanted for a long time and neither molecule nor the metal box can do.
 
-Defaults: 4 GiB RAM, 4 vCPUs, 20 GiB disk, Ubuntu **26.04** cloud image, state in `/var/tmp/testlab-vm`. Override with `LAB_VM_MEM`, `LAB_VM_CPUS`, `LAB_VM_DISK`, `LAB_VM_RELEASE`, `LAB_VM_IMAGE_URL`, `LAB_VM_STATE`, `LAB_VM_SSH_PORT`.
+Defaults: 4 GiB RAM, 4 vCPUs, 20 GiB disk, Ubuntu **24.04** cloud image — the release production runs — state in `/var/tmp/testlab-vm`. Override with `LAB_VM_MEM`, `LAB_VM_CPUS`, `LAB_VM_DISK`, `LAB_VM_RELEASE`, `LAB_VM_IMAGE_URL`, `LAB_VM_STATE`, `LAB_VM_SSH_PORT`.
 
 ## The metal loop
 

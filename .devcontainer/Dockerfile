@@ -229,6 +229,11 @@ COPY \
     fix-docker-gid.sh \
     /usr/local/share/fix-docker-gid.sh
 
+COPY \
+    --chmod=755 \
+    fix-kvm-perms.sh \
+    /usr/local/share/fix-kvm-perms.sh
+
 USER ${ARG_USER}
 
 # Can't set default user here, USER takes

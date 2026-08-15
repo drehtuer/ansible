@@ -14,25 +14,49 @@
 
 set -euo pipefail
 
-HOST=yuggoth
+# Which guest to act on. Each one is a row here and a matching block
+# in ~/.ssh/config; they run side by side, so several releases can be
+# up at once.
+#
+#   yuggoth  the default. Runs the same release as production, so a
+#            deploy here rehearses what carcosa will actually do.
+#   hastur   the upgrade rehearsal guest. Starts on the same release
+#            and carries upgrade.target_release, so it is the one that
+#            gets moved to the next LTS once Ubuntu offers it.
+#
+# Both therefore track production, not the newest release. For a
+# forward-compatibility check against a release production has not
+# reached yet, override it for one run:
+#   LAB_VM_RELEASE=26.04 vm.sh reset
+HOST="${LAB_VM_HOST:-yuggoth}"
+case "$HOST" in
+  yuggoth) DEFAULT_PORT=2222; DEFAULT_RELEASE=24.04 ;;
+  hastur)  DEFAULT_PORT=2223; DEFAULT_RELEASE=24.04 ;;
+  *) printf 'Unknown guest "%s". Known: yuggoth, hastur.\n' "$HOST" >&2; exit 1 ;;
+esac
 GROUP=testlab_vm
-SSH_PORT="${LAB_VM_SSH_PORT:-2222}"
+SSH_PORT="${LAB_VM_SSH_PORT:-$DEFAULT_PORT}"
+
+# Codename-independent path, so this keeps working across releases.
+RELEASE="${LAB_VM_RELEASE:-$DEFAULT_RELEASE}"
+IMAGE_URL="${LAB_VM_IMAGE_URL:-https://cloud-images.ubuntu.com/releases/${RELEASE}/release/ubuntu-${RELEASE}-server-cloudimg-amd64.img}"
 
 # Container-local by design: the guest is disposable and re-created
 # from the base image, so nothing here is worth persisting across a
 # container rebuild except the download. Point LAB_VM_STATE at a
-# bind-mounted path to keep the base image between rebuilds.
+# bind-mounted path to keep the base images between rebuilds.
+#
+# Base images are shared and keyed by release, so a second guest on a
+# release already downloaded costs nothing; everything a guest writes
+# lives under its own directory.
 STATE="${LAB_VM_STATE:-/var/tmp/testlab-vm}"
-BASE="${STATE}/base.qcow2"
-DISK="${STATE}/disk.qcow2"
-SEED="${STATE}/seed.iso"
-MONITOR="${STATE}/monitor.sock"
-CONSOLE="${STATE}/console.sock"
-PIDFILE="${STATE}/qemu.pid"
-
-# Codename-independent path, so this keeps working across releases.
-RELEASE="${LAB_VM_RELEASE:-26.04}"
-IMAGE_URL="${LAB_VM_IMAGE_URL:-https://cloud-images.ubuntu.com/releases/${RELEASE}/release/ubuntu-${RELEASE}-server-cloudimg-amd64.img}"
+BASE="${STATE}/base-${RELEASE}.qcow2"
+GUEST="${STATE}/${HOST}"
+DISK="${GUEST}/disk.qcow2"
+SEED="${GUEST}/seed.iso"
+MONITOR="${GUEST}/monitor.sock"
+CONSOLE="${GUEST}/console.sock"
+PIDFILE="${GUEST}/qemu.pid"
 
 MEM="${LAB_VM_MEM:-4096}"
 CPUS="${LAB_VM_CPUS:-4}"
@@ -40,6 +64,8 @@ DISK_SIZE="${LAB_VM_DISK:-20G}"
 BOOT_TIMEOUT=300
 
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+# One key for every local guest: they are ephemeral, identical in
+# purpose, and reachable only from inside this container.
 PUBKEY="${HOME}/.ssh/yuggoth.pub"
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -65,7 +91,7 @@ wait_for_ssh() {
       ok "guest is up"
       return 0
     fi
-    running || die "QEMU exited while booting. Last console output:$(printf '\n')$(tail -20 "${STATE}/console.log" 2>/dev/null)"
+    running || die "QEMU exited while booting. Last console output:$(printf '\n')$(tail -20 "${GUEST}/console.log" 2>/dev/null)"
     sleep 5
   done
   die "The guest did not answer SSH within ${BOOT_TIMEOUT}s. Attach to the console with 'vm.sh console' to see where it stopped."
@@ -75,7 +101,7 @@ write_seed() {
   [[ -f "$PUBKEY" ]] || die "No ${PUBKEY}. Generate it with: ssh-keygen -t ed25519 -f ~/.ssh/yuggoth -N ''"
   # The account and its NOPASSWD sudo have to exist before Ansible can
   # do anything: ansible.cfg escalates on every play.
-  cat > "${STATE}/user-data" <<EOF
+  cat > "${GUEST}/user-data" <<EOF
 #cloud-config
 hostname: ${HOST}
 fqdn: ${HOST}.lab.lan
@@ -93,14 +119,14 @@ users:
 ssh_pwauth: false
 package_update: false
 EOF
-  printf 'instance-id: %s\nlocal-hostname: %s\n' "${HOST}-$$" "$HOST" > "${STATE}/meta-data"
-  cloud-localds "$SEED" "${STATE}/user-data" "${STATE}/meta-data"
+  printf 'instance-id: %s\nlocal-hostname: %s\n' "${HOST}-$$" "$HOST" > "${GUEST}/meta-data"
+  cloud-localds "$SEED" "${GUEST}/user-data" "${GUEST}/meta-data"
 }
 
 cmd_create() {
   require_kvm
   running && { info "already running"; return 0; }
-  mkdir -p "$STATE"
+  mkdir -p "$STATE" "$GUEST"
 
   if [[ ! -f "$BASE" ]]; then
     say "Downloading the Ubuntu ${RELEASE} cloud image"
@@ -141,7 +167,7 @@ cmd_start() {
     -daemonize
   # The serial socket only has one reader, so mirror it to a file for
   # after-the-fact diagnosis.
-  socat -u "unix-connect:${CONSOLE}" "create:${STATE}/console.log" &
+  socat -u "unix-connect:${CONSOLE}" "create:${GUEST}/console.log" &
   disown
   info "ssh forwarded on 127.0.0.1:${SSH_PORT}"
   wait_for_ssh
@@ -209,7 +235,7 @@ cmd_status() {
 cmd_destroy() {
   cmd_stop
   say "Removing the overlay and seed (the base image is kept)"
-  rm -f "$DISK" "$SEED" "${STATE}/user-data" "${STATE}/meta-data" "${STATE}/console.log"
+  rm -f "$DISK" "$SEED" "${GUEST}/user-data" "${GUEST}/meta-data" "${GUEST}/console.log"
   ok "destroyed - 'vm.sh create' rebuilds it without re-downloading"
 }
 

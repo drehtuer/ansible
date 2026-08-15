@@ -21,7 +21,7 @@
   // Fixes up group membership for the socket mount below - the
   // host's docker group GID varies by machine, so it can't be baked
   // into the image and has to be handled at container start instead.
-  "postStartCommand": "/usr/local/share/fix-docker-gid.sh",
+  "postStartCommand": "/usr/local/share/fix-docker-gid.sh && /usr/local/share/fix-kvm-perms.sh",
   "customizations": {
     "vscode": {
       // VS code extensions

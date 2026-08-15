@@ -61,6 +61,15 @@ all:
               # QEMU's fixed SLIRP subnet.
               ip_v4: 10.0.2.15
               ip_v6: "fd00::15"
+            # Deliberately one release behind yuggoth, so the upgrade
+            # role has a real release upgrade to perform. Same SLIRP
+            # addresses - each guest has its own private network.
+            hastur:
+              ansible_host: hastur
+              hostname: hastur
+              hostname_fqdn: hastur.lab.lan
+              ip_v4: 10.0.2.15
+              ip_v6: "fd00::15"
         testlab_metal:
           hosts:
             nyarlathotep:

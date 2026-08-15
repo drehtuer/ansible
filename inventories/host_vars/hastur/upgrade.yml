@@ -1,0 +1,13 @@
+# This guest exists to exercise the upgrade role, so unlike every
+# other host it has a target release set. The role is a no-op while
+# this is empty, and playbooks/upgrade.yml is tagged `never` on top of
+# that, so it still only runs when asked for explicitly:
+#
+#   invoke run-playbook --hosts=hastur \
+#     --playbook=playbooks/upgrade.yml --tags=release-upgrade
+upgrade:
+  target_release: "26.04"
+  prompt: lts
+  async_timeout: 5400
+  poll_interval: 30
+  reboot_timeout: 1800
