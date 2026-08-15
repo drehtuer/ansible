@@ -24,12 +24,19 @@ nsd:
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
   # Shared secret authenticating the AXFR to Hetzner's secondaries, so
-  # they can verify the zone came from here unaltered. The same name,
-  # algorithm and secret must be entered in Hetzner's DNS console for
-  # the secondary zone; a mismatch shows up as a refused transfer and a
-  # secondary that keeps serving its previous copy.
+  # they can verify the zone came from here unaltered.
+  #
+  # The name is NOT free to choose. Hetzner's console takes only the
+  # algorithm and the secret, and derives the key name itself as
+  # "<zone>.<primary-ip>." - so it must be written out here exactly as
+  # they send it. Getting it wrong is not a soft failure: NSD answers
+  # BADKEY, no transfer ever succeeds, and once their copy passes the
+  # SOA expire time they stop answering for the zone entirely and the
+  # domain goes dark. Recovering means fixing the name and waiting for
+  # the transfer, so check the name against a real transfer attempt
+  # (`journalctl -u nsd | grep tsig`) rather than assuming.
   tsig:
-    name: hetzner-secondary
+    name: drehtuer.net.88.198.12.17.
     algorithm: hmac-sha256
     secret: !vault |
         $ANSIBLE_VAULT;1.1;AES256
