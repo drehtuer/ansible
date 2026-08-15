@@ -1,12 +1,16 @@
+{{ ansible_managed | comment }}
 server {
-  listen 443 ssl http2;
-  listen [::]:443 ssl http2;
+  listen {{ http.port_https }} ssl http2;
+  listen [::]:{{ http.port_https }} ssl http2;
 
   include conf-server/ssl.conf;
   include conf-server/security.conf;
   include conf-server/general.conf;
 
-  server_name spam.{{ domain }};
+  # One name per served domain, same as the cloud vhost. The
+  # certificate already covers spam.<domain> for each of them through
+  # http.letsencrypt.subdomains.
+  server_name {{ http.domains | map('regex_replace', '^', 'spam.') | join(' ') }};
 
   location / {
     auth_basic "Restricted Access";
@@ -18,6 +22,4 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   }
-
-  include locations-enabled/letsencrypt.conf;
 }

@@ -4,12 +4,25 @@ argument_specs:
     description:
       - Installs RSpamd, wires it to the shared Redis instance and the
         local DNS resolver, and reverse-proxies its password-protected
-        controller UI through nginx at spam.<domain>.
+        controller UI through nginx at spam.<domain>, for every domain
+        this host serves.
     options:
       domain:
         type: str
         required: true
-        description: Primary domain, used for the spam.<domain> vhost.
+        description:
+          - Primary domain. Used by the DKIM key generation script,
+            which is still commented out in tasks/main.yml.
+      http:
+        type: dict
+        required: true
+        description:
+          - Shared HTTP settings, owned by the http role. This vhost
+            reads `http.port_https` and `http.domains`, serving
+            spam.<domain> for each.
+          - Deliberately declared without suboptions. Listing them
+            would make validation reject every other key the http role
+            puts in this dict, which fails the role outright.
       spam:
         type: dict
         required: true

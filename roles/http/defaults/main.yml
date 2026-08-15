@@ -14,11 +14,12 @@ http:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Included in the certificate for every entry in `domains`.
     subdomains:
       - www
-  # Every domain this host serves. Adding one here extends the
-  # certificate and every vhost below - nothing else has to change.
-  # A second domain is expected later, see doc/TODO.adoc.
-  domains:
-    - "{{ domain }}"
+  # Every domain this host serves, derived from the host's own facts
+  # rather than listed again here: `domain_aliases` already records
+  # the secondary domains, and the mail role reads the same fact for
+  # its virtual aliases. One list, so web and mail cannot disagree
+  # about which domains the host answers for.
+  domains: "{{ [domain] + domain_aliases }}"
   # Static vhosts, all rendered from templates/site.conf.j2. Roles
   # that bring their own application (cloud, spam) add their own vhost
   # instead of appearing here.

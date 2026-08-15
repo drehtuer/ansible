@@ -1,11 +1,11 @@
 http:
   port_http: 80
   port_https: 443
-  # Two domains on purpose: the static tests then cover the
-  # multi-domain rendering path, which production does not use yet.
-  domains:
-    - "{{ domain }}"
-    - second.invalid
+  # Derived exactly as production does, and `domain_aliases` in
+  # ../../machines.yml holds one entry - so the static tests still
+  # render the multi-domain path, now in the same shape the real
+  # inventory uses.
+  domains: "{{ [domain] + domain_aliases }}"
   letsencrypt:
     email: postmaster@test.invalid
     webroot_path: /var/www/certbot
@@ -13,6 +13,10 @@ http:
     subdomains:
       - cloud
       - mail
+      # The spam role renders a spam.<domain> vhost, so the fixture
+      # has to cover it too or it describes a host whose certificate
+      # does not match its own vhosts.
+      - spam
       - status
       - www
   sites:

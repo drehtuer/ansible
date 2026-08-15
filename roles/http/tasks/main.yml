@@ -148,27 +148,63 @@
     owner: root
     group: root
     mode: "0755"
-- name: Register certbot
+- name: Build the list of names the certificate has to cover
+  ansible.builtin.set_fact:
+    # The host FQDN, each domain itself, and every subdomain of every
+    # domain. Sorted and deduplicated so the comparison below is
+    # independent of the order certbot happens to store them in.
+    http_cert_names: >-
+      {{ ([hostname_fqdn] + (http.domains | list)
+          + (http.domains | product(http.letsencrypt.subdomains)
+             | map('reverse') | map('join', '.') | list))
+         | unique | sort }}
+- name: Check for an existing certificate
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ http.letsencrypt.cert_name }}/cert.pem"
+  register: http_cert
+- name: Read the names on the existing certificate
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -noout -ext subjectAltName
+      -in /etc/letsencrypt/live/{{ http.letsencrypt.cert_name }}/cert.pem
+  register: http_cert_san
+  changed_when: false
+  # Reads nothing but the certificate already on disk, and the task
+  # below needs its output to decide anything at all in check mode.
+  check_mode: false
+  when: http_cert.stat.exists
+- name: Collect the names on the existing certificate
+  ansible.builtin.set_fact:
+    http_cert_current: >-
+      {{ http_cert_san.stdout | default('')
+         | regex_findall('DNS:([^,\s]+)') | unique | sort }}
+- name: Issue or expand the certificate
+  # Deliberately not guarded with `creates:` on the lineage. That only
+  # answers whether *a* certificate exists, not whether it covers the
+  # names this host now serves - so adding a domain to http.domains
+  # rendered vhosts for it and then served them with a certificate
+  # that did not match, with the run reporting success. Comparing the
+  # SANs is what makes adding a domain a one-line inventory change.
+  #
+  # --expand is what lets certbot extend the existing lineage
+  # non-interactively; it is a no-op on a first issuance.
   ansible.builtin.command:
     cmd: >
       certbot certonly
       --cert-name {{ http.letsencrypt.cert_name }}
       -w {{ http.letsencrypt.webroot_path }}
-      -d {{ hostname_fqdn }}
-      {{ certbot_domains | join(' ') }}
+      {{ http_cert_names | map('regex_replace', '^', '-d ') | join(' ') }}
+      --expand
       --non-interactive
       --agree-tos
       --email {{ http.letsencrypt.email }}
-  vars:
-    # Each domain itself, plus every subdomain of it.
-    certbot_domains: >-
-      {{ ((http.domains | list)
-          + (http.domains | product(http.letsencrypt.subdomains)
-             | map('reverse') | map('join', '.') | list))
-         | map('regex_replace', '^', '-d ') | list }}
-  args:
-    creates: >-
-      /etc/letsencrypt/live/{{ http.letsencrypt.cert_name }}/fullchain.pem
+  when: >-
+    not http_cert.stat.exists
+    or http_cert_names | symmetric_difference(http_cert_current) | length > 0
+  # Only runs when the two sets actually differ, so it always did
+  # something when it ran. The deploy hook installed above reloads
+  # nginx, postfix and dovecot afterwards.
+  changed_when: true
 - name: Enable certbot renewal timer
   # certbot.service is a oneshot without an [Install] section - it can
   # be neither enabled nor reloaded. The timer is what schedules

@@ -132,6 +132,15 @@
     - cli
   notify:
     - Reload PHP-FPM
+- name: Nextcloud trusted domains
+  # Same config/*.config.php mechanism as the cache settings below.
+  ansible.builtin.template:
+    src: templates/domains.config.php.j2
+    dest: "{{ cloud.nextcloud.path }}/config/domains.config.php"
+    owner: www-data
+    group: www-data
+    mode: "0640"
+    validate: php -l %s
 - name: Nextcloud cache configuration
   # A config/*.config.php drop-in rather than config.php, which is
   # written by Nextcloud itself and is not managed here.

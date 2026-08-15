@@ -1,9 +1,25 @@
+{#
+  Every alias is generated for the primary domain *and* every alias
+  domain, so mail to an address behaves the same whichever of this
+  host's domains it was sent to. Previously only the catch-all below
+  existed for the alias domains, which silently routed e.g.
+  postmaster@<alias domain> to the catch-all mailbox instead of
+  forwarding it where postmaster@<primary domain> goes.
+
+  The right-hand side always stays on the primary domain: that is the
+  one in Postfix's virtual_mailbox_domains, so it is where the
+  mailboxes actually live.
+
+  Postfix looks up the full address before falling back to the
+  @domain catch-all, so the order of the two blocks does not matter.
+#}
 # Catch-all for hosts
-@{{ domain }} user
-{% for domain in domain_aliases %}
-@{{ domain }} user
+{% for d in [domain] + domain_aliases %}
+@{{ d }} user
 {% endfor %}
 # Virtual aliases for Postfix
+{% for d in [domain] + domain_aliases %}
 {% for entry in mail.aliases %}
-{{ entry.alias }}@{{ domain }} {{ entry.forwards | map('regex_replace', '^(.*)$', '\\1@' ~ domain) | join(', ') }}
+{{ entry.alias }}@{{ d }} {{ entry.forwards | map('regex_replace', '^(.*)$', '\\1@' ~ domain) | join(', ') }}
+{% endfor %}
 {% endfor %}
