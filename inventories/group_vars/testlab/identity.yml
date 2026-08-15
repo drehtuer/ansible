@@ -1,0 +1,14 @@
+# Shared by every host in the testlab group.
+#
+# Fictional and resolving nowhere, so Let's Encrypt can never issue
+# for it - `lab.sh seed-certs` installs a self-signed certificate with
+# exactly the names the http role expects instead, which makes that
+# role's SAN comparison skip certbot entirely.
+#
+# Both test hosts use the same domain on purpose. They are never on
+# the same network (the VM is behind user-mode NAT inside the dev
+# container), and sharing it means a test host is defined by its
+# connection details alone.
+domain: lab.lan
+domain_aliases:
+  - lab.test

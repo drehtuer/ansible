@@ -1,0 +1,10 @@
+# Connection identity for the deployment-test VM.
+#
+# Not vault-encrypted, for the same reason as the other test host: the
+# account name is fixed by the cloud-init seed that builds the guest
+# and is documented in the skill anyway. The credential that matters
+# is the SSH key, which never enters the repository.
+#
+# The port forward and the key live in the `yuggoth` block of
+# ~/.ssh/config, so nothing else is needed here.
+ansible_user: drehtuer

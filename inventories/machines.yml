@@ -1,17 +1,73 @@
-# Group `all` is even pre-defined
-# by ansible
+# Host inventory.
+#
+#   production     the real server. Reachable from the internet, holds
+#                  real data, real certificates, real credentials.
+#   testlab        disposable machines used to prove the roles converge
+#                  on a real system, between molecule (one role, in a
+#                  container) and production. Nothing on them is backed
+#                  up. See .claude/skills/testlab/SKILL.md.
+#     testlab_vm   the default: a QEMU/KVM guest running inside the dev
+#                  container itself. Reset to a pristine cloud image in
+#                  seconds, and it has a serial console, so no mistake
+#                  is unrecoverable.
+#     testlab_metal
+#                  a physical machine on the LAN. Kept for the things a
+#                  VM cannot show - real hardware, real firmware, a
+#                  real NIC - but it is slow to reset and has no
+#                  console, so reach for the VM first.
+#
+# Every playbook is still `hosts: all`, so a run without a host
+# selection targets ALL of these. `invoke run-playbook` therefore
+# requires `--hosts`, which is how they stay apart - see tasks.py.
+#
+# Anything that differs between environments (credentials above all)
+# belongs in group_vars/production/ or group_vars/testlab/, never in
+# group_vars/all/. That is what keeps the production passwords off the
+# test machines. The two testlab hosts deliberately share everything
+# except their connection details, so adding a third costs one entry
+# here and one connection.yml.
 all:
-  hosts:
-    carcosa:
-      ansible_host: carcosa
-      hostname: carcosa
-      domain: drehtuer.net
-      domain_aliases:
-        - drehtuer.de
-      hostname_fqdn: carcosa.drehtuer.net
-      # Not read by any role yet. Kept for documentation and for a
-      # role that needs to bind to this host's actual address rather
-      # than the 0.0.0.0/:: wildcard (e.g. the `dns` role, once it
-      # serves the zone authoritatively - see doc/TODO.adoc).
-      ip_v4: 88.198.12.17
-      ip_v6: 2a01:4f8:222:1fcb::2
+  children:
+    production:
+      hosts:
+        carcosa:
+          ansible_host: carcosa
+          hostname: carcosa
+          domain: drehtuer.net
+          domain_aliases:
+            - drehtuer.de
+          hostname_fqdn: carcosa.drehtuer.net
+          # Not read by any role yet. Kept for documentation and for a
+          # role that needs to bind to this host's actual address rather
+          # than the 0.0.0.0/:: wildcard (e.g. the `dns` role, once it
+          # serves the zone authoritatively - see doc/TODO.adoc).
+          ip_v4: 88.198.12.17
+          ip_v6: 2a01:4f8:222:1fcb::2
+    testlab:
+      # `domain`/`domain_aliases` are shared by both test hosts and
+      # live in group_vars/testlab/identity.yml - only what is genuinely
+      # per-host is repeated below.
+      children:
+        testlab_vm:
+          hosts:
+            yuggoth:
+              # Resolved by the `yuggoth` block in ~/.ssh/config, which
+              # points at the forwarded port on localhost. Ansible runs
+              # `ssh yuggoth`, so that block applies to it too.
+              ansible_host: yuggoth
+              hostname: yuggoth
+              hostname_fqdn: yuggoth.lab.lan
+              # User-mode networking: the guest always sees itself on
+              # QEMU's fixed SLIRP subnet.
+              ip_v4: 10.0.2.15
+              ip_v6: "fd00::15"
+        testlab_metal:
+          hosts:
+            nyarlathotep:
+              ansible_host: nyarlathotep
+              hostname: nyarlathotep
+              hostname_fqdn: nyarlathotep.lab.lan
+              ip_v4: 192.168.89.41
+              # The ULA rather than the dynamic global address, since
+              # that is the stable half of this machine's addressing.
+              ip_v6: "fdc7:fe36:a4a6:0:6e71:d9ff:fe25:be98"

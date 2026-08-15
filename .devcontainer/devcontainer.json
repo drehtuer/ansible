@@ -57,6 +57,17 @@
     }
   },
   "runArgs": [
+    // Hardware virtualization for the deployment-test VM, see
+    // .claude/skills/testlab/. The WSL2 kernel exposes KVM
+    // (/proc/misc lists it) and this host has nested virtualization
+    // enabled, but a container gets no access to the device unless it
+    // is passed through explicitly - creating the node by hand is not
+    // enough, the device cgroup still denies it.
+    //
+    // If the host has no /dev/kvm, the container will not start.
+    // Remove this line in that case; everything except the test VM
+    // works without it.
+    "--device=/dev/kvm",
     "--hostname=dev_host"
   ],
   "mounts": [

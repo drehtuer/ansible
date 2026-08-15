@@ -66,6 +66,20 @@ RUN   \
     # its distro-version gating) is needed.
     docker.io \
     docker-compose-v2 \
+    # The deployment-test VM (.claude/skills/testlab). QEMU runs the
+    # guest right here in the container against /dev/kvm, which
+    # devcontainer.json passes through - the WSL2 kernel exposes KVM
+    # and this host has nested virtualization enabled. No libvirt and
+    # no root: the guest uses user-mode networking with a forwarded
+    # SSH port, so nothing needs a bridge or NET_ADMIN.
+    qemu-system-x86 \
+    qemu-utils \
+    # cloud-localds, which builds the cloud-init seed image that
+    # gives the guest its user, SSH key and hostname on first boot.
+    cloud-image-utils \
+    # Attaches a terminal to the guest's serial console, which is the
+    # way back in when SSH is broken.
+    socat \
     # GitHub CLI apt repo, added below,
     # needs its keyring dir to exist first
     && install -d -m 755 /etc/apt/keyrings \

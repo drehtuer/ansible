@@ -21,6 +21,10 @@ RUFF_BIN = 'ruff'
 MOLECULE_BIN = 'molecule'
 INVENTORY_DIR = 'inventories'
 INVENTORY = f'{INVENTORY_DIR}/machines.yml'
+# Groups in the inventory above. Every playbook is `hosts: all`, so
+# these are what a run is narrowed to.
+GROUP_PRODUCTION = 'production'
+GROUP_TESTLAB = 'testlab'
 # Fake, non-vaulted inventory used by the tests, so they run without
 # the vault password. See doc/TESTING.adoc.
 TEST_INVENTORY = f'{INVENTORY_DIR}/test/machines.yml'
@@ -336,7 +340,7 @@ def ping(
 def run_playbook(
   ctx: context,
   playbook: str,
-  hosts: str = HOSTS_ALL,
+  hosts: str = None,
   remote_user: str = None,
   ask_pass: bool = False,
   ask_become_pass: bool = False,
@@ -345,7 +349,21 @@ def run_playbook(
 ) -> None:
   """
   Run a playbook on machines.
+
+  `--hosts` is required and has no default. Every playbook is
+  `hosts: all`, and the inventory holds both the production server
+  and the disposable test machine, so a defaulted run would deploy
+  to both. Pass a group (`production`, `testlab`) or a host name.
   """
+  if not hosts:
+    raise Exit(
+      '--hosts is required: the inventory holds both '
+      f'`{GROUP_PRODUCTION}` and `{GROUP_TESTLAB}` hosts, and every '
+      'playbook targets `all`. Pass a group or a host name, e.g. '
+      f'--hosts={GROUP_TESTLAB}.',
+      code=1,
+    )
+
   cmd: list[str] = [
     ANSIBLE_PLAYBOOK_BIN,
     playbook,
@@ -459,11 +477,15 @@ def test(
 @task(pre=[clean])
 def check_drift(
   ctx: context,
-  hosts: str = HOSTS_ALL,
+  hosts: str = GROUP_PRODUCTION,
   playbook: str = None,
 ) -> None:
   """
   Report drift on the real hosts, changing nothing.
+
+  Defaults to the `production` group: drift is a question about the
+  server that is supposed to match the repository, whereas the test
+  machine is expected to differ constantly.
 
   Runs the playbooks in `--check --diff` mode, so
   anything reported is a difference between the
