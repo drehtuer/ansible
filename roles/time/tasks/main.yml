@@ -8,6 +8,23 @@
       - util-linux-extra
   notify:
     - Set HW clock
+- name: Create the ntpd statistics directory
+  # ntpd warns at every start that /var/log/ntpsec does not exist. The
+  # path is compiled into ntpsec as the default statsdir, and the
+  # Debian package ships a rotation timer for it but never creates the
+  # directory itself, so on a fresh install it is simply missing.
+  #
+  # Owned by the user ntpd drops to, not root: it writes here itself
+  # once any `statistics` directive is enabled. Nothing here enables
+  # one yet, so this only silences the warning today - which is worth
+  # it, because a daemon that complains on every restart trains you to
+  # ignore what it says.
+  ansible.builtin.file:
+    path: /var/log/ntpsec
+    state: directory
+    owner: ntpsec
+    group: ntpsec
+    mode: "0755"
 - name: Config for ntpd
   ansible.builtin.template:
     src: templates/ntp.conf.j2

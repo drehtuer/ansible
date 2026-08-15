@@ -13,8 +13,14 @@ leapfile /usr/share/zoneinfo/leap-seconds.list
 # upstream server, and those only ever pin the single address the
 # name happened to resolve to at startup - which silently breaks
 # for rotating pool names.
-restrict    default kod nomodify nopeer noquery limited
-restrict -6 default kod nomodify nopeer noquery limited
+#
+# `nopeer` is deliberately absent: ntpsec dropped it, logs "CONFIG:
+# restrict nopeer ignored" once per line at every start, and no
+# longer mobilises the ephemeral peer associations it used to guard
+# against. Leaving it in changed nothing except adding two warnings
+# to every restart.
+restrict    default kod nomodify noquery limited
+restrict -6 default kod nomodify noquery limited
 
 # local connection is allowed
 restrict    127.0.0.1
