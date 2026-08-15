@@ -1,0 +1,82 @@
+{{ ansible_managed | comment }}
+#
+# Authoritative DNS, running alongside unbound rather than instead of
+# it: unbound stays on 127.0.0.1 answering recursive queries for this
+# host, NSD binds the public addresses and answers authoritatively for
+# the zones below. They cannot collide because each names its
+# addresses explicitly.
+#
+# THIS IS NOT AN OPEN RESOLVER, and cannot become one by
+# misconfiguration. NSD is authoritative-only software: it contains no
+# recursion code whatsoever. A query for a name outside the zones
+# below is answered REFUSED, never resolved on the client's behalf.
+# That is the reason to use NSD here rather than BIND, which *can*
+# recurse and merely has to be told not to.
+#
+# The recursive resolver on this host remains bound to loopback and
+# refuses every other source (see roles/dns), so the public addresses
+# below reach NSD only.
+#
+# unbound could not do this job in any case: its `auth-zone` only ever
+# *downloads* a zone ("where to download a copy of the zone from, with
+# AXFR and IXFR"). It has no way to answer a transfer request, so a
+# secondary asking it for AXFR gets nothing.
+
+server:
+  # Public addresses only - loopback belongs to unbound. Listed
+  # explicitly rather than derived from the host's facts: binding an
+  # address the host does not actually have is a hard startup failure,
+  # and not every host has both families.
+  #
+  # Never leave this empty. With no ip-address at all NSD binds every
+  # interface, including loopback, where it would collide with the
+  # resolver.
+{% for addr in nsd.listen %}
+  ip-address: {{ addr }}
+{% endfor %}
+  do-ip4: yes
+  do-ip6: yes
+
+  hide-version: yes
+  identity: ""
+
+  zonesdir: "/etc/nsd/zones"
+  username: nsd
+
+  # Response rate limiting. An authoritative server cannot be used as
+  # an open resolver, but it can still be used as a reflector: an
+  # attacker spoofs a victim's address and this host sends the reply
+  # there. RRL caps how often the same answer goes to the same
+  # network, which is the standard mitigation.
+  rrl-size: {{ nsd.rrl.size }}
+  rrl-ratelimit: {{ nsd.rrl.ratelimit }}
+  rrl-whitelist-ratelimit: {{ nsd.rrl.whitelist_ratelimit }}
+
+remote-control:
+  # Unix socket, not the default TCP port 8952: nsd-control is local
+  # administration and has no business being reachable over a network.
+  control-enable: yes
+  control-interface: /run/nsd/nsd.sock
+
+{% for zone in nsd.zones %}
+zone:
+  name: "{{ zone.name }}"
+  zonefile: "{{ zone.name }}.zone"
+
+  # Hetzner's secondaries pull the zone from here and are told when it
+  # changes. NOTIFY makes them fetch promptly rather than waiting out
+  # the SOA refresh interval; provide-xfr is what permits the transfer
+  # at all, and names exactly those addresses - an unrestricted
+  # provide-xfr hands the entire zone to anyone who asks for it.
+{% for peer in nsd.secondaries %}
+  notify: {{ peer }} NOKEY
+{% endfor %}
+{% for peer in nsd.secondaries %}
+  provide-xfr: {{ peer }} NOKEY
+{% endfor %}
+  # Everyone else, explicitly. NSD already refuses transfers it was
+  # not told to provide, so this is belt and braces - but it makes the
+  # intent unmissable to whoever reads the file next.
+  provide-xfr: 0.0.0.0/0 BLOCKED
+  provide-xfr: ::0/0 BLOCKED
+{% endfor %}

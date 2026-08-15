@@ -26,6 +26,12 @@ firewall:
         comment: "SMTP(s) Submission"
       - port: 993
         comment: "IMAPS"
+      # DNS over TCP, which is not optional for an authoritative
+      # server: AXFR is TCP-only, so without this Hetzner's
+      # secondaries cannot transfer the zone at all, and any answer
+      # too large for UDP is retried over TCP.
+      - port: 53
+        comment: "DNS (TCP - AXFR and large answers)"
     udp:
       - port: 53
         comment: "DNS"

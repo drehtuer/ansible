@@ -74,6 +74,17 @@ Restoring the rules flushes the whole `filter` table, which takes fail2ban's and
 
 Note that `systemd-resolved` is set to `DNSSEC=allow-downgrade`, not `yes`: unbound has already validated every answer before resolved sees it, and validating twice adds nothing while making resolved's weaker implementation a failure source of its own. Queries still reach unbound only - stopping it breaks system resolution rather than falling back to the DHCP-provided server, which was checked rather than assumed.
 
+| `nsd`
+| Authoritative DNS for the zones in `nsd.zones`, alongside the `dns` role's unbound rather than instead of it: NSD binds the public addresses, unbound stays on loopback, and each names its addresses explicitly so they cannot collide.
+
+**This cannot become an open resolver.** NSD is authoritative-only software - it contains no recursion code at all, so a query for a name outside its zones is answered `REFUSED` and the recursion-available flag is never set. That is the reason to use it here rather than BIND, which *can* recurse and merely has to be told not to. Verified on the live host: `REFUSED` for a foreign name on the public address, no `ra` flag, and the resolver unreachable from off-host. Response rate limiting is on as well, since an authoritative server can still be abused as a reflector even though it cannot resolve.
+
+**Hidden primary.** The zone's NS records still point at Hetzner's nameservers, which pull the zone by AXFR; the world queries them, not this host, so an outage here stops updates propagating rather than taking the zone down. `provide-xfr` names exactly Hetzner's six addresses and blocks everything else, and NOTIFY is sent to the same set so they transfer promptly instead of waiting out the SOA refresh. AXFR is TCP-only, which is why the firewall opens TCP/53 as well as UDP/53.
+
+**unbound could not do this job.** Its `auth-zone` only ever *downloads* a zone - "where to download a copy of the zone from, with AXFR and IXFR" - and has no way to answer a transfer request, so a secondary asking it for AXFR gets nothing.
+
+The serial in `nsd.zones[].serial` must be increased by hand whenever records change: secondaries compare serials and keep their old copy if it does not rise. It is an explicit value rather than a timestamp so re-running the role without a content change stays idempotent.
+
 | `database`
 | MariaDB (root user/password vault-encrypted, idempotent via a `/root/.mysql_root_password_set` marker file) and Redis (16 logical DBs), both bound to loopback only and neither reachable from off-host.
 

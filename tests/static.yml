@@ -39,6 +39,9 @@
     http_php_version: "8.3"
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
     ip_version: 4
+    # roles/nsd renders one zone file per entry in nsd.zones, with the
+    # entry passed in as `zone`; supply the first one here.
+    zone: "{{ nsd.zones[0] }}"
     site:
       name: default
       subdomains:

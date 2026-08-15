@@ -1,0 +1,9 @@
+# Authoritative DNS. Runs alongside the `dns` role's unbound, which
+# stays loopback-only - see roles/nsd/templates/nsd.conf.j2 for why
+# this cannot be an open resolver.
+- name: Nsd role
+  hosts: all
+  roles:
+    - role: nsd
+      tags:
+        - nsd

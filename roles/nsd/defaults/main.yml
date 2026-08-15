@@ -1,0 +1,27 @@
+nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  # Addresses to answer on. Public only - the recursive resolver owns
+  # loopback. Empty by default so the role cannot accidentally bind
+  # every interface on a host that has not declared its addresses.
+  listen: []
+  # Addresses permitted to pull the zone by AXFR and sent NOTIFY when
+  # it changes: Hetzner's three secondary nameservers, v4 and v6.
+  # https://docs.hetzner.com/de/networking/dns/overview
+  secondaries:
+    - 213.239.242.238      # ns1.first-ns.de
+    - 2a01:4f8:0:a101::a:1
+    - 213.133.100.103      # robotns2.second-ns.de
+    - 2a01:4f8:0:1::5ddc:2
+    - 193.47.99.3          # robotns3.second-ns.com
+    - 2001:67c:192c::add:a3
+  # Response rate limiting, against reflection abuse. NSD cannot be an
+  # open resolver, but a spoofed source address can still make it send
+  # a reply to a victim; this caps how often the same answer goes to
+  # the same network. The defaults NSD ships are sane and these match
+  # them closely.
+  rrl:
+    size: 1000000
+    ratelimit: 200
+    whitelist_ratelimit: 2000
+  # No zones by default: the role is a no-op until a host declares
+  # what it is authoritative for.
+  zones: []

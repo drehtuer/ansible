@@ -1,0 +1,35 @@
+{# Zone files comment with `;`, not `#`. The default decoration is a
+   syntax error here that nsd-checkzone reports as "unrecognized RR
+   type 'Ansible'" - the same trap the php-fpm pool template hit. #}
+{{ ansible_managed | comment(decoration='; ') }}
+;
+; Zone file for {{ zone.name }}. Generated - edit the inventory, not
+; this file.
+;
+; The serial must increase whenever the contents change, or the
+; secondaries will keep serving their old copy: they compare serials
+; and only transfer when ours is higher. It is an explicit inventory
+; value rather than a timestamp so that re-running the role without a
+; content change is idempotent.
+$ORIGIN {{ zone.name }}.
+$TTL {{ zone.ttl }}
+
+@ IN SOA {{ zone.soa.primary }} {{ zone.soa.contact }} (
+    {{ zone.serial }} ; serial
+    {{ zone.soa.refresh }} ; refresh
+    {{ zone.soa.retry }} ; retry
+    {{ zone.soa.expire }} ; expire
+    {{ zone.soa.minimum }} ; minimum
+    )
+
+; Delegation still points at Hetzner's nameservers: this host is a
+; hidden primary. It holds the authoritative copy and feeds it to
+; them, but the world queries them, not it - so an outage here does
+; not take the zone down.
+{% for ns in zone.nameservers %}
+@ IN NS {{ ns }}
+{% endfor %}
+
+{% for r in zone.records %}
+{{ "%-22s"|format(r.name) }} IN {{ "%-5s"|format(r.type) }} {{ r.value }}
+{% endfor %}

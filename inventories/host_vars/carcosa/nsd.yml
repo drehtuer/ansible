@@ -1,0 +1,92 @@
+# Authoritative zone data for this host, transcribed from what
+# ns1.first-ns.de served on 2026-08-15 before the primary moved here.
+#
+# This host is a *hidden primary*: the NS records still point at
+# Hetzner's nameservers, which pull the zone from here by AXFR. The
+# world queries them, so an outage here does not take the zone down -
+# it only stops updates propagating.
+#
+# Bump `serial` on every change. Secondaries compare serials and will
+# keep serving their old copy if it does not increase.
+nsd:
+  # Overriding the role's top-level dict replaces its defaults, so
+  # every key the role requires is repeated here even where the value
+  # matches the default - see doc/STATUS.adoc.
+  #
+  # Hetzner's secondary nameservers: the only addresses allowed to
+  # transfer this zone, and the ones notified when it changes.
+  # https://docs.hetzner.com/de/networking/dns/overview
+  secondaries:
+    - 213.239.242.238      # ns1.first-ns.de
+    - 2a01:4f8:0:a101::a:1
+    - 213.133.100.103      # robotns2.second-ns.de
+    - 2a01:4f8:0:1::5ddc:2
+    - 193.47.99.3          # robotns3.second-ns.com
+    - 2001:67c:192c::add:a3
+  rrl:
+    size: 1000000
+    ratelimit: 200
+    whitelist_ratelimit: 2000
+  listen:
+    - "{{ ip_v4 }}"
+    - "{{ ip_v6 }}"
+  zones:
+    - name: "{{ domain }}"
+      ttl: 3600
+      serial: 2026081501
+      soa:
+        primary: ns1.first-ns.de.
+        contact: dns.hetzner.com.
+        refresh: 86400
+        retry: 10800
+        expire: 3600000
+        minimum: 3600
+      nameservers:
+        - ns1.first-ns.de.
+        - robotns2.second-ns.de.
+        - robotns3.second-ns.com.
+      records:
+        - {name: "@", type: A, value: "{{ ip_v4 }}"}
+        - {name: "@", type: AAAA, value: "{{ ip_v6 }}"}
+        - {name: "@", type: MX, value: "10 mail.{{ domain }}."}
+        # SPF: only this host may send for the domain, hard fail
+        # otherwise. Keep in step with the addresses above.
+        - {name: "@", type: TXT,
+           value: '"v=spf1 ip4:{{ ip_v4 }} ip6:{{ ip_v6 }} -all"'}
+        # Only Let's Encrypt may issue, and no wildcards at all.
+        - {name: "@", type: CAA, value: '128 issue "letsencrypt.org"'}
+        - {name: "@", type: CAA, value: '128 issuewild ""'}
+        - {name: "@", type: CAA, value: '128 iodef "mailto:root@{{ domain }}"'}
+        # The host itself, and the name every TLS consumer reads out of
+        # /etc/letsencrypt/live/.
+        - {name: "{{ hostname }}", type: A, value: "{{ ip_v4 }}"}
+        - {name: "{{ hostname }}", type: AAAA, value: "{{ ip_v6 }}"}
+        # mail is an A/AAAA rather than a CNAME on purpose: it is the
+        # MX target, and a CNAME there is invalid.
+        - {name: mail, type: A, value: "{{ ip_v4 }}"}
+        - {name: mail, type: AAAA, value: "{{ ip_v6 }}"}
+        # Everything else the http role serves points at the apex.
+        - {name: www, type: CNAME, value: "{{ domain }}."}
+        - {name: cloud, type: CNAME, value: "{{ domain }}."}
+        - {name: spam, type: CNAME, value: "{{ domain }}."}
+        - {name: status, type: CNAME, value: "{{ domain }}."}
+        # DMARC is p=reject with strict alignment, so a message that
+        # fails both SPF and DKIM is discarded rather than quarantined.
+        - name: _dmarc
+          type: TXT
+          value: >-
+            "v=DMARC1; p=reject; rua=mailto:postmaster@{{ domain }};
+            adkim=s; aspf=s"
+        # DKIM. This is the ed25519 key generated before the signing
+        # role switched to RSA; the private half is still on the host,
+        # so the published record and the signer agree. Replacing it
+        # means generating a new key, publishing the new record, and
+        # only then removing the old one.
+        # Two quoted strings, not one: DNS concatenates them, and it
+        # keeps the base64 off an over-long line without folding a
+        # space into the middle of the key, which would break it.
+        - name: mail._domainkey
+          type: TXT
+          value: >-
+            "v=DKIM1; k=ed25519; "
+            "p=9w24peXmzA+r8Z3oodRBfeYChYc/YXx2vyD0Zv5N1x4="
