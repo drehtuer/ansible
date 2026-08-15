@@ -35,14 +35,25 @@ users:
         39323537376337643431346233363265346431383034633137633231396564646531303033633839
         65623964666135376139313034393939326437383939353931393562656130633963643838613966
         35383439356361623362663264396333316237653137633734643634636132313966
+  # ONE entry per user, carrying every key that user may log in with.
+  #
+  # The role loops `ansible.posix.authorized_key` over this list with
+  # exclusive: true, so a second entry for the same user does not add
+  # a key - it rewrites the file with only its own. Two entries left
+  # the account reachable by the last key alone and reported `changed`
+  # on every single run. On nyarlathotep, which has no console, that
+  # would have removed the very key used to reach it.
+  #
+  # The blank line inside the folded scalar is what separates the two
+  # keys with a real newline; the line breaks within a key are folded
+  # back into spaces, which is how they stay under the 80-column lint.
   authorized_keys:
     - name: drehtuer
       public_key: >-
         ssh-ed25519
         AAAAC3NzaC1lZDI1NTE5AAAAIPFoXmWpgxvGobz2e5YViQLs8yeck1MBC2CmNZTP42HN
         drehtuer@nyarlathotep-testlab
-    - name: drehtuer
-      public_key: >-
+
         ssh-ed25519
         AAAAC3NzaC1lZDI1NTE5AAAAIHfn6QcevGraqtuW1nyA1WOKMXXEKWyn3ElWdE8AlsKN
         drehtuer@yuggoth-testlab-vm

@@ -17,14 +17,12 @@ TARGET="${LAB_TARGET:-vm}"
 case "$TARGET" in
   vm)
     HOST=yuggoth
-    GROUP=testlab_vm
     # Loopback, via the port forward in ~/.ssh/config.
     IP=127.0.0.1
     KEY="${HOME}/.ssh/yuggoth"
     ;;
   metal)
     HOST=nyarlathotep
-    GROUP=testlab_metal
     IP=192.168.89.41
     KEY="${HOME}/.ssh/nyarlathotep"
     ;;
@@ -288,7 +286,9 @@ cmd_deploy() {
   local failed=()
   for book in "${books[@]}"; do
     say "playbook: ${book}"
-    if invoke run-playbook --hosts="$GROUP" \
+    # --hosts is the HOST, not its group: testlab_vm holds more than
+    # one guest now, and targeting the group deployed to all of them.
+    if invoke run-playbook --hosts="$HOST" \
         --playbook="playbooks/${book}.yml"; then
       ok "${book}"
     else
