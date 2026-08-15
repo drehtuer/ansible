@@ -74,6 +74,10 @@ Restoring the rules flushes the whole `filter` table, which takes fail2ban's and
 
 Note that `systemd-resolved` is set to `DNSSEC=allow-downgrade`, not `yes`: unbound has already validated every answer before resolved sees it, and validating twice adds nothing while making resolved's weaker implementation a failure source of its own. Queries still reach unbound only - stopping it breaks system resolution rather than falling back to the DHCP-provided server, which was checked rather than assumed.
 
+
+`unbound-resolvconf.service` is masked. The package ships it to point the system's `resolv.conf` at unbound through resolvconf, and it cannot work on this host: it attaches a DNS server to the link `lo`, which systemd-resolved refuses outright ("Link lo is loopback device"). The wiring it exists to do is done by the role's `resolved.conf` instead, which points systemd-resolved at `127.0.0.1`. Masked rather than disabled, since it is `WantedBy` unbound.service and a package upgrade re-enabling it would quietly bring the failure back; a masked `Wants` is skipped without failing the parent. The failure systemd had already recorded needs clearing separately - masking a unit leaves it listed as masked *and* failed - which the role does, guarded so a converged host reports no change.
+
+This mattered out of proportion to the symptom: it was the only failed unit on the host, so `systemctl list-units --state=failed` - the cheapest health check available - never read clean, and any real failure would have had to be spotted among the noise.
 | `nsd`
 | Authoritative DNS for the zones in `nsd.zones`, alongside the `dns` role's unbound rather than instead of it: NSD binds the public addresses, unbound stays on loopback, and each names its addresses explicitly so they cannot collide.
 
