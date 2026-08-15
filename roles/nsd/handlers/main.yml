@@ -1,0 +1,10 @@
+- name: Reload nsd
+  ansible.builtin.systemd_service:
+    name: nsd
+    state: reloaded
+    enabled: true
+- name: Restart nsd
+  ansible.builtin.systemd_service:
+    name: nsd
+    state: restarted
+    enabled: true

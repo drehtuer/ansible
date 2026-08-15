@@ -1,0 +1,120 @@
+argument_specs:
+  main:
+    short_description: Authoritative DNS with NSD
+    description:
+      - Serves the declared zones authoritatively on this host's public
+        addresses and offers AXFR to the configured secondaries only.
+        Runs alongside the unbound resolver from the `dns` role, which
+        stays bound to loopback.
+      - NSD is authoritative-only and cannot recurse, so this cannot
+        become an open resolver.
+    options:
+      nsd:
+        type: dict
+        required: true
+        description: Authoritative DNS settings.
+        options:
+          listen:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Addresses NSD answers on. Public only; loopback belongs
+                to the unbound resolver. Must not be empty, or NSD
+                binds every interface.
+          secondaries:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Addresses allowed to AXFR the zones and notified on
+                change. Everything else is refused.
+          rrl:
+            type: dict
+            required: true
+            description: Response rate limiting.
+            options:
+              size:
+                type: int
+                required: true
+                description: Size of the rate limit table.
+              ratelimit:
+                type: int
+                required: true
+                description: Responses per second per bucket.
+              whitelist_ratelimit:
+                type: int
+                required: true
+                description: Rate limit for whitelisted sources.
+          zones:
+            type: list
+            elements: dict
+            required: true
+            description: Zones served authoritatively.
+            options:
+              name:
+                type: str
+                required: true
+                description: Zone name, without a trailing dot.
+              ttl:
+                type: int
+                required: true
+                description: Default TTL.
+              serial:
+                type: int
+                required: true
+                description:
+                  - Zone serial. Must be increased whenever the records
+                    change, or secondaries keep their old copy.
+              soa:
+                type: dict
+                required: true
+                description: SOA fields.
+                options:
+                  primary:
+                    type: str
+                    required: true
+                    description: SOA MNAME, with trailing dot.
+                  contact:
+                    type: str
+                    required: true
+                    description: SOA RNAME, with trailing dot.
+                  refresh:
+                    type: int
+                    required: true
+                    description: Refresh interval.
+                  retry:
+                    type: int
+                    required: true
+                    description: Retry interval.
+                  expire:
+                    type: int
+                    required: true
+                    description: Expiry.
+                  minimum:
+                    type: int
+                    required: true
+                    description: Negative caching TTL.
+              nameservers:
+                type: list
+                elements: str
+                required: true
+                description: NS records, with trailing dots.
+              records:
+                type: list
+                elements: dict
+                required: true
+                description: The zone's resource records.
+                options:
+                  name:
+                    type: str
+                    required: true
+                    description: Owner name, or @ for the apex.
+                  type:
+                    type: str
+                    required: true
+                    description: Record type.
+                  value:
+                    type: str
+                    required: true
+                    description: Record data.

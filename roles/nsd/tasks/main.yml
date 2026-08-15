@@ -1,0 +1,61 @@
+- name: Install nsd
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - nsd
+  notify:
+    - Restart nsd
+- name: Create zone directory
+  ansible.builtin.file:
+    path: /etc/nsd/zones
+    state: directory
+    owner: root
+    group: nsd
+    mode: "0750"
+- name: Zone files
+  ansible.builtin.template:
+    src: templates/zone.j2
+    dest: "/etc/nsd/zones/{{ item.name }}.zone"
+    owner: root
+    group: nsd
+    mode: "0640"
+  loop: "{{ nsd.zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    zone: "{{ item }}"
+  notify:
+    - Reload nsd
+- name: Configure nsd
+  ansible.builtin.template:
+    src: templates/nsd.conf.j2
+    dest: /etc/nsd/nsd.conf
+    owner: root
+    group: nsd
+    mode: "0640"
+  notify:
+    - Restart nsd
+- name: Validate nsd configuration
+  # Same stance as `nginx -t` and `php-fpm -t` elsewhere: a template
+  # has no validator of its own, and a reload of a broken config
+  # leaves the old one running, so the run would go green with the
+  # change not actually applied.
+  ansible.builtin.command:
+    cmd: nsd-checkconf /etc/nsd/nsd.conf
+  changed_when: false
+- name: Validate zone files
+  # nsd-checkzone catches the mistakes that matter here - a serial
+  # that did not increase is not one of them, but a syntax error or a
+  # missing SOA is, and either would take the zone down at the
+  # secondaries once they transferred it.
+  ansible.builtin.command:
+    cmd: "nsd-checkzone {{ item.name }} /etc/nsd/zones/{{ item.name }}.zone"
+  changed_when: false
+  loop: "{{ nsd.zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+- name: Systemd enable nsd
+  ansible.builtin.systemd_service:
+    name: nsd
+    state: started
+    enabled: true
