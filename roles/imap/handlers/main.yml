@@ -9,15 +9,3 @@
     name: dovecot
     state: reloaded
     enabled: true
-- name: Compile sieve scripts (ham)
-  ansible.builtin.command:
-    cmd: sievec /etc/dovecot/sieve/learn-ham.sieve
-  changed_when: true
-  notify:
-    - Reload dovecot
-- name: Compile sieve scripts (spam)
-  ansible.builtin.command:
-    cmd: sievec /etc/dovecot/sieve/learn-spam.sieve
-  changed_when: true
-  notify:
-    - Reload dovecot

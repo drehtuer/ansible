@@ -10,13 +10,18 @@
   one in Postfix's virtual_mailbox_domains, so it is where the
   mailboxes actually live.
 
-  Postfix looks up the full address before falling back to the
-  @domain catch-all, so the order of the two blocks does not matter.
+  There is deliberately no `@domain` catch-all. It collected nothing
+  but spam, and because Postfix expands virtual aliases recursively it
+  also swallowed every address that reached it by way of another
+  alias - so real mail ended up at the catch-all target instead of the
+  mailbox it was aliased to. Without it, an address with no entry
+  falls through to virtual_mailbox_domains and is delivered to the
+  matching system account, which is what was wanted all along.
+
+  The alias domains stay accepted because they still appear on the
+  left of this map through the per-alias entries below, and Postfix
+  derives virtual_alias_domains from virtual_alias_maps.
 #}
-# Catch-all for hosts
-{% for d in [domain] + domain_aliases %}
-@{{ d }} user
-{% endfor %}
 # Virtual aliases for Postfix
 {% for d in [domain] + domain_aliases %}
 {% for entry in mail.aliases %}

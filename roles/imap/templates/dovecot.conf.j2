@@ -49,6 +49,14 @@ protocol lmtp {
   mail_plugins = $mail_plugins sieve
 }
 
+# imap_sieve is what makes the imapsieve_mailbox* rules below do
+# anything at all. Without it dovecot loads the settings, reports no
+# error, and simply never fires the training scripts - moving a
+# message into TrainSpam succeeds and teaches RSpamd nothing.
+protocol imap {
+  mail_plugins = $mail_plugins imap_sieve
+}
+
 service auth {
   unix_listener /var/spool/postfix/private/auth {
     mode = 0660
@@ -83,6 +91,16 @@ namespace inbox {
   }
   mailbox Spam {
     special_use = \Junk
+    # Created on first spam by the delivery sieve's `fileinto :create`,
+    # but declared here so it exists and is subscribed from the start.
+    auto = subscribe
+  }
+  # Training folder, deliberately separate from Spam. Moving a message
+  # *into* it trains that message as spam; moving one *out* trains it
+  # as ham. Keeping it apart from Spam means the automatic filing of
+  # spam is not itself taken as a training signal.
+  mailbox TrainSpam {
+    auto = subscribe
   }
   mailbox Trash {
     special_use = \Trash
@@ -91,18 +109,26 @@ namespace inbox {
 
 # Sieve
 plugin {
-  sieve_plugins = sieve_extprograms
+  # sieve_imapsieve as well as sieve_extprograms: the learn-ham and
+  # learn-spam scripts open with `require ["imapsieve"]`, and that
+  # capability only exists once this plugin is loaded. Without it
+  # `sievec` refuses to compile them - "unknown Sieve capability
+  # `imapsieve'" - and the role fails in its compile handler.
+  # Runs before any per-user script, on every delivery, which is how
+  # spam gets filed without each account needing its own sieve.
+  sieve_before = /etc/dovecot/sieve/spam-to-folder.sieve
+  sieve_plugins = sieve_imapsieve sieve_extprograms
   sieve_extensions = +vnd.dovecot.pipe
   sieve_pipe_bin_dir = /etc/dovecot/sieve-pipe
 }
 
 plugin {
-  imapsieve_mailbox1_name = Spam
+  imapsieve_mailbox1_name = TrainSpam
   imapsieve_mailbox1_causes = COPY
   imapsieve_mailbox1_before = file:/etc/dovecot/sieve/learn-spam.sieve
   
   imapsieve_mailbox2_name = *
-  imapsieve_mailbox2_from = Spam
+  imapsieve_mailbox2_from = TrainSpam
   imapsieve_mailbox2_causes = COPY
   imapsieve_mailbox2_before = file:/etc/dovecot/sieve/learn-ham.sieve
 }

@@ -1,4 +1,18 @@
+{# This file REPLACES the packaged redis.conf, so anything the
+   distribution set there and is not repeated here is lost. #}
 supervised systemd
+# Without `dir`, Redis inherits the service's working directory - "/" -
+# and cannot write its RDB snapshot there. Because
+# stop-writes-on-bgsave-error defaults to yes, the first failed save
+# makes Redis reject *every* write from then on:
+#
+#   MISCONF Redis is configured to save RDB snapshots, but it is
+#   currently unable to persist to disk.
+#
+# That silently breaks anything that writes to it - RSpamd's Bayes
+# learning stops recording, and Nextcloud's Redis file locking starts
+# erroring - while Redis itself still answers PING and looks healthy.
+dir /var/lib/redis
 bind {{ database.redis.ip4 }} {{ database.redis.ip6 }}
 port {{ database.redis.port }}
 databases {{ database.redis.databases }}
