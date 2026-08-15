@@ -68,7 +68,23 @@
     mode: '0644'
   notify:
     - Reload dovecot
+- name: Configure dovecot
+  ansible.builtin.template:
+    src: templates/dovecot.conf.j2
+    dest: /etc/dovecot/dovecot.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload dovecot
 - name: Compile sieve scripts
+  # Ordered after `Configure dovecot`, not before it: sievec reads
+  # dovecot.conf to learn which sieve plugins exist, and the learn
+  # scripts open with `require ["imapsieve"]`. Compiling first meant
+  # a host whose dovecot.conf predated sieve_imapsieve could never
+  # converge: the compile failed, and the task that would have fixed
+  # the config ran afterwards.
+  #
   # A task rather than a handler, and unconditional. As handlers these
   # only ran when the script file itself changed, so a first compile
   # that failed - or any change made elsewhere, such as loading the
@@ -86,13 +102,3 @@
     - learn-ham
     - learn-spam
     - spam-to-folder
-
-- name: Configure dovecot
-  ansible.builtin.template:
-    src: templates/dovecot.conf.j2
-    dest: /etc/dovecot/dovecot.conf
-    owner: root
-    group: root
-    mode: '0644'
-  notify:
-    - Reload dovecot
