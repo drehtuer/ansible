@@ -28,6 +28,16 @@
     mode: "0644"
   notify:
     - Reload rspamd
+- name: Bulk training script
+  # For seeding the Bayes classifier from a collection of messages
+  # exported from somewhere else. Not run by the role - it is a tool
+  # the administrator invokes with a corpus.
+  ansible.builtin.template:
+    src: templates/rspamd/train-bulk.sh.j2
+    dest: /usr/local/bin/rspamd-train-bulk
+    owner: root
+    group: root
+    mode: "0755"
 - name: Configure rspamd (actions.conf)
   ansible.builtin.copy:
     src: files/rspamd/actions.conf

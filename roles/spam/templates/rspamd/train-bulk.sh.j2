@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Bulk-train RSpamd from a collection of exported messages, for the
+# initial seeding of the Bayes classifier from mail that already
+# exists elsewhere.
+#
+#   rspamd-train-bulk spam /srv/import/spam
+#   rspamd-train-bulk ham  /srv/import/archive.mbox /srv/import/inbox/
+#
+# Takes any mix of:
+#   - a directory, searched recursively (Maildir cur/new, or loose
+#     .eml files - anything that is one message per file)
+#   - an mbox file, split into its individual messages first
+#   - a single message file
+#
+# Learning is not idempotent in the useful sense: teaching the same
+# message twice is refused by RSpamd rather than counted twice, so a
+# re-run over the same corpus is safe but reports those as skipped.
+
+set -euo pipefail
+
+CONTROLLER="127.0.0.1:{{ spam.http_port }}"
+# RSpamd refuses anything with too few tokens to be worth learning
+# ("contains less tokens than required for bayes classifier"). Tiny
+# notification mails are common in an export and would otherwise fill
+# the output with noise.
+MIN_BYTES=256
+# rspamc takes many files per invocation; batching keeps it to a few
+# controller round trips instead of one per message.
+BATCH=50
+
+usage() {
+  cat <<'USAGE'
+rspamd-train-bulk <spam|ham> <path>... [--dry-run]
+
+  spam|ham   which class to teach the messages as
+  path       message file, Maildir/directory (searched recursively),
+             or mbox file
+  --dry-run  count what would be learned, contact nothing
+
+Exit status is non-zero if nothing at all could be learned, which is
+almost always a broken controller or a Redis that is refusing writes -
+check `rspamc stat` and `redis-cli set probe ok` before the corpus.
+USAGE
+}
+
+CLASS_NAME="${1:-}"
+case "$CLASS_NAME" in
+  spam) CLASS=learn_spam ;;
+  ham)  CLASS=learn_ham ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+shift
+[[ $# -gt 0 ]] || { usage >&2; exit 2; }
+
+DRY_RUN=0
+PATHS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--dry-run" ]]; then DRY_RUN=1; else PATHS+=("$arg"); fi
+done
+# Array-length expansion is avoided throughout this file: the brace
+# followed by a hash that bash uses for it also opens a Jinja comment,
+# which breaks the template rather than the script.
+[[ -n "${PATHS[*]}" ]] || { usage >&2; exit 2; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# An mbox holds many messages in one file; each starts at a line
+# beginning "From " in the first column. Split it so rspamc sees one
+# message per file, the same as every other input.
+split_mbox() {
+  local src="$1" out
+  out="$(mktemp -d "${WORK}/mbox.XXXXXX")"
+  awk -v dir="$out" '
+    /^From / { n++; f = sprintf("%s/%06d.eml", dir, n) }
+    n { print > f }
+  ' "$src"
+  find "$out" -type f
+}
+
+is_mbox() { [[ "$(head -c 5 "$1" 2>/dev/null)" == "From " ]]; }
+
+LIST="${WORK}/messages.txt"
+: > "$LIST"
+for p in "${PATHS[@]}"; do
+  if [[ -d "$p" ]]; then
+    # Dovecot index/cache files live alongside the messages in a
+    # Maildir and are not mail.
+    find "$p" -type f \
+      ! -name 'dovecot*' ! -name 'maildirfolder' ! -name '.*' >> "$LIST"
+  elif [[ -f "$p" ]]; then
+    if is_mbox "$p"; then split_mbox "$p" >> "$LIST"
+    else echo "$p" >> "$LIST"
+    fi
+  else
+    echo "skipping ${p}: not a file or directory" >&2
+  fi
+done
+
+# The size floor is applied here rather than in the directory search
+# above, so that it holds for every input shape - a message split out
+# of an mbox is filtered on the same rule as one found in a Maildir.
+KEPT="${WORK}/kept.txt"
+: > "$KEPT"
+TOO_SMALL=0
+while IFS= read -r f; do
+  if [[ "$(stat -c %s "$f" 2>/dev/null || echo 0)" -ge "$MIN_BYTES" ]]; then
+    echo "$f" >> "$KEPT"
+  else
+    TOO_SMALL=$((TOO_SMALL + 1))
+  fi
+done < "$LIST"
+mv "$KEPT" "$LIST"
+
+TOTAL=$(wc -l < "$LIST")
+echo "found ${TOTAL} message(s) to learn as ${CLASS_NAME} (${TOO_SMALL} below ${MIN_BYTES} bytes, skipped)"
+[[ "$TOTAL" -gt 0 ]] || { echo "nothing to do" >&2; exit 1; }
+if [[ "$DRY_RUN" -eq 1 ]]; then echo "dry run, stopping here"; exit 0; fi
+
+LEARNED=0 SKIPPED=0 FAILED=0
+# Read N paths at a time so rspamc makes a few controller round trips
+# instead of one per message.
+while mapfile -t -n "$BATCH" batch && [[ -n "${batch[*]}" ]]; do
+  out="$(rspamc -h "$CONTROLLER" "$CLASS" "${batch[@]}" 2>&1 || true)"
+  # Classify each result once and in this order. RSpamd reports an
+  # already-learned message as an error, so counting "error" first
+  # would report a harmless re-run over the same corpus as a failure
+  # - and then exit non-zero on it.
+  learned=$(grep -c "success = true" <<<"$out" || true)
+  benign=$(grep -ci "already learned\|less tokens" <<<"$out" || true)
+  errors=$(grep -ci "^error\|cannot\|HTTP error" <<<"$out" || true)
+  LEARNED=$((LEARNED + learned))
+  SKIPPED=$((SKIPPED + benign))
+  FAILED=$((FAILED + errors - benign > 0 ? errors - benign : 0))
+done < "$LIST"
+
+echo "learned ${LEARNED}, skipped ${SKIPPED}, failed ${FAILED}"
+rspamc -h "$CONTROLLER" stat 2>/dev/null | grep -E "Messages learned|BAYES_(SPAM|HAM)" || true
+
+# Nothing learned *and* nothing recognised as already known means the
+# corpus never reached the classifier at all - almost always a broken
+# controller or a Redis refusing writes. A re-run that only skips is a
+# success.
+if [[ "$LEARNED" -eq 0 && "$SKIPPED" -eq 0 ]]; then
+  echo "nothing reached the classifier - check 'rspamc stat' and that Redis accepts writes" >&2
+  exit 1
+fi
