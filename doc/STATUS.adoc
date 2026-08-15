@@ -70,6 +70,10 @@ Restoring the rules flushes the whole `filter` table, which takes fail2ban's and
 | `dns`
 | Installs `unbound` + `unbound-anchor` as a **local, loopback-only DNS-cache/validating resolver** (`interface 127.0.0.1`/`::1`, all other sources refused) and configures `systemd-resolved`. Not yet configured to serve the `drehtuer.net`/`drehtuer.de` zone authoritatively (no zone data, no public listener) — this is planned but not started. The firewall's UDP/53 rule is already in place ahead of this work so it's ready to go once `unbound` is configured to listen publicly. See `doc/TODO.adoc`.
 
+**Cache and statistics.** `prefetch`/`prefetch-key` renew popular entries shortly before they expire rather than making the next client wait for the recursion, and the message/rrset caches are raised from the 4 MB defaults. Runtime statistics are available through `unbound-control stats`, which is deliberately bound to a *unix socket* (`/run/unbound.ctl`, `root:unbound`) rather than the default TCP port 8953: a socket opens no network port at all, so there is nothing for an external address to reach even if the access-control rules were later loosened, and it removes the need for the control certificates `unbound-control-setup` would otherwise generate. Verified on a live host - `ss`, `lsof` and a direct connection attempt all agree that unbound owns only `127.0.0.1:53` and `[::1]:53`.
+
+Note that `systemd-resolved` is set to `DNSSEC=allow-downgrade`, not `yes`: unbound has already validated every answer before resolved sees it, and validating twice adds nothing while making resolved's weaker implementation a failure source of its own. Queries still reach unbound only - stopping it breaks system resolution rather than falling back to the DHCP-provided server, which was checked rather than assumed.
+
 | `database`
 | MariaDB (root user/password vault-encrypted, idempotent via a `/root/.mysql_root_password_set` marker file) and Redis (loopback-only, 16 logical DBs), both bound to `127.0.0.1`/`::1` only.
 
