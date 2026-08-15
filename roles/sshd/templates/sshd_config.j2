@@ -31,14 +31,14 @@ PermitEmptyPasswords no
 
 UsePAM yes
 
-# Only members of this group may log in at all. The account Ansible
-# connects as is a member (the users role puts it in `sudo`, which is
-# also what grants it NOPASSWD escalation), so this is not a lockout
-# risk for deploys - but it does mean a new account needs that group
-# membership before it can reach the host.
-AllowGroups {{ sshd.allow_group }}
+# There is deliberately no AllowGroups: any account with a valid shell
+# may log in. Password and keyboard-interactive authentication are off
+# above, so login is public key only and there is no password to
+# guess - a group restriction would add little beyond another way to
+# lock an account out of its own host.
 
-# Slow down guessing and stop half-open sessions holding slots.
+# Stop half-open sessions holding connection slots, and cap how many
+# keys one connection may offer.
 MaxAuthTries 3
 LoginGraceTime 30
 

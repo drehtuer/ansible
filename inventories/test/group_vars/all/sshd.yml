@@ -1,5 +1,4 @@
 sshd:
-  allow_group: sudo
   host_keys:
     - ed25519
     - rsa
