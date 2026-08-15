@@ -11,6 +11,27 @@ extends: default
 ignore-from-file: .gitignore
 
 rules:
+  # The three settings ansible-lint insists on. It reads this file
+  # instead of its own defaults, so a disagreement makes it warn on
+  # every run and disable its `--fix` transforms entirely.
+  #
+  # All three are *relaxations* of the yamllint defaults (2 spaces
+  # before an inline comment, comment indentation checked, no spaces
+  # inside braces), so nothing that passes today starts failing.
+  #
+  # NOTE: making `ansible-lint --fix` available is not the same as
+  # making it safe to run here. Its transforms rewrite YAML in its own
+  # house style - `---` document starts on every file, reflowed
+  # comments and description blocks, different quoting - which
+  # contradicts the deliberate choices below and would touch ~130
+  # files. Use `invoke lint` to check; do not use `invoke lint --fix`
+  # on the YAML unless that whole-repo reformat is actually wanted.
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    max-spaces-inside: 1
+
   # This repo does not prefix its YAML files with `---`.
   document-start: disable
 
