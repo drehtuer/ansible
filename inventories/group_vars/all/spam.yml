@@ -3,5 +3,8 @@
 # playbooks/imap.yml too - each playbook runs a single role, and role
 # defaults are only in scope for the play that actually runs that role.
 spam:
+  dkim:
+    selector: mail
+    bits: 2048
   milter_port: 11332
   http_port: 11334

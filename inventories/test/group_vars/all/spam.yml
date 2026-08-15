@@ -1,3 +1,6 @@
 spam:
+  dkim:
+    selector: mail
+    bits: 2048
   milter_port: 11332
   http_port: 11334

@@ -28,6 +28,21 @@ argument_specs:
         required: true
         description: Spam filtering settings.
         options:
+          dkim:
+            type: dict
+            required: true
+            description: Outbound DKIM signing.
+            options:
+              selector:
+                type: str
+                required: true
+                description:
+                  - Selector name, which becomes
+                    <selector>._domainkey.<domain> in DNS.
+              bits:
+                type: int
+                required: true
+                description: RSA key size.
           milter_port:
             type: int
             required: true
