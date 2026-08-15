@@ -4,5 +4,11 @@
   hosts: all
   vars:
     hostname_fqdn: moleculetest.test.invalid
+    hostname: moleculetest
+    # Loopback, so both host lines in /etc/hosts are actually rendered:
+    # the template only writes an address the host really holds, and a
+    # container holds no others worth naming.
+    ip_v4: 127.0.0.1
+    ip_v6: "::1"
   roles:
     - system

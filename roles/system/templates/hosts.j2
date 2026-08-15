@@ -1,0 +1,41 @@
+{{ ansible_managed | comment }}
+#
+# The name resolution the host uses for itself, before DNS is
+# consulted. Anything that asks what this machine is called - and
+# anything resolving its own address back to a name - answers from
+# here, so a stale entry misnames the host locally no matter how
+# correct DNS is.
+#
+# The images these hosts are installed from ship their own name here
+# (Hetzner's leaves "Ubuntu-2404-noble-amd64-base" mapped to the public
+# addresses), which survives every later rename because nothing else
+# rewrites this file.
+#
+# The fully qualified name comes first on each line: `hostname -f` and
+# most software that wants an FQDN take the first name after the
+# address, and getting the order wrong leaves them with the short name.
+
+127.0.0.1	localhost.localdomain localhost
+{% if ip_v4 in ansible_all_ipv4_addresses %}
+{{ ip_v4 }}	{{ hostname_fqdn }} {{ hostname }}
+{% endif %}
+
+::1	ip6-localhost ip6-loopback
+{% if ip_v6 in ansible_all_ipv6_addresses %}
+{{ ip_v6 }}	{{ hostname_fqdn }} {{ hostname }}
+{% endif %}
+fe00::0	ip6-localnet
+ff00::0	ip6-mcastprefix
+ff02::1	ip6-allnodes
+ff02::2	ip6-allrouters
+ff02::3	ip6-allhosts
+{#
+   Each host line is written only when the host actually holds that
+   address, rather than on the inventory's word alone. The lab guests
+   declare an ip_v6 they do not have - it is there for the roles that
+   need a value - and mapping this machine's own name to an address it
+   cannot reach makes every local connection to itself try that
+   address first and wait for it to fail before falling back. The
+   inventory says what the address should be; the facts say what it
+   is, and only the second one belongs in a resolution table.
+#}

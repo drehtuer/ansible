@@ -34,6 +34,9 @@ provisioner:
     # it; the real playbooks never pass --skip-tags, so it still
     # fires normally on a real host. Unlike a handler (see the time
     # role), --skip-tags does reliably skip a regular tagged task.
-    skip-tags: hostname
+    # /etc/hosts is bind-mounted into the container by Docker, so the
+    # template module's final rename onto it fails the same way
+    # ("Device or resource busy"). Skipped here for that reason only.
+    skip-tags: hostname,hosts
 verifier:
   name: ansible

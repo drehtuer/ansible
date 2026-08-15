@@ -12,6 +12,25 @@
     name: "{{ hostname_fqdn }}"
   tags:
     - hostname
+- name: Configure hosts file
+  # No handler: nothing needs restarting, and the next lookup on the
+  # host reads the file directly.
+  #
+  # Tagged so molecule can skip it, for the same reason as the
+  # hostname task above: Docker bind-mounts /etc/hosts into the
+  # container, so the atomic rename this module ends with fails on it
+  # with "Device or resource busy". `unsafe_writes` would get past
+  # that by writing in place, but it would apply on the real hosts
+  # too, where a write interrupted partway would leave a truncated
+  # resolution table behind. See roles/system/molecule/default.
+  ansible.builtin.template:
+    src: templates/hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - hosts
 - name: Generate locales
   # Edits /etc/locale.gen and runs locale-gen, but only for locales
   # that are not built yet - unlike the previous template plus

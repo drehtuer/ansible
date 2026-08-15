@@ -93,6 +93,15 @@ TSIG is *not* DNSSEC and neither substitutes for the other. TSIG authenticates t
 
 The serial in `nsd.zones[].serial` must be increased by hand whenever records change: secondaries compare serials and keep their old copy if it does not rise. It is an explicit value rather than a timestamp so re-running the role without a content change stays idempotent.
 
+| `system`
+| Hostname, `/etc/hosts` and locales.
+
+The hosts file is what the machine uses to answer questions about itself before DNS is consulted, so a stale entry misnames it locally however correct DNS is. Hetzner's install image leaves `Ubuntu-2404-noble-amd64-base` mapped to both public addresses, and nothing else rewrites the file, so it survived every later rename - `getent hosts 88.198.12.17` returned the image name until this role took the file over. It was also the reason an audit of what the DNS published briefly looked like an OS leak: the host's default resolver is systemd-resolved, which synthesises PTR answers out of `/etc/hosts`, so a local lookup disagreed with what the public nameservers actually served.
+
+Each address is written only when the host really holds it, checked against `ansible_all_ipv4_addresses`/`ansible_all_ipv6_addresses` - which is why `playbooks/system.yml` gathers facts. The lab guests declare an `ip_v6` they do not have (it exists for the roles that need a value), and naming a machine by an address it cannot reach makes every local connection to itself try that address and wait for it to fail first. The inventory says what an address should be; the facts say what it is, and only the second belongs in a resolution table.
+
+The fully qualified name comes first on each line, because `hostname -f` and most software wanting an FQDN take the first name after the address.
+
 | `database`
 | MariaDB (root user/password vault-encrypted, idempotent via a `/root/.mysql_root_password_set` marker file) and Redis (16 logical DBs), both bound to loopback only and neither reachable from off-host.
 
