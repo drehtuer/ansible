@@ -1,0 +1,48 @@
+# Accounts on the deployment-test machines.
+#
+# This file is load-bearing for access: the users role manages
+# `authorized_keys` authoritatively (authorized_keys_exclusive), so
+# the keys below are the only ones that remain on a host after a run.
+# They are the dedicated keys created for the test machines
+# (~/.ssh/nyarlathotep and ~/.ssh/yuggoth), referenced by the matching
+# entries in ~/.ssh/config. Both are listed for both hosts, which is
+# harmless and means one file covers every test host. Remove a key
+# here without removing the host and the next deploy locks that host
+# out - which is unrecoverable on the metal one, since it has no
+# console.
+#
+# The password hash is only there so the physical console remains a
+# way back in; SSH password authentication is denied by the sshd role.
+users:
+  sudo_nopasswd: true
+  authorized_keys_exclusive: true
+  users:
+    - name: drehtuer
+      group: drehtuer
+      shell: /usr/bin/bash
+      # `docker` so the docker role's client works without sudo,
+      # `sudo` because Ansible logs in unprivileged and escalates.
+      groups: "sudo,adm,docker"
+      create_home: true
+      password: !vault |
+        $ANSIBLE_VAULT;1.1;AES256
+        30373330643434626635353962393438633934313337356630303034393536626537613066343665
+        3362313633396531333130363265623465383165306338340a666233323535333530626638356461
+        30316438356461336236306538353534396137363636626130303363643463356264623537346666
+        3532303432633964640a346464626635643439353536643434336434616461653533383762343434
+        39643861333731303365353730356532633363653465363537656166643665623565333136353639
+        38343434323161363566393035343231316638636339333362636233393566333336396233666566
+        39323537376337643431346233363265346431383034633137633231396564646531303033633839
+        65623964666135376139313034393939326437383939353931393562656130633963643838613966
+        35383439356361623362663264396333316237653137633734643634636132313966
+  authorized_keys:
+    - name: drehtuer
+      public_key: >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAIPFoXmWpgxvGobz2e5YViQLs8yeck1MBC2CmNZTP42HN
+        drehtuer@nyarlathotep-testlab
+    - name: drehtuer
+      public_key: >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAIHfn6QcevGraqtuW1nyA1WOKMXXEKWyn3ElWdE8AlsKN
+        drehtuer@yuggoth-testlab-vm

@@ -1,0 +1,23 @@
+# Mail aliases for the deployment-test machine.
+#
+# All local, no personal addresses, so nothing here needs vaulting -
+# unlike the production file, where the forward targets are the whole
+# reason it carries inline vault blocks.
+#
+# The alias role generates each of these for `domain` *and* every
+# entry in `domain_aliases`, so a deploy here also exercises the
+# multi-domain valiases path.
+mail:
+  aliases:
+    - alias: postmaster
+      forwards:
+        - root
+    - alias: www-data
+      forwards:
+        - root
+    - alias: root
+      forwards:
+        - drehtuer
+  ssl:
+    cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
+    key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem

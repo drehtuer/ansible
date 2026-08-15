@@ -1,0 +1,11 @@
+# Connection identity for the deployment-test machine.
+#
+# Not vault-encrypted, unlike the production equivalent: this account
+# name is fixed by the machine's own installation and is documented in
+# the skill anyway, so hiding it here would obscure the file without
+# protecting anything. The credential that matters is the SSH key,
+# which never enters the repository.
+#
+# ~/.ssh/config resolves `nyarlathotep` to this address and selects
+# the dedicated key, so Ansible needs nothing else to connect.
+ansible_user: drehtuer

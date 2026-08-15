@@ -1,0 +1,40 @@
+# Same shape as the production host_vars, so a deploy here exercises
+# the real multi-domain code path rather than a simplified one.
+#
+# `lab.sh seed-certs` derives the certificate names from exactly these
+# values, so the self-signed certificate it installs matches what the
+# http role asks certbot for - which is what makes the role's SAN
+# comparison decide there is nothing to do and skip certbot. Change
+# `domains` or `subdomains` and the certificate has to be re-seeded.
+http:
+  port_http: 80
+  port_https: 443
+  domains: "{{ [domain] + domain_aliases }}"
+  letsencrypt:
+    # Never used: certbot is not reached on this machine.
+    email: postmaster@lab.lan
+    webroot_path: /var/www/certbot
+    cert_name: "{{ hostname_fqdn }}"
+    subdomains:
+      - cloud
+      - mail
+      - spam
+      - status
+      - www
+  sites:
+    - name: default
+      subdomains:
+        - ""
+        - www
+      root: /var/www/html
+      include_locations: true
+    - name: status
+      subdomains:
+        - status
+      root: /var/www/html
+      include_locations: false
+    - name: mail
+      subdomains:
+        - mail
+      root: /var/www/html
+      include_locations: false

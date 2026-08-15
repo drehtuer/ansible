@@ -23,6 +23,10 @@ Nothing here replaces reading the output of a real run. The point of the automat
 | Converges a role inside a systemd container and runs it a second time to prove it is idempotent.
 | CI + local
 
+| Deployment test
+| Runs the real playbooks against a disposable host - by default a local QEMU/KVM VM, optionally a physical LAN machine - and resets it afterwards.
+| Local only
+
 | Drift check
 | Runs the real playbooks against the real hosts in `--check --diff` mode and reports what differs.
 | Local only
@@ -110,6 +114,34 @@ The rest are not covered, for concrete reasons rather than lack of effort:
 |===
 
 Roles needing a VM or remote host rather than a container are tracked in `doc/TODO.adoc` (*Molecule roles needing a VM*) so they get picked up later rather than forgotten.
+
+== Deployment test
+
+`nyarlathotep` is a LAN-only physical machine in the inventory's `testlab` group. It is what molecule and the static tests cannot be: real hardware, real systemd, real services talking to each other, with every role applied in order rather than one at a time. It is disposable — nothing on it is backed up, and it is rolled back between runs.
+
+Everything runs through `.claude/skills/testlab/lab.sh`; see that skill's `SKILL.md` for the full workflow, the lockout hazards and the reinstall path.
+
+[source, bash]
+----
+# the VM, which is the default target
+.claude/skills/testlab/vm.sh  create     # pristine guest, booted
+.claude/skills/testlab/lab.sh deploy     # every playbook, in order
+.claude/skills/testlab/lab.sh verify     # units, sockets, validators, TLS
+.claude/skills/testlab/vm.sh  reset      # pristine again, in seconds
+
+# the physical machine
+LAB_TARGET=metal .claude/skills/testlab/lab.sh snapshot
+LAB_TARGET=metal .claude/skills/testlab/lab.sh deploy
+LAB_TARGET=metal .claude/skills/testlab/lab.sh reset
+----
+
+Two things make this work at all:
+
+*Certbot is never reached.* The machine has no public DNS and no inbound internet, so Let's Encrypt cannot validate it. `lab.sh seed-certs` installs a self-signed certificate carrying exactly the names the `http` role computes, and the role's SAN comparison then finds nothing to do. This is the *reason* that role compares names rather than checking whether a certificate merely exists.
+
+*The rollback is an LVM snapshot.* Root is a logical volume with ~829 GB free in the volume group, so a snapshot the size of the whole origin costs nothing and can never overflow. `reset` merges it and reboots; the merge completes during boot, and the baseline is re-taken afterwards because merging consumes it. `/boot` is a separate partition outside the snapshot, so it is archived and restored alongside — not as a backup, but so root and `/boot` never disagree about which kernel is installed.
+
+*This is not a substitute for a from-scratch provision.* The machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
 
 == Drift check
 
