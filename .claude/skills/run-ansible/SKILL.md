@@ -17,9 +17,12 @@ sudo -n true && echo "passwordless sudo OK"
 Molecule additionally needs, on this container as observed in this session (may already be fixed in a freshly rebuilt one — see Gotchas): `community.docker` installed under `/usr/share/ansible/collections`, and the `python3-requests`/`python3-docker` apt packages. Check and fix in one go:
 
 ```bash
+sudo apt-get update            # the image ships an empty cache; without this the installs below "cannot locate" packages that do exist
 sudo ansible-galaxy collection install --requirements-file .devcontainer/ansible-galaxy.yml --collections-path /usr/share/ansible/collections --force
 sudo apt-get install -y python3-requests python3-docker
 ```
+
+Both are needed again after every container rebuild — they are installed at runtime, not baked into the image. The missing-collection error appears at the `syntax` stage; the missing Python libraries surface much later, at `destroy`, after converge and idempotence have already passed, which makes it look like only cleanup broke.
 
 ## Run (agent path)
 

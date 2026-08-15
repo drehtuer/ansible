@@ -7,6 +7,9 @@
   vars:
     hostname: moleculetest
     sshd:
+      # Same replace-not-merge rule as above: every required key has to
+      # be present, not just the ones this scenario cares about.
+      allow_group: sudo
       host_keys:
         - ed25519
         - rsa
