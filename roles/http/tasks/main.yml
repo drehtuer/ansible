@@ -20,6 +20,14 @@
   ansible.builtin.command:
     cmd: php -r "echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;"
   changed_when: false
+  # Runs in check mode too. It is a read-only `php -r`, and every
+  # later task that names a service or a config path depends on the
+  # fact it sets - so skipping it (which check mode does to `command`
+  # by default) left the version empty and made `invoke check-drift`
+  # fail with "Could not find the requested service php-fpm" instead
+  # of reporting drift. Same reason the certificate SAN read below
+  # opts out.
+  check_mode: false
   register: http_php_version_cmd
 - name: Set PHP version fact
   ansible.builtin.set_fact:
