@@ -13,6 +13,10 @@ nsd:
   # at, and a broken key would pass the test.
   secondaries:
     - "{{ ip_v4 }}"
+  # Same target as the transfer ACL: the lab has one peer and no
+  # IPv4/IPv6 split to model.
+  notify:
+    - "{{ ip_v4 }}"
   # Throwaway secret: the lab has no real secondaries, and this exists
   # so the TSIG path is the one actually exercised in testing rather
   # than the NOKEY fallback.

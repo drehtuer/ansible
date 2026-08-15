@@ -6,6 +6,10 @@ nsd:
     - "{{ ip_v4 }}"
   secondaries:
     - 192.0.2.53
+  # Same target as the transfer ACL: the lab has one peer and no
+  # IPv4/IPv6 split to model.
+  notify:
+    - 192.0.2.53
   # Throwaway secret: the lab has no real secondaries, and this exists
   # so the TSIG path is the one actually exercised in testing rather
   # than the NOKEY fallback.

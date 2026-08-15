@@ -77,6 +77,10 @@ zone:
   # at all, and names exactly those addresses - an unrestricted
   # provide-xfr hands the entire zone to anyone who asks for it.
   #
+  # The two lists differ on purpose: transfers are permitted over both
+  # address families, notifications are sent over IPv4 only. See
+  # nsd.notify in the role defaults for why.
+  #
 {% if nsd.tsig.secret %}
   # Both also require the TSIG key above, so a transfer is refused
   # unless the peer proves it holds the shared secret, and the zone the
@@ -94,7 +98,7 @@ zone:
   # tell whether what it received was altered on the way. Set
   # nsd.tsig.secret to require a shared secret instead.
 {% endif %}
-{% for peer in nsd.secondaries %}
+{% for peer in nsd.notify %}
   notify: {{ peer }} {{ xfr_key }}
 {% endfor %}
 {% for peer in nsd.secondaries %}
