@@ -45,7 +45,7 @@
     group: root
     mode: '0644'
   notify:
-    - Compile sieve scripts (ham)
+    - Reload dovecot
 - name: Copy learn-spam sieve script
   ansible.builtin.copy:
     src: files/learn-spam.sieve
@@ -54,7 +54,35 @@
     group: root
     mode: '0644'
   notify:
-    - Compile sieve scripts (spam)
+    - Reload dovecot
+- name: Copy spam-to-folder sieve script
+  ansible.builtin.copy:
+    src: files/spam-to-folder.sieve
+    dest: /etc/dovecot/sieve/spam-to-folder.sieve
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload dovecot
+- name: Compile sieve scripts
+  # A task rather than a handler, and unconditional. As handlers these
+  # only ran when the script file itself changed, so a first compile
+  # that failed - or any change made elsewhere, such as loading the
+  # imapsieve plugin - left no .svbin behind at all. Dovecot then tries
+  # to compile at delivery/IMAP time as the *user*, cannot write into
+  # /etc/dovecot/sieve, and silently does nothing: the training scripts
+  # never run and no error reaches the playbook.
+  #
+  # Compiling is deterministic and cheap, so it is not reported as a
+  # change; the copy tasks above are what notify the reload.
+  ansible.builtin.command:
+    cmd: "sievec /etc/dovecot/sieve/{{ item }}.sieve"
+  changed_when: false
+  loop:
+    - learn-ham
+    - learn-spam
+    - spam-to-folder
+
 - name: Configure dovecot
   ansible.builtin.template:
     src: templates/dovecot.conf.j2

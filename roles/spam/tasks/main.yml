@@ -19,15 +19,15 @@
 #     creates: /var/lib/rspamd/dkim/{{ domain }}.mail.key
 #   notify:
 #     - Reload rspamd
-# - name: Configure rspamd (milter_headers.conf)
-#   ansible.builtin.copy:
-#     src: files/rspamd/milter_headers.conf
-#     dest: /etc/rspamd/local.d/milter_headers.conf
-#     owner: root
-#     group: root
-#     mode: "0644"
-#   notify:
-#     - Reload rspamd
+- name: Configure rspamd (milter_headers.conf)
+  ansible.builtin.copy:
+    src: files/rspamd/milter_headers.conf
+    dest: /etc/rspamd/local.d/milter_headers.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload rspamd
 - name: Configure rspamd (actions.conf)
   ansible.builtin.copy:
     src: files/rspamd/actions.conf
@@ -35,6 +35,15 @@
     owner: root
     group: root
     mode: "0644"
+- name: Configure rspamd (force_actions.conf)
+  ansible.builtin.copy:
+    src: files/rspamd/force_actions.conf
+    dest: /etc/rspamd/local.d/force_actions.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload rspamd
 - name: Configure rspamd (options.inc)
   # Points RSpamd's own DNS resolution at the local caching resolver
   # from roles/dns, rather than whatever the host's /etc/resolv.conf
