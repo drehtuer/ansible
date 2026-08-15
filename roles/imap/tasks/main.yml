@@ -28,15 +28,19 @@
     src: templates/rspamd-learn-ham.sh.j2
     dest: /etc/dovecot/sieve-pipe/rspamd-learn-ham.sh
     owner: root
-    group: root
-    mode: '0755'
+    group: dovecot
+    # Embeds the controller password, so not world-readable. Dovecot
+    # runs sieve pipes as the mail user, which needs execute only.
+    mode: '0750'
 - name: Copy rspam learn spam script
   ansible.builtin.template:
     src: templates/rspamd-learn-spam.sh.j2
     dest: /etc/dovecot/sieve-pipe/rspamd-learn-spam.sh
     owner: root
-    group: root
-    mode: '0755'
+    group: dovecot
+    # Embeds the controller password, so not world-readable. Dovecot
+    # runs sieve pipes as the mail user, which needs execute only.
+    mode: '0750'
 - name: Copy learn-ham sieve script
   ansible.builtin.copy:
     src: files/learn-ham.sieve

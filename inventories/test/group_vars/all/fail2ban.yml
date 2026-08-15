@@ -4,6 +4,14 @@ fail2ban:
     findtime: 10m
     maxretry: 5
   jails:
+    - name: recidive
+      port: all
+      filter: recidive
+      backend: auto
+      logpath: /var/log/fail2ban.log
+      bantime: 1w
+      findtime: 1d
+      maxretry: 3
     - name: sshd
       port: ssh
       filter: sshd

@@ -31,7 +31,28 @@ PermitEmptyPasswords no
 
 UsePAM yes
 
-X11Forwarding yes
+# Only members of this group may log in at all. The account Ansible
+# connects as is a member (the users role puts it in `sudo`, which is
+# also what grants it NOPASSWD escalation), so this is not a lockout
+# risk for deploys - but it does mean a new account needs that group
+# membership before it can reach the host.
+AllowGroups {{ sshd.allow_group }}
+
+# Slow down guessing and stop half-open sessions holding slots.
+MaxAuthTries 3
+LoginGraceTime 30
+
+# Forwarding is off. Much of this host's security model is services
+# bound to loopback and nothing else - MariaDB, Redis, the RSpamd
+# controller, unbound - and with forwarding enabled any account that
+# can log in can tunnel straight past that binding to all of them.
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTunnel no
+GatewayPorts no
+
+# No X on a headless server.
+X11Forwarding no
 PrintMotd no
 
 AcceptEnv LANG LC_*

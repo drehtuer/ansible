@@ -36,9 +36,25 @@ smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = high
 smtpd_tls_mandatory_ciphers = high
 
+# Outbound TLS. Opportunistic: try STARTTLS with every peer and fall
+# back to cleartext for the ones that do not offer it, which is the
+# only workable policy for a public MX - `encrypt` would bounce mail
+# to any server still running without TLS.
+#
+# This setting is what actually turns outbound TLS on. Without it
+# Postfix falls back to smtp_use_tls, which defaults to no, and the
+# protocol/cipher lines below have no effect at all - so mail this
+# host sent went out in the clear even to peers offering STARTTLS.
+smtp_tls_security_level = may
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
 smtp_tls_mandatory_ciphers = high
+
+# One line per delivery recording whether it was encrypted and with
+# what, so "was that message protected in transit" is answerable
+# afterwards rather than a guess.
+smtp_tls_loglevel = 1
+smtpd_tls_loglevel = 1
 
 smtpd_tls_received_header = yes
 smtpd_sasl_type = dovecot

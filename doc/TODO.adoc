@@ -42,6 +42,8 @@ None currently open. The RSpamd milter connection, which sat here for a long tim
 * *`firewall.docker.wan_interface` is fact-derived.* It resolves to `ansible_default_ipv4.interface`. Confirm that is the real internet-facing NIC on `carcosa` — a wrong interface means the `DOCKER-USER` drop never matches and published container ports are exposed, with no visible error. Pin it explicitly in the inventory if the fact is not dependable.
 * *fail2ban's ban action vs. the firewall.* The `firewall` role restarts fail2ban after every rules reload, because `iptables-restore` flushes the `filter` table and with it every `f2b-*` chain. This assumes fail2ban is using an `iptables` ban action. If the installed version defaults to the `nftables` action instead, its chains live elsewhere, survive the flush, and the restart is unnecessary (harmless, but worth knowing). Check with `iptables -S | grep f2b` after a firewall run.
 
+* *The CSP still permits inline script and style.* `roles/http/files/security.conf` was narrowed from a policy that allowed any `http:`/`https:` origin to one scoped to this origin, but `'unsafe-inline'` remains for both script and style because the RSpamd web UI proxied at `spam.<domain>` includes the same file and needs them. Removing them means either giving that vhost its own policy or testing the UI in a browser afterwards - a 200 from `curl` does not prove the interface still works.
+
 == Documentation gaps
 
 * No day-2 operations runbook: how to rotate the vault password, rotate a compromised user/mail password, restore a host from scratch, add a second host, or renew/replace host SSH keys.

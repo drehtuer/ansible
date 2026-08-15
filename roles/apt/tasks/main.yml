@@ -19,3 +19,18 @@
   tags:
     - never
     - package-upgrade
+
+- name: Configure unattended upgrades
+  ansible.builtin.template:
+    src: "templates/{{ item.src }}"
+    dest: "/etc/apt/apt.conf.d/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - src: 20auto-upgrades.j2
+      dest: 20auto-upgrades
+    - src: 52-unattended-reboot.j2
+      dest: 52-unattended-reboot
+  loop_control:
+    label: "{{ item.dest }}"

@@ -10,6 +10,23 @@ fail2ban:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # to match how the service actually logs. sshd and postfix go to
     # the journal; dovecot and nginx are configured by their roles to
     # write to files, so those jails have to poll the file instead.
+    # Escalation for hosts that come back after their ban expires.
+    # Without it a persistent scanner is banned for an hour, returns,
+    # and is banned for an hour again - indefinitely, at no cost to
+    # them. This jail reads fail2ban's own log, so it catches repeat
+    # offenders across every jail below.
+    - name: recidive
+      # Every port: a host that keeps coming back has earned a block on
+      # all of them, not just the service it happened to probe last.
+      port: all
+      filter: recidive
+      # Reads fail2ban's own log, not a service's, so it catches repeat
+      # offenders across every jail below.
+      backend: auto
+      logpath: /var/log/fail2ban.log
+      bantime: 1w
+      findtime: 1d
+      maxretry: 3
     - name: sshd
       port: ssh
       filter: sshd

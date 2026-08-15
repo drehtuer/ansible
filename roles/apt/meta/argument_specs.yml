@@ -11,6 +11,23 @@ argument_specs:
         required: true
         description: Apt settings.
         options:
+          unattended:
+            type: dict
+            required: true
+            description: Unattended-upgrade behaviour.
+            options:
+              reboot:
+                type: bool
+                required: true
+                description: Reboot automatically when an update needs it.
+              reboot_with_users:
+                type: bool
+                required: true
+                description: Reboot even when users are logged in.
+              reboot_time:
+                type: str
+                required: true
+                description: Time of day for the reboot, HH:MM.
           packages:
             type: list
             elements: str

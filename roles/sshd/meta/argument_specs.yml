@@ -19,6 +19,12 @@ argument_specs:
         required: true
         description: SSHd settings.
         options:
+          allow_group:
+            type: str
+            required: true
+            description:
+              - Unix group whose members may log in over SSH. The
+                Ansible connection account must be in it.
           host_keys:
             type: list
             elements: str

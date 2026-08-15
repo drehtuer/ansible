@@ -1,4 +1,5 @@
 spam:
+  controller_password: test-controller-password
   dkim:
     selector: mail
     bits: 2048

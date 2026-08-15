@@ -3,6 +3,9 @@
 # that does not exist. It is a required input, see
 # meta/argument_specs.yml.
 sshd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  # Only members of this group may log in over SSH. `sudo` because the
+  # users role already puts the Ansible connection account there.
+  allow_group: sudo
   # Key types to deploy. For each entry the role expects a
   # vault-encrypted files/ssh_<hostname>_<type>_key.aes256,
   # produced by scripts/generate_keys.sh.

@@ -70,7 +70,9 @@ ssl = yes
 ssl_cert = <{{ imap.conf.ssl.cert }}
 ssl_key = <{{ imap.conf.ssl.key }}
 ssl_ca = <{{ imap.conf.ssl.ca }}
-ssl_dh = <{{ imap.conf.ssl.dh }}
+# No ssl_dh: Dovecot 2.3+ does not need explicit DH parameters for
+# TLS 1.2+ ECDHE, and pointing it at /etc/nginx/dhparam.pem made
+# the imap role silently depend on the http role having run first.
 ssl_min_protocol = TLSv1.2
 ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES:!RC4:!DSS:!SHA1:!SHA256:!SHA384:!CAMELLIA128:!CAMELLIA256
 ssl_prefer_server_ciphers = yes

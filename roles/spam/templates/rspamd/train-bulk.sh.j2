@@ -21,6 +21,9 @@
 set -euo pipefail
 
 CONTROLLER="127.0.0.1:{{ spam.http_port }}"
+# The controller requires a password for learn requests; without
+# it every message here would be refused.
+PASSWORD="{{ spam.controller_password }}"
 # RSpamd refuses anything with too few tokens to be worth learning
 # ("contains less tokens than required for bayes classifier"). Tiny
 # notification mails are common in an export and would otherwise fill
@@ -124,7 +127,7 @@ LEARNED=0 SKIPPED=0 FAILED=0
 # Read N paths at a time so rspamc makes a few controller round trips
 # instead of one per message.
 while mapfile -t -n "$BATCH" batch && [[ -n "${batch[*]}" ]]; do
-  out="$(rspamc -h "$CONTROLLER" "$CLASS" "${batch[@]}" 2>&1 || true)"
+  out="$(rspamc -h "$CONTROLLER" -P "$PASSWORD" "$CLASS" "${batch[@]}" 2>&1 || true)"
   # Classify each result once and in this order. RSpamd reports an
   # already-learned message as an error, so counting "error" first
   # would report a harmless re-run over the same corpus as a failure
@@ -138,7 +141,7 @@ while mapfile -t -n "$BATCH" batch && [[ -n "${batch[*]}" ]]; do
 done < "$LIST"
 
 echo "learned ${LEARNED}, skipped ${SKIPPED}, failed ${FAILED}"
-rspamc -h "$CONTROLLER" stat 2>/dev/null | grep -E "Messages learned|BAYES_(SPAM|HAM)" || true
+rspamc -h "$CONTROLLER" -P "$PASSWORD" stat 2>/dev/null | grep -E "Messages learned|BAYES_(SPAM|HAM)" || true
 
 # Nothing learned *and* nothing recognised as already known means the
 # corpus never reached the classifier at all - almost always a broken
