@@ -22,6 +22,54 @@
     mode: "0644"
   notify:
     - Restart unbound
+- name: Mask unbound-resolvconf
+  # The package ships this helper to point the system's resolv.conf at
+  # unbound through resolvconf. It cannot work here and has never
+  # worked here: it tries to attach a DNS server to the link `lo`, and
+  # systemd-resolved rejects that outright -
+  #
+  #   Dropped protocol specifier '.unbound' from 'lo.unbound'
+  #   Failed to set DNS configuration: Link lo is loopback device
+  #
+  # The wiring it exists to do is done by the resolved.conf below
+  # instead, which points systemd-resolved at 127.0.0.1, so nothing is
+  # lost by masking it.
+  #
+  # Masked rather than disabled: it is WantedBy unbound.service, so a
+  # package upgrade re-enabling it would quietly bring the failure
+  # back. A masked Wants is skipped without failing the parent unit.
+  #
+  # Worth doing rather than tolerating, because it was the only failed
+  # unit on the host - so `systemctl list-units --state=failed`, the
+  # cheapest health check there is, always had an entry in it and any
+  # real failure would have had to be noticed among the noise.
+  ansible.builtin.systemd_service:
+    name: unbound-resolvconf.service
+    enabled: false
+    masked: true
+    state: stopped
+- name: Check whether unbound-resolvconf is still recorded as failed
+  # Masking and stopping the unit does not clear the failure systemd
+  # already recorded against it, so it keeps showing up in
+  # `--state=failed` - masked *and* failed - which is the very thing
+  # this is meant to stop.
+  # noqa: command-instead-of-module - systemd has no module action for
+  # reading or clearing a recorded failure; systemd_service covers
+  # enabled/masked/state only.
+  ansible.builtin.command:
+    cmd: systemctl is-failed unbound-resolvconf.service
+  register: dns_resolvconf_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+- name: Clear the recorded unbound-resolvconf failure
+  # Guarded on the state above rather than run every time, so a
+  # converged host reports no change.
+  # noqa: command-instead-of-module - see the task above.
+  ansible.builtin.command:
+    cmd: systemctl reset-failed unbound-resolvconf.service
+  changed_when: true
+  when: dns_resolvconf_state.stdout == "failed"
 - name: Configure resolved
   ansible.builtin.copy:
     src: files/resolved.conf
