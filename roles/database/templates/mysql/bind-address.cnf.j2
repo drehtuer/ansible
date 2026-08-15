@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+#
+# A drop-in, deliberately not an edit to (or replacement of) the
+# packaged 50-server.cnf. conf.d files are read after it, so this wins
+# without taking ownership of everything else the distribution sets
+# there - replacing a packaged config wholesale is exactly how the
+# Redis data directory was lost once already.
+#
+# Until this existed, MariaDB was loopback-only purely because Ubuntu
+# ships it that way. That was correct but unmanaged: a package upgrade
+# rewriting 50-server.cnf could have exposed the server with nothing
+# in this repository to prevent or even notice it.
+[mysqld]
+bind-address = {{ database.mysql.bind_address }}

@@ -1,6 +1,9 @@
 database:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   mysql:
     ip4: 127.0.0.1
+    # Address MariaDB listens on. Loopback only: nothing outside
+    # this host has any business reaching the database directly.
+    bind_address: 127.0.0.1
     socket: /var/run/mysqld/mysqld.sock
     root:
       user: root
