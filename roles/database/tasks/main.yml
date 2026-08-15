@@ -28,6 +28,15 @@
     - Disable remote root login
     - Remove test database
     - Create initial installation done file
+- name: Configure mariaDB bind address
+  ansible.builtin.template:
+    src: templates/mysql/bind-address.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/99-bind-address.cnf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart mariadb
 - name: Install redis
   ansible.builtin.apt:
     install_recommends: false
