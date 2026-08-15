@@ -3,6 +3,11 @@
 ; reverted on upgrade.
 memory_limit = {{ cloud.php.memory_limit }}
 
+; APCu is Nextcloud's memcache.local. It is disabled for the CLI SAPI
+; by default, which the background job and occ both run under, so it
+; has to be turned on explicitly. Ignored by the FPM SAPI.
+apc.enable_cli = 1
+
 opcache.enable = {{ cloud.php.opcache.enable }}
 opcache.interned_strings_buffer = {{ cloud.php.opcache.interned_strings_buffer }}
 opcache.memory_consumption = {{ cloud.php.opcache.memory_consumption }}

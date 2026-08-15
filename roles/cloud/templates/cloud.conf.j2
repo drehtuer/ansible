@@ -20,13 +20,8 @@ server {
     # not include: Nextcloud sends its own Content-Security-Policy, and
     # a second one from nginx would be enforced as the intersection of
     # the two and break the app. HSTS is the part that was missing.
-    #
-    # WARNING: Only add the preload option once you read about
-    # the consequences in https://hstspreload.org/. This option
-    # will add the domain to a hardcoded list that is shipped
-    # in all major browsers and getting removed from this list
-    # could take several months.
-    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+    # The `preload` token is deliberately omitted there too.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     # set max upload size and increase upload timeout:
     client_max_body_size 512M;
@@ -162,6 +157,10 @@ server {
     # Serve static files
     location ~ \.(?:css|js|mjs|svg|gif|ico|jpg|png|webp|wasm|tflite|map|ogg|flac)$ {
         try_files $uri /index.php$request_uri;
+        # nginx only inherits `add_header` from the enclosing level
+        # when the current level declares none of its own, so this
+        # block has to repeat the server-level HSTS header as well.
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         # HTTP response headers borrowed from Nextcloud `.htaccess`
         add_header Cache-Control                     "public, max-age=15778463$asset_immutable";
         add_header Referrer-Policy                   "no-referrer"       always;

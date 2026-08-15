@@ -40,6 +40,16 @@ cloud:
     checksum: "d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d"
     path: /var/www/nextcloud
     cron_minute: "*/5"
+  ocr:
+    # Tesseract training data for OCRmyPDF, one package per language.
+    languages:
+      - eng
+      - deu
+  redis:
+    # Host and port come from database.redis; index 0 holds RSpamd's
+    # data, so Nextcloud gets one of its own.
+    dbindex: 1
+    timeout: 1.5
   php:
     memory_limit: 512M
     opcache:

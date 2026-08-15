@@ -15,6 +15,17 @@ cloud:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     path: /var/www/nextcloud
     # Nextcloud's own recommendation for the background job.
     cron_minute: "*/5"
+  ocr:
+    # Tesseract training data for OCRmyPDF, one package per language.
+    languages:
+      - eng
+      - deu
+  redis:
+    # Host and port come from database.redis - this is only what is
+    # specific to Nextcloud's use of that shared instance. Index 0 is
+    # where RSpamd stores its data.
+    dbindex: 1
+    timeout: 1.5
   php:
     memory_limit: 512M
     opcache:
