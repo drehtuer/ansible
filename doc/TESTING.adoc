@@ -141,7 +141,19 @@ Two things make this work at all:
 
 *The rollback is an LVM snapshot.* Root is a logical volume with ~829 GB free in the volume group, so a snapshot the size of the whole origin costs nothing and can never overflow. `reset` merges it and reboots; the merge completes during boot, and the baseline is re-taken afterwards because merging consumes it. `/boot` is a separate partition outside the snapshot, so it is archived and restored alongside — not as a backup, but so root and `/boot` never disagree about which kernel is installed.
 
-*This is not a substitute for a from-scratch provision.* The machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
+*The `upgrade` role has been run, and cannot currently succeed.* `hastur` is a 24.04 guest carrying `upgrade.target_release: "26.04"`, which is what the role needs to do anything at all. Running it gets as far as `do-release-upgrade` and stops there:
+
+----
+Current release 24.04, target 26.04, upgrade needed.
+do-release-upgrade  FAILED rc=1
+  "There is no development version of an LTS available."
+----
+
+That is Ubuntu's LTS gate, not a defect: 24.04 -> 26.04 is not offered until the 26.04.1 point release. Everything up to that point works - both assertions, the version comparison, the full upgrade of the current release, the prompt-mode change - as does the no-op path when the target is already reached (`ok=5 changed=0 skipped=8`). What remains unproven is a `do-release-upgrade` that actually completes, reboots and passes the closing assert. Rehearse on `hastur` once Ubuntu offers the upgrade, *before* pointing the role at production.
+
+The run also surfaced a real defect, recorded in `doc/TODO.adoc`: the role reads `ansible_distribution`/`ansible_distribution_version` as bare top-level variables, which ansible-core deprecates.
+
+*This is not a substitute for a from-scratch provision.* The metal machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
 
 == Drift check
 

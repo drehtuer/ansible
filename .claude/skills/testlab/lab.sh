@@ -20,11 +20,13 @@ case "$TARGET" in
     GROUP=testlab_vm
     # Loopback, via the port forward in ~/.ssh/config.
     IP=127.0.0.1
+    KEY="${HOME}/.ssh/yuggoth"
     ;;
   metal)
     HOST=nyarlathotep
     GROUP=testlab_metal
     IP=192.168.89.41
+    KEY="${HOME}/.ssh/nyarlathotep"
     ;;
   *) printf 'LAB_TARGET must be "vm" or "metal", not "%s"\n' "$TARGET" >&2; exit 1 ;;
 esac
@@ -146,21 +148,28 @@ cmd_check() {
   sshq 'echo "  $(. /etc/os-release; echo "$PRETTY_NAME")  kernel $(uname -r)"
         echo "  virt: $(systemd-detect-virt || true)   uptime:$(uptime -p | sed s/up//)"'
 
-  say "Storage and baseline"
-  sshq "sudo vgs --noheadings -o vg_name,vg_free ${VG} | sed 's/^/  vg /'
-        sudo lvs --noheadings -o lv_name,lv_size,origin,snap_percent ${VG} | sed 's/^/  lv /'"
-  if sshq "sudo lvs ${VG}/${SNAP} >/dev/null 2>&1"; then
-    ok "baseline snapshot ${VG}/${SNAP} exists - 'lab.sh reset' can roll back"
+  say "Rollback"
+  if [[ "$TARGET" == "metal" ]]; then
+    sshq "sudo vgs --noheadings -o vg_name,vg_free ${VG} | sed 's/^/  vg /'
+          sudo lvs --noheadings -o lv_name,lv_size,origin,snap_percent ${VG} | sed 's/^/  lv /'"
+    if sshq "sudo lvs ${VG}/${SNAP} >/dev/null 2>&1"; then
+      ok "baseline snapshot ${VG}/${SNAP} exists - 'lab.sh reset' can roll back"
+    else
+      bad "no baseline snapshot - 'lab.sh reset' cannot work until 'lab.sh snapshot' runs"
+    fi
+    if sshq "test -f ${BOOT_BACKUP}"; then ok "/boot baseline archive present"; else
+      bad "no /boot archive at ${BOOT_BACKUP}"
+    fi
   else
-    bad "no baseline snapshot - 'lab.sh reset' cannot work until 'lab.sh snapshot' runs"
-  fi
-  if sshq "test -f ${BOOT_BACKUP}"; then ok "/boot baseline archive present"; else
-    bad "no /boot archive at ${BOOT_BACKUP}"
+    # The guest has no LVM and needs none: its disk is a qcow2 overlay
+    # on an untouched base image, so rollback is 'vm.sh reset'.
+    ok "qcow2 overlay - 'vm.sh reset' restores a pristine image in seconds"
+    info "snapshots: $(.claude/skills/testlab/vm.sh status 2>/dev/null | grep -c '^  snap ') named"
   fi
 
   say "Lockout guards"
   local key
-  key="$(ssh-keygen -y -f ~/.ssh/nyarlathotep 2>/dev/null | awk '{print $2}')"
+  key="$(ssh-keygen -y -f "$KEY" 2>/dev/null | awk '{print $2}')"
   if sshq "grep -qF '${key}' ~/.ssh/authorized_keys"; then
     ok "our public key is in authorized_keys"
   else
