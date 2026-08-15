@@ -1,5 +1,14 @@
 # Override with own variables
 apt:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  unattended:
+    # Reboot when an update needs it. Without this the patch is on disk
+    # but never in memory, which loses most of the value of applying it
+    # automatically in the first place.
+    reboot: true
+    # Reboot even with users logged in: this is a server, and an SSH
+    # session left open should not defer a kernel fix indefinitely.
+    reboot_with_users: true
+    reboot_time: "04:00"
   packages:
     # Python3 should always be installed
     # on managed hosts when using ansible

@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+//
+// Until this file existed the host applied updates only because
+// Ubuntu's package happens to enable it - the same accidental safety
+// the MariaDB bind address had. Nothing here set it, so nothing here
+// would have noticed it being turned off.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";

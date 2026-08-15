@@ -31,7 +31,28 @@ PermitEmptyPasswords no
 
 UsePAM yes
 
-X11Forwarding yes
+# There is deliberately no AllowGroups: any account with a valid shell
+# may log in. Password and keyboard-interactive authentication are off
+# above, so login is public key only and there is no password to
+# guess - a group restriction would add little beyond another way to
+# lock an account out of its own host.
+
+# Stop half-open sessions holding connection slots, and cap how many
+# keys one connection may offer.
+MaxAuthTries 3
+LoginGraceTime 30
+
+# Forwarding is off. Much of this host's security model is services
+# bound to loopback and nothing else - MariaDB, Redis, the RSpamd
+# controller, unbound - and with forwarding enabled any account that
+# can log in can tunnel straight past that binding to all of them.
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitTunnel no
+GatewayPorts no
+
+# No X on a headless server.
+X11Forwarding no
 PrintMotd no
 
 AcceptEnv LANG LC_*

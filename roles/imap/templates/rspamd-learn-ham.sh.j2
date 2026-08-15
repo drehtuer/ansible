@@ -1,2 +1,19 @@
 #!/usr/bin/env bash
-curl -s -X POST --data-binary @- http://127.0.0.1:{{ spam.http_port }}/learnham
+{{ ansible_managed | comment }}
+#
+# Piped a message by the imapsieve rules in dovecot.conf when the user
+# moves mail into or out of the training folder.
+#
+# The Password header is required: RSpamd's controller no longer
+# trusts requests merely for arriving from 127.0.0.1, so without it
+# every training request is refused - silently, because sieve pipes
+# discard the response.
+#
+# --fail so a rejected request is a non-zero exit rather than a
+# success with an error body nobody reads.
+set -euo pipefail
+
+curl -s --fail \
+  -H "Password: {{ spam.controller_password }}" \
+  -X POST --data-binary @- \
+  "http://127.0.0.1:{{ spam.http_port }}/learnham"

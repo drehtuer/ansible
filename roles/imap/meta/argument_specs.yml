@@ -41,10 +41,6 @@ argument_specs:
                     type: str
                     required: true
                     description: CA chain path.
-                  dh:
-                    type: str
-                    required: true
-                    description: Diffie-Hellman parameters path.
       spam:
         type: dict
         required: true

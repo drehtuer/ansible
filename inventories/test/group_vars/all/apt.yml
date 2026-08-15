@@ -1,4 +1,8 @@
 apt:
+  unattended:
+    reboot: true
+    reboot_with_users: true
+    reboot_time: "04:00"
   packages:
     - bash
     - python3

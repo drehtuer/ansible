@@ -28,6 +28,13 @@ argument_specs:
         required: true
         description: Spam filtering settings.
         options:
+          controller_password:
+            type: str
+            required: true
+            description:
+              - Password for RSpamd's controller, required for the web
+                UI and for every learn request. Read by the imap role's
+                training scripts too.
           dkim:
             type: dict
             required: true

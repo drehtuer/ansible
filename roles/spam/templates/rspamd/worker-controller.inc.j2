@@ -1,4 +1,18 @@
+{{ ansible_managed | comment }}
 bind_socket = "127.0.0.1:{{ spam.http_port }}";
-secure_ip = "127.0.0.1";
-password = "";
-enable_password = false;
+
+# There is deliberately no `secure_ip` here. It used to list 127.0.0.1,
+# and because nginx proxies the web UI *from* 127.0.0.1 every proxied
+# request was treated as trusted - so the nginx basic-auth file was the
+# only thing standing between a visitor and full controller access,
+# including learning and configuration. An unauthenticated local POST
+# to /learnspam was accepted. Requiring the password means a stolen
+# basic-auth credential is not sufficient on its own.
+#
+# An empty list, not an omission: RSpamd ships `secure_ip = 127.0.0.1`
+# in its own worker-controller.inc, and UCL *merges* lists, so simply
+# leaving the key out here - even from override.d - keeps the packaged
+# entries. Assigning an empty array is what actually clears them.
+secure_ip = [];
+password = "{{ spam.controller_password }}";
+enable_password = "{{ spam.controller_password }}";

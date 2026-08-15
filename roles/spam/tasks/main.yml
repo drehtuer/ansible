@@ -42,7 +42,8 @@
     dest: /usr/local/bin/rspamd-train-bulk
     owner: root
     group: root
-    mode: "0755"
+    # Embeds the controller password; run it with sudo.
+    mode: "0750"
 - name: Configure rspamd (actions.conf)
   ansible.builtin.copy:
     src: files/rspamd/actions.conf
@@ -78,15 +79,30 @@
     owner: root
     group: root
     mode: "0644"
+- name: Remove the old local.d controller config
+  # It was merged with the packaged defaults rather than replacing
+  # them; leaving it behind would reintroduce secure_ip.
+  ansible.builtin.file:
+    path: /etc/rspamd/local.d/worker-controller.inc
+    state: absent
+  notify:
+    - Restart rspamd
 - name: Configure rspamd (worker-controller.inc)
   ansible.builtin.template:
     src: templates/rspamd/worker-controller.inc.j2
-    dest: /etc/rspamd/local.d/worker-controller.inc
+    # override.d, not local.d: local.d *merges* with the packaged
+    # config, so the `secure_ip = 127.0.0.1` RSpamd ships would survive
+    # and keep treating every request arriving through nginx as
+    # trusted. override.d replaces the section outright, which is the
+    # only way to drop a default.
+    dest: /etc/rspamd/override.d/worker-controller.inc
     owner: root
-    group: root
-    mode: "0644"
+    group: _rspamd
+    # Contains the controller password, so not world-readable like the
+    # rest of local.d.
+    mode: "0640"
   notify:
-    - Reload rspamd
+    - Restart rspamd
 # - name: Configure rspamd (spf.conf)
 #   ansible.builtin.copy:
 #     src: files/rspamd/spf.conf

@@ -1,4 +1,5 @@
 spam:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  controller_password: ""
   dkim:
     # The selector names the DNS record: <selector>._domainkey.<domain>.
     # Changing it means publishing a new record and keeping the old one

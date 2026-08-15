@@ -4,6 +4,14 @@
   hosts: all
   vars:
     apt:
+      # Overriding the role's top-level dict *replaces* its defaults,
+      # so every key the role requires has to be repeated here - a
+      # missing one fails the argument spec, not the task that uses it.
+      # See doc/STATUS.adoc.
+      unattended:
+        reboot: false
+        reboot_with_users: false
+        reboot_time: "04:00"
       packages:
         - bash
         - python3

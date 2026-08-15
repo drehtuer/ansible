@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+//
+// A drop-in, so the packaged 50unattended-upgrades keeps ownership of
+// which origins are patched.
+//
+// Without an automatic reboot, kernel and libc updates install but the
+// host keeps running the old ones indefinitely - the patch is on disk
+// and not in memory, which is most of the point of unattended
+// upgrades lost silently.
+Unattended-Upgrade::Automatic-Reboot "{{ apt.unattended.reboot | ternary('true', 'false') }}";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "{{ apt.unattended.reboot_with_users | ternary('true', 'false') }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ apt.unattended.reboot_time }}";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
