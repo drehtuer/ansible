@@ -1,25 +1,57 @@
 #!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Generates a DKIM signing key per served domain, and writes the
+# matching DNS record next to it. Idempotent: an existing key is left
+# alone, so re-running never invalidates a record already published.
+#
+# Prints "generated <domain>" for each new key, which is what the
+# playbook keys its changed state on.
 
 set -eo pipefail
-# set -x
 
 RSPAM_DKIM_DIR="/var/lib/rspamd/dkim"
-DOMAIN="{{ domain }}"
-PRIVATE_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.key"
-PUBLIC_KEY="${RSPAM_DKIM_DIR}/${DOMAIN}.mail.pub"
+SELECTOR="{{ spam.dkim.selector }}"
 
-if [ -e "${PRIVATE_KEY}" ]; then
-  echo "Private key already exists: ${PRIVATE_KEY}"
-  exit 0
-fi
+mkdir -p "${RSPAM_DKIM_DIR}"
 
-mkdir -p /var/lib/rspamd/dkim
-rspamadm dkim_keygen \
-  --domain ${DOMAIN} \
-  --selector mail \
-  --privkey "${PRIVATE_KEY}" \
-  --type ED25519 \
-  > "${PUBLIC_KEY}"
+generate() {
+  local domain="$1"
+  local private="${RSPAM_DKIM_DIR}/${domain}.${SELECTOR}.key"
+  local public="${RSPAM_DKIM_DIR}/${domain}.${SELECTOR}.txt"
+
+  if [ -e "${private}" ]; then
+    echo "exists ${domain}"
+    return 0
+  fi
+
+  # RSA rather than the Ed25519 the first draft of this script used:
+  # a verifier that does not implement ed25519-sha256 simply cannot
+  # check the signature, and DKIM exists here for deliverability, so
+  # the interoperable algorithm is the right one.
+  rspamadm dkim_keygen \
+    --domain "${domain}" \
+    --selector "${SELECTOR}" \
+    --privkey "${private}" \
+    --type rsa \
+    --bits {{ spam.dkim.bits }} \
+    > "${public}"
+
+  echo "generated ${domain}"
+}
+
+{% for d in [domain] + domain_aliases %}
+generate "{{ d }}"
+{% endfor %}
 
 chown -R _rspamd:_rspamd "${RSPAM_DKIM_DIR}"
-chmod 0600 "${PRIVATE_KEY}"
+chmod 0700 "${RSPAM_DKIM_DIR}"
+find "${RSPAM_DKIM_DIR}" -name "*.key" -exec chmod 0600 {} +
+
+echo
+echo "Publish these TXT records, then verify with: rspamadm dkim_keygen -d <domain> -s ${SELECTOR} -k <key> -t"
+for f in "${RSPAM_DKIM_DIR}"/*."${SELECTOR}".txt; do
+  [ -e "$f" ] || continue
+  echo "--- $(basename "$f" ."${SELECTOR}".txt) ---"
+  cat "$f"
+done

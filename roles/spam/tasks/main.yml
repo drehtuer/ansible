@@ -6,19 +6,24 @@
     update_cache: true
   notify:
     - Restart rspamd
-# - name: Copy DKIM key script
-#   ansible.builtin.template:
-#     src: templates/rspamd/dkim_keygen.sh.j2
-#     dest: /usr/local/bin/dkim_keygen.sh
-#     owner: root
-#     group: root
-#     mode: "0755"
-# - name: Run DKIM script
-#   ansible.builtin.command: /usr/local/bin/dkim_keygen.sh
-#   args:
-#     creates: /var/lib/rspamd/dkim/{{ domain }}.mail.key
-#   notify:
-#     - Reload rspamd
+- name: Copy DKIM key script
+  ansible.builtin.template:
+    src: templates/rspamd/dkim_keygen.sh.j2
+    dest: /usr/local/bin/dkim_keygen.sh
+    owner: root
+    group: root
+    mode: "0755"
+- name: Generate DKIM keys
+  # No `creates:` guard - one would name a single domain's key, and
+  # this host signs for several. The script is idempotent instead: it
+  # leaves an existing key alone and prints what it generated, which
+  # is what the changed state below reads.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/dkim_keygen.sh
+  register: spam_dkim_keygen
+  changed_when: "'generated ' in spam_dkim_keygen.stdout"
+  notify:
+    - Reload rspamd
 - name: Configure rspamd (milter_headers.conf)
   ansible.builtin.copy:
     src: files/rspamd/milter_headers.conf
@@ -109,15 +114,15 @@
 #     mode: "0644"
 #   notify:
 #     - Reload rspamd
-# - name: Configure rspamd (dkim_signing.conf)
-#   ansible.builtin.template:
-#     src: templates/rspamd/dkim_signing.conf.j2
-#     dest: /etc/rspamd/local.d/dkim_signing.conf
-#     owner: root
-#     group: root
-#     mode: "0644"
-#   notify:
-#     - Reload rspamd
+- name: Configure rspamd (dkim_signing.conf)
+  ansible.builtin.template:
+    src: templates/rspamd/dkim_signing.conf.j2
+    dest: /etc/rspamd/local.d/dkim_signing.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload rspamd
 # `copy` compares the decrypted source against the destination, so it
 # is already idempotent - no separate checksum probe is needed.
 - name: Add htaccess for spam web ui

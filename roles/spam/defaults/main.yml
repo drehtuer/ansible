@@ -1,3 +1,12 @@
 spam:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  dkim:
+    # The selector names the DNS record: <selector>._domainkey.<domain>.
+    # Changing it means publishing a new record and keeping the old one
+    # until every message signed with it has aged out.
+    selector: mail
+    # RSA, for verifiers that do not implement ed25519-sha256. 2048 is
+    # the usual ceiling: some resolvers still struggle with the TXT
+    # record a 4096-bit key produces.
+    bits: 2048
   milter_port: 11332
   http_port: 11334

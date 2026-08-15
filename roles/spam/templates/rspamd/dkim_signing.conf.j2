@@ -1,11 +1,25 @@
+{{ ansible_managed | comment }}
+#
+# Outbound signing. There is deliberately no per-domain block here:
+# the generic `path` below resolves $domain and $selector for every
+# domain this host serves, so one line covers them all and cannot
+# drift out of step with the keys the generator produced.
+#
+# The previous version had a block keyed on the host FQDN pointing at
+# <fqdn>.mail.key - a file the generator never creates, since keys are
+# per *domain*, not per host.
 enabled = true;
-sign_authnenticated = true;
-selector = mail;
+
+# Sign mail this host originates and mail submitted by an
+# authenticated user. Note the spelling: an earlier draft had
+# `sign_authnenticated`, which RSpamd silently ignores, leaving
+# submitted mail unsigned.
+sign_local = true;
+sign_authenticated = true;
+
+selector = "{{ spam.dkim.selector }}";
 path = "/var/lib/rspamd/dkim/$domain.$selector.key";
 
-domain {
-  {{ hostname_fqdn }} {
-    selector = mail;
-    path = "/var/lib/rspamd/dkim/{{ hostname_fqdn }}.mail.key";
-  }
-}
+# Do not sign as a domain we hold no key for, rather than failing the
+# message.
+allow_missing_key = false;
