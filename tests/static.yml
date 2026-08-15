@@ -42,6 +42,15 @@
     # roles/nsd renders one zone file per entry in nsd.zones, with the
     # entry passed in as `zone`; supply the first one here.
     zone: "{{ nsd.zones[0] }}"
+    # Facts, which this play does not gather - no host is contacted.
+    # roles/system checks its own addresses against these before
+    # writing them to /etc/hosts, and is deliberately strict about it
+    # rather than defaulting them away: on a real run a missing fact
+    # means the host lines would be silently dropped, which is worth a
+    # hard failure. Both inventory addresses are listed so that both
+    # branches render here.
+    ansible_all_ipv4_addresses: "{{ [ip_v4] }}"
+    ansible_all_ipv6_addresses: "{{ [ip_v6] }}"
     site:
       name: default
       subdomains:

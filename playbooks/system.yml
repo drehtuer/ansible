@@ -1,8 +1,14 @@
 # On a fresh host, run playbooks/apt.yml first - the apt role is the
 # only one that refreshes the apt cache. See doc/TODO.adoc.
+#
+# gather_facts stays on (the default) here: the system role writes
+# /etc/hosts, and checks each address from the inventory against
+# ansible_all_ipv4_addresses/ansible_all_ipv6_addresses before naming
+# this host by it - the lab guests declare an ip_v6 they do not
+# actually hold, and mapping a machine's own name to an unreachable
+# address makes local connections to itself stall on it first.
 - name: System role
   hosts: all
-  gather_facts: false
   roles:
     - role: system
       tags:

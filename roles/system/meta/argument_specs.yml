@@ -1,9 +1,9 @@
 argument_specs:
   main:
-    short_description: Set hostname and system locales
+    short_description: Set hostname, hosts file and system locales
     description:
-      - Sets the system hostname and generates the configured
-        locales.
+      - Sets the system hostname, writes /etc/hosts, and generates
+        the configured locales.
     options:
       hostname_fqdn:
         type: str
@@ -11,6 +11,25 @@ argument_specs:
         description:
           - Fully qualified domain name to set as the system
             hostname.
+      hostname:
+        type: str
+        required: true
+        description:
+          - Short hostname, written to /etc/hosts after the fully
+            qualified name.
+      ip_v4:
+        type: str
+        required: true
+        description:
+          - The host's IPv4 address. Written to /etc/hosts only if the
+            host actually holds it.
+      ip_v6:
+        type: str
+        required: true
+        description:
+          - The host's IPv6 address. Written to /etc/hosts only if the
+            host actually holds it - the lab guests declare one they do
+            not have.
       system:
         type: dict
         required: true
