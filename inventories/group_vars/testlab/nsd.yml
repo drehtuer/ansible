@@ -6,9 +6,20 @@ nsd:
     - "{{ ip_v4 }}"
   # Overriding the role's top-level dict replaces its defaults, so
   # every required key has to be repeated - see doc/STATUS.adoc.
-  # A documentation-range address: nothing will ever transfer this.
+  # The host itself, so a test can actually complete a transfer and the
+  # TSIG check is what decides the outcome. Pointed at an address that
+  # can never connect - a documentation-range one, say - every attempt
+  # would be refused on source address before the key was even looked
+  # at, and a broken key would pass the test.
   secondaries:
-    - 192.0.2.53
+    - "{{ ip_v4 }}"
+  # Throwaway secret: the lab has no real secondaries, and this exists
+  # so the TSIG path is the one actually exercised in testing rather
+  # than the NOKEY fallback.
+  tsig:
+    name: transfer
+    algorithm: hmac-sha256
+    secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
   rrl:
     size: 1000000
     ratelimit: 200

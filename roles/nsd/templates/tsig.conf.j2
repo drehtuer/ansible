@@ -1,0 +1,26 @@
+{{ ansible_managed | comment }}
+#
+# Shared secret authenticating zone transfers to the secondaries
+# (TSIG, RFC 8945). The secondary uses it to verify that the zone it
+# received really came from this host and was not altered in transit,
+# and this host uses it to refuse a transfer to anyone who cannot
+# prove they hold the same secret.
+#
+# This is NOT DNSSEC, which is a separate matter still open. TSIG
+# authenticates the hop between these two servers with a shared secret
+# and leaves nothing behind in the zone; DNSSEC signs the zone data
+# itself with public-key cryptography so that any validating resolver
+# anywhere can check an individual answer. A TSIG-protected transfer
+# of an unsigned zone is still unverifiable to the outside world, and
+# a DNSSEC-signed zone transferred without TSIG is still fully
+# verifiable by resolvers. Neither substitutes for the other.
+#
+# Kept out of nsd.conf so that the secret does not show up in a
+# --diff, which the drift check runs routinely. Both ends must agree
+# on the key *name* as well as the secret; the name travels in the
+# clear as part of the transfer.
+
+key:
+  name: "{{ nsd.tsig.name }}"
+  algorithm: {{ nsd.tsig.algorithm }}
+  secret: "{{ nsd.tsig.secret }}"
