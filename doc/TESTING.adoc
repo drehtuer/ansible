@@ -5,6 +5,22 @@ How this repository is tested, what each layer actually catches, and what it del
 
 Nothing here replaces reading the output of a real run. The point of the automated layers is to make the *first* real run boring.
 
+The dev container holds two sets of collections, which is deliberate
+and occasionally confusing. The distribution's `ansible` package ships
+around fifty of them inside `/usr/lib/python3/dist-packages`, found
+through `sys.path`; the image additionally installs three from Galaxy
+into `/usr/share/ansible/collections`, because molecule runs from a
+virtualenv with an ansible-core of its own that cannot see the first
+set.
+
+`ansible.cfg` drops `/usr/share/ansible/collections` from its search
+path so the repo's own runs see one copy of each rather than two -
+otherwise every invocation warned three times that a second copy had
+been found. The copy actually used was always the distribution's, so
+the Galaxy ones were only ever noise outside molecule. Molecule is
+unaffected: it generates its own `ansible.cfg` and never reads the
+repo's.
+
 == Layers
 
 [cols="1,3,1", options="header,autowidth"]
