@@ -13,6 +13,13 @@ cloud:
       d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d
     path: /var/www/nextcloud
     cron_minute: "*/5"
+  ocr:
+    languages:
+      - eng
+      - deu
+  redis:
+    dbindex: 1
+    timeout: 1.5
   php:
     memory_limit: 512M
     opcache:

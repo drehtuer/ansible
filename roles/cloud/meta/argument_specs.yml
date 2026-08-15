@@ -17,6 +17,14 @@ argument_specs:
           - Deliberately declared without suboptions. Listing them
             would make validation reject every other key the http role
             puts in this dict, which fails the role outright.
+      database:
+        type: dict
+        required: true
+        description:
+          - Shared with the database role, only database.redis.ip4 and
+            database.redis.port are read here. Deliberately declared
+            without suboptions - listing them would make validation
+            reject every other key the database role itself requires.
       cloud:
         type: dict
         required: true
@@ -78,6 +86,33 @@ argument_specs:
                 type: str
                 required: true
                 description: Cron schedule for the background job.
+          ocr:
+            type: dict
+            required: true
+            description: OCRmyPDF settings.
+            options:
+              languages:
+                type: list
+                elements: str
+                required: true
+                description:
+                  - Tesseract language codes to install training data
+                    for, e.g. eng, deu. One apt package each.
+          redis:
+            type: dict
+            required: true
+            description:
+              - Nextcloud's use of the shared Redis instance. The host
+                and port it connects to come from database.redis.
+            options:
+              dbindex:
+                type: int
+                required: true
+                description: Logical Redis database to use.
+              timeout:
+                type: float
+                required: true
+                description: Connection timeout in seconds.
           php:
             type: dict
             required: true

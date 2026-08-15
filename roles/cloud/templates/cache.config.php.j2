@@ -1,0 +1,25 @@
+<?php
+{{ ansible_managed | comment }}
+# An additional config file, not config.php. Nextcloud reads every
+# config/*.config.php after config.php and only ever writes back to
+# config.php itself, so these settings survive the (still manual, see
+# doc/TODO.adoc) web installer and any occ run without this role
+# having to own the whole configuration.
+#
+# APCu is the local cache; Redis is the shared instance from the
+# database role and provides the distributed cache and the file
+# locking backend. Nextcloud reports "no memory cache configured"
+# until memcache.local is set.
+$CONFIG = [
+    'memcache.local' => '\OC\Memcache\APCu',
+    'memcache.distributed' => '\OC\Memcache\Redis',
+    'memcache.locking' => '\OC\Memcache\Redis',
+    'redis' => [
+        'host' => '{{ database.redis.ip4 }}',
+        'port' => {{ database.redis.port }},
+        // A logical database of its own, so flushing Nextcloud's
+        // cache cannot take RSpamd's data with it.
+        'dbindex' => {{ cloud.redis.dbindex }},
+        'timeout' => {{ cloud.redis.timeout }},
+    ],
+];

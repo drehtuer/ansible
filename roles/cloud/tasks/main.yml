@@ -1,7 +1,9 @@
 - name: Install Nextcloud and dependencies
   ansible.builtin.apt:
     install_recommends: false
-    name:
+    name: "{{ cloud_packages + cloud_ocr_packages }}"
+  vars:
+    cloud_packages:
       - php-mysql
       - php-zip
       - php-dom
@@ -12,10 +14,27 @@
       - php-imagick
       - php-intl
       - php-gmp
+      # The two cache backends configured in cache.config.php below.
+      # Nextcloud lists apcu as a recommended module and reports it as
+      # missing without this.
+      - php-apcu
+      - php-redis
       - unzip
       - bzip2
       - curl
       - imagemagick
+      # Nextcloud looks for the OCRmyPDF CLI on $PATH.
+      - ocrmypdf
+    # Tesseract ships its training data one package per language and
+    # ocrmypdf only depends on English, so every other language has to
+    # be installed explicitly.
+    cloud_ocr_packages: >-
+      {{ cloud.ocr.languages
+         | map('regex_replace', '^', 'tesseract-ocr-') | list }}
+  notify:
+    # php-apcu and php-redis are only loaded once the running workers
+    # are replaced.
+    - Reload PHP-FPM
 - name: Detect PHP version
   ansible.builtin.command:
     cmd: php -r "echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;"
@@ -101,12 +120,28 @@
 - name: Nextcloud PHP configuration
   ansible.builtin.template:
     src: templates/php-nextcloud.ini.j2
-    dest: "/etc/php/{{ cloud_php_version }}/fpm/conf.d/99-nextcloud.ini"
+    dest: "/etc/php/{{ cloud_php_version }}/{{ item }}/conf.d/99-nextcloud.ini"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - fpm
+    # The CLI SAPI gets the same drop-in: the background job and occ
+    # run through it, and APCu is off there by default, so without it
+    # the local cache configured below exists for web requests only.
+    - cli
   notify:
     - Reload PHP-FPM
+- name: Nextcloud cache configuration
+  # A config/*.config.php drop-in rather than config.php, which is
+  # written by Nextcloud itself and is not managed here.
+  ansible.builtin.template:
+    src: templates/cache.config.php.j2
+    dest: "{{ cloud.nextcloud.path }}/config/cache.config.php"
+    owner: www-data
+    group: www-data
+    mode: "0640"
+    validate: php -l %s
 - name: Nextcloud nginx upstream
   ansible.builtin.template:
     src: templates/nextcloud-fpm.conf.j2
