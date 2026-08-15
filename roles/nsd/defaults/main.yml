@@ -13,6 +13,26 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     - 2a01:4f8:0:1::5ddc:2
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
+  # Shared secret authenticating the zone transfer, so a secondary can
+  # verify the zone it received really came from this host and was not
+  # altered in transit (TSIG, RFC 8945). This is *not* DNSSEC: TSIG
+  # authenticates the transfer between these two servers and is not
+  # stored in the zone, whereas DNSSEC signs the zone data itself so
+  # that any validating resolver can check an answer. Neither
+  # substitutes for the other.
+  #
+  # An empty secret disables it and falls back to unauthenticated
+  # transfers restricted by source address alone, which is what
+  # Hetzner's own example configuration shows. Left empty here so the
+  # role does not require a secret from a host that has no zones.
+  #
+  # hmac-sha256 because it is the strongest of the three algorithms
+  # Hetzner accepts - the other two are hmac-md5 and hmac-sha1, both
+  # long broken.
+  tsig:
+    name: transfer
+    algorithm: hmac-sha256
+    secret: ""
   # Response rate limiting, against reflection abuse. NSD cannot be an
   # open resolver, but a spoofed source address can still make it send
   # a reply to a victim; this caps how often the same answer goes to

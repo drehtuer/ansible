@@ -6,6 +6,13 @@ nsd:
     - "{{ ip_v4 }}"
   secondaries:
     - 192.0.2.53
+  # Throwaway secret: the lab has no real secondaries, and this exists
+  # so the TSIG path is the one actually exercised in testing rather
+  # than the NOKEY fallback.
+  tsig:
+    name: transfer
+    algorithm: hmac-sha256
+    secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
   rrl:
     size: 1000000
     ratelimit: 200

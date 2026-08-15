@@ -12,6 +12,27 @@
     owner: root
     group: nsd
     mode: "0750"
+- name: Create configuration directory
+  ansible.builtin.file:
+    path: /etc/nsd/nsd.conf.d
+    state: directory
+    owner: root
+    group: nsd
+    mode: "0750"
+- name: Configure transfer key
+  # no_log because the task arguments would otherwise carry the shared
+  # secret into the log and into --diff output. It is in a file of its
+  # own for the same reason, so that nsd.conf itself stays diffable.
+  ansible.builtin.template:
+    src: templates/tsig.conf.j2
+    dest: /etc/nsd/nsd.conf.d/tsig.conf
+    owner: root
+    group: nsd
+    mode: "0640"
+  no_log: true
+  when: nsd.tsig.secret | length > 0
+  notify:
+    - Restart nsd
 - name: Zone files
   ansible.builtin.template:
     src: templates/zone.j2

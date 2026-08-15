@@ -58,6 +58,14 @@ remote-control:
   control-enable: yes
   control-interface: /run/nsd/nsd.sock
 
+{% if nsd.tsig.secret %}
+# The shared secret authenticating zone transfers, in its own file so
+# that it stays out of a --diff of this one. Included before the zones
+# below, which reference the key by name.
+include: "/etc/nsd/nsd.conf.d/tsig.conf"
+
+{% endif %}
+{% set xfr_key = nsd.tsig.name if nsd.tsig.secret else 'NOKEY' %}
 {% for zone in nsd.zones %}
 zone:
   name: "{{ zone.name }}"
@@ -68,15 +76,37 @@ zone:
   # the SOA refresh interval; provide-xfr is what permits the transfer
   # at all, and names exactly those addresses - an unrestricted
   # provide-xfr hands the entire zone to anyone who asks for it.
+  #
+{% if nsd.tsig.secret %}
+  # Both also require the TSIG key above, so a transfer is refused
+  # unless the peer proves it holds the shared secret, and the zone the
+  # secondary receives is signed in a way it can verify. The source
+  # address restriction stays as well: a spoofed address alone no
+  # longer suffices, and neither does a stolen key from elsewhere.
+  #
+  # The NOTIFY is signed too. If a secondary were to reject a signed
+  # NOTIFY it would simply fall back to polling on the SOA refresh
+  # interval, so the failure mode is slower propagation rather than a
+  # stale zone.
+{% else %}
+  # NOKEY: transfers are restricted by source address only, which a
+  # spoofed packet can defeat and which gives the secondary no way to
+  # tell whether what it received was altered on the way. Set
+  # nsd.tsig.secret to require a shared secret instead.
+{% endif %}
 {% for peer in nsd.secondaries %}
-  notify: {{ peer }} NOKEY
+  notify: {{ peer }} {{ xfr_key }}
 {% endfor %}
 {% for peer in nsd.secondaries %}
-  provide-xfr: {{ peer }} NOKEY
+  provide-xfr: {{ peer }} {{ xfr_key }}
 {% endfor %}
-  # Everyone else, explicitly. NSD already refuses transfers it was
-  # not told to provide, so this is belt and braces - but it makes the
-  # intent unmissable to whoever reads the file next.
-  provide-xfr: 0.0.0.0/0 BLOCKED
-  provide-xfr: ::0/0 BLOCKED
+  # Everyone else is refused by default, and there is deliberately no
+  # catch-all `provide-xfr: 0.0.0.0/0 BLOCKED` to say so explicitly.
+  # That looks like harmless belt and braces and is not: per
+  # nsd.conf(5), "BLOCKED supersedes other entries, other entries are
+  # scanned for a match afterwards" - so a catch-all BLOCKED blocks the
+  # secondaries listed above as well and no transfer ever succeeds.
+  # Verified both ways in the lab: with it, even the correct key and a
+  # permitted address are refused; without it, an unlisted address is
+  # still refused.
 {% endfor %}

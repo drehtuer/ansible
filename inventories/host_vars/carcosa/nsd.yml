@@ -23,6 +23,22 @@ nsd:
     - 2a01:4f8:0:1::5ddc:2
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
+  # Shared secret authenticating the AXFR to Hetzner's secondaries, so
+  # they can verify the zone came from here unaltered. The same name,
+  # algorithm and secret must be entered in Hetzner's DNS console for
+  # the secondary zone; a mismatch shows up as a refused transfer and a
+  # secondary that keeps serving its previous copy.
+  tsig:
+    name: hetzner-secondary
+    algorithm: hmac-sha256
+    secret: !vault |
+        $ANSIBLE_VAULT;1.1;AES256
+        32376362383262663463363139623062346434393734343731323337626366323164346232666362
+        3761646462623631326431306638613565633266623434340a386161343537333038643262316139
+        38633036343265373635323439326434386361303835623039623730643535316235306530373937
+        3562336238333138340a376531646238353632633037393034373665386537366266666163303331
+        35343534643865643066626233316664633535363036666334643163323166626566323261326264
+        6265366233383336633936623137646233386164623032393236
   rrl:
     size: 1000000
     ratelimit: 200
