@@ -49,8 +49,13 @@
     # means the host lines would be silently dropped, which is worth a
     # hard failure. Both inventory addresses are listed so that both
     # branches render here.
-    ansible_all_ipv4_addresses: "{{ [ip_v4] }}"
-    ansible_all_ipv6_addresses: "{{ [ip_v6] }}"
+    #
+    # Supplied under `ansible_facts` rather than as top-level
+    # `ansible_*` names: those are injected by INJECT_FACTS_AS_VARS,
+    # which ansible-core deprecates and will default to false.
+    ansible_facts:
+      all_ipv4_addresses: "{{ [ip_v4] }}"
+      all_ipv6_addresses: "{{ [ip_v6] }}"
     site:
       name: default
       subdomains:
