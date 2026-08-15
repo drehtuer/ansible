@@ -5,7 +5,7 @@ firewall:
   docker:
     # carcosa runs Docker, so the DOCKER-USER chain is managed.
     enabled: true
-    wan_interface: "{{ ansible_default_ipv4.interface }}"
+    wan_interface: "{{ ansible_facts['default_ipv4'].interface }}"
     # No containers publish ports yet. Anything forwarded in from the
     # internet is dropped until a port is listed here.
     published:

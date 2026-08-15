@@ -2,7 +2,7 @@
 # only one that refreshes the apt cache. See doc/TODO.adoc.
 #
 # gather_facts stays on (the default) here: firewall.docker.wan_interface
-# defaults to ansible_default_ipv4.interface.
+# defaults to ansible_facts['default_ipv4'].interface.
 - name: Firewall role
   hosts: all
   roles:

@@ -16,12 +16,12 @@
 # address, and getting the order wrong leaves them with the short name.
 
 127.0.0.1	localhost.localdomain localhost
-{% if ip_v4 in ansible_all_ipv4_addresses %}
+{% if ip_v4 in ansible_facts['all_ipv4_addresses'] %}
 {{ ip_v4 }}	{{ hostname_fqdn }} {{ hostname }}
 {% endif %}
 
 ::1	ip6-localhost ip6-loopback
-{% if ip_v6 in ansible_all_ipv6_addresses %}
+{% if ip_v6 in ansible_facts['all_ipv6_addresses'] %}
 {{ ip_v6 }}	{{ hostname_fqdn }} {{ hostname }}
 {% endif %}
 fe00::0	ip6-localnet

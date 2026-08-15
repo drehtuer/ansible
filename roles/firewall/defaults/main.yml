@@ -14,7 +14,7 @@ firewall:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Deliberately no fallback: guessing wrong means the DROP below
     # matches nothing and every published container port is exposed,
     # which is silent. Failing to template is the safer error.
-    wan_interface: "{{ ansible_default_ipv4.interface }}"
+    wan_interface: "{{ ansible_facts['default_ipv4'].interface }}"
     # Container ports that may be reached from wan_interface.
     # Everything else forwarded in from outside is dropped.
     published:
