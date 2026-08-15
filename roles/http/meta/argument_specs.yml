@@ -10,7 +10,15 @@ argument_specs:
       domain:
         type: str
         required: true
-        description: Primary domain, used as the default entry in http.domains.
+        description: Primary domain, the first entry in http.domains.
+      domain_aliases:
+        type: list
+        elements: str
+        required: true
+        description:
+          - Secondary domains this host also serves. Appended to
+            http.domains by default, so they reach the certificate and
+            every vhost. The mail role reads the same fact.
       hostname_fqdn:
         type: str
         required: true

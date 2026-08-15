@@ -1,12 +1,14 @@
 http:
   port_http: 80
   port_https: 443
-  # Adding the second domain here is all that is needed to extend the
-  # certificate and every vhost to it. Deliberately not done yet -
-  # drehtuer.de is migrating to carcosa.drehtuer.net first, see
-  # doc/TODO.adoc.
-  domains:
-    - "{{ domain }}"
+  # Derived from the host facts in inventories/machines.yml: the
+  # primary `domain` plus every entry in `domain_aliases`. Adding a
+  # domain there extends the certificate, every static vhost, the
+  # cloud and spam vhosts and Postfix's virtual aliases at once.
+  # Every name has to resolve to this host before the next run, or
+  # certbot's challenge fails for it and takes the whole certificate
+  # with it. See doc/STATUS.adoc.
+  domains: "{{ [domain] + domain_aliases }}"
   letsencrypt:
     email: !vault |
       $ANSIBLE_VAULT;1.1;AES256

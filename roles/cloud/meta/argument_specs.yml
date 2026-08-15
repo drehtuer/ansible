@@ -13,7 +13,8 @@ argument_specs:
         description:
           - Shared HTTP settings, owned by the http role. This vhost
             reads `http.port_https` and `http.domains`, serving
-            cloud.<domain> for each.
+            cloud.<domain> for each, and `http.sites` to work out
+            which static vhosts also expose /nextcloud.
           - Deliberately declared without suboptions. Listing them
             would make validation reject every other key the http role
             puts in this dict, which fails the role outright.
