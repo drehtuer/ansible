@@ -1,4 +1,8 @@
-{{ ansible_managed | comment }}
+{# PHP's ini parser takes `;` comments, not `#`. The default
+   decoration is fatal to php-fpm's pool parser: it rejects the
+   file at line 1 with "value is NULL for a ZEND_INI_PARSER_ENTRY"
+   and the whole service then fails to start. #}
+{{ ansible_managed | comment(decoration='; ') }}
 ; Dedicated pool for Nextcloud. The name must not be `www`, which is
 ; the pool the distribution already ships - two pools of one name is a
 ; php-fpm startup error.

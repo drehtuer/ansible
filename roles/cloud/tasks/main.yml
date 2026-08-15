@@ -132,6 +132,16 @@
     - cli
   notify:
     - Reload PHP-FPM
+- name: Validate PHP-FPM configuration
+  # Same stance as `nginx -t`, `sshd -t` and `iptables-restore --test`
+  # elsewhere in this repo. `template` has no validator of its own, and
+  # the reload handler reports success even when the service then dies,
+  # so a malformed pool file otherwise leaves the whole run green with
+  # php-fpm down and every PHP vhost answering 502.
+  ansible.builtin.command:
+    cmd: "php-fpm{{ cloud_php_version }} -t"
+  changed_when: false
+
 - name: Nextcloud trusted domains
   # Same config/*.config.php mechanism as the cache settings below.
   ansible.builtin.template:
