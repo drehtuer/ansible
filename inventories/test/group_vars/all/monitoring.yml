@@ -3,7 +3,9 @@
 # anything a template reads has to be defined here or the render
 # fails.
 monitoring:
+  subdomain: status
   prometheus:
+    path: /prometheus/
     listen_address: 127.0.0.1
     port: 9090
     scrape_interval: 15s
@@ -13,6 +15,7 @@ monitoring:
     config_file: /etc/prometheus/prometheus.yml
     rules_dir: /etc/prometheus/rules
   alertmanager:
+    path: /alerts/
     listen_address: 127.0.0.1
     port: 9093
     config_file: /etc/prometheus/alertmanager.yml
@@ -45,7 +48,6 @@ monitoring:
     uid: 472
     listen_address: 127.0.0.1
     port: 3000
-    subdomain: status
     admin_user: admin
     admin_password: test-grafana-admin-password
     datasource_uid: prometheus

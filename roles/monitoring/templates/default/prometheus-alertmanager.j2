@@ -9,8 +9,10 @@
 # a port on every interface, including both public addresses, for a
 # cluster of one. Emptying it disables HA mode outright.
 {% set a = monitoring.alertmanager %}
+{% set url = 'https://' ~ monitoring.subdomain ~ '.' ~ domain ~ a.path %}
 {% set args = [
      '--web.listen-address=' ~ a.listen_address ~ ':' ~ a.port,
+     '--web.external-url=' ~ url,
      '--cluster.listen-address=',
    ] %}
 ARGS="{{ args | join(' ') }}"

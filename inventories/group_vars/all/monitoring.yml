@@ -6,7 +6,9 @@
 # it, so this file has to repeat every key the role reads - not only
 # the one that differs. See doc/STATUS.adoc.
 monitoring:
+  subdomain: status
   prometheus:
+    path: /prometheus/
     # Both servers listen on every interface out of the box; these
     # bindings are what keep them off the public addresses, and there
     # is no firewall rule for them either.
@@ -21,6 +23,7 @@ monitoring:
     config_file: /etc/prometheus/prometheus.yml
     rules_dir: /etc/prometheus/rules
   alertmanager:
+    path: /alerts/
     listen_address: 127.0.0.1
     port: 9093
     config_file: /etc/prometheus/alertmanager.yml
@@ -54,9 +57,6 @@ monitoring:
     uid: 472
     listen_address: 127.0.0.1
     port: 3000
-    # Also present in http.letsencrypt.subdomains, which nothing
-    # enforces - the same standing trap as spam and f2b.
-    subdomain: status
     admin_user: admin
     # The nginx basic-auth credential in front of this is a separate
     # secret, vault-encrypted at

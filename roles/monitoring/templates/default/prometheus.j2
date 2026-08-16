@@ -11,8 +11,10 @@
 # EnvironmentFile does no variable expansion and line continuations
 # are not worth relying on, so this is deliberately one long line.
 {% set p = monitoring.prometheus %}
+{% set url = 'https://' ~ monitoring.subdomain ~ '.' ~ domain ~ p.path %}
 {% set args = [
      '--web.listen-address=' ~ p.listen_address ~ ':' ~ p.port,
+     '--web.external-url=' ~ url,
      '--storage.tsdb.retention.time=' ~ p.retention_time,
      '--storage.tsdb.retention.size=' ~ p.retention_size,
    ] %}
