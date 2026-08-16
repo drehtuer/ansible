@@ -38,7 +38,7 @@ userdb {
 }
 
 # Logging
-log_path = /var/log/dovecot.log
+log_path = {{ imap.conf.logfile }}
 
 # Mailbox
 mail_location = maildir:{{ imap.conf.maildir }}

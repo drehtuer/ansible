@@ -4,7 +4,26 @@ imap:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Read by maildir-import as well, so that a migration cannot put
     # mail somewhere Dovecot is not looking.
     maildir: ~/.mail
+    # Takes Dovecot off syslog and onto a file of its own. Read by the
+    # logrotate template as well, so rotation cannot end up pointed at
+    # a file Dovecot is not writing - and note that roles/fail2ban's
+    # `dovecot` jail reads this same path, set independently in its own
+    # `logpath`. Three places, one value here for two of them.
+    logfile: /var/log/dovecot.log
     ssl:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
       ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
+  # Rotation for the log above. Dovecot's own package ships none,
+  # because out of the box it logs to syslog and has nothing of its own
+  # to rotate - diverting it is this role's decision, so rotating it is
+  # this role's job.
+  logrotate:
+    # Weekly rather than daily, and kept for half a year: this log is
+    # low-volume (roughly 1 MB a week on the production host) and its
+    # value is in looking *back*. The brute-force campaign that made
+    # the point ran from March to August, so a month of retention would
+    # have thrown away most of the evidence while saving nothing worth
+    # saving.
+    frequency: weekly
+    rotate: 26

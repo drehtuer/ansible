@@ -47,6 +47,14 @@ argument_specs:
                     maildir-import tool, so that importing an account
                     from another server cannot write it somewhere
                     Dovecot does not read.
+              logfile:
+                type: str
+                required: true
+                description:
+                  - Dovecot's `log_path`, which takes it off syslog and
+                    onto a file of its own. Read by the logrotate
+                    template too, so rotation cannot be pointed at a
+                    file Dovecot is not writing.
               ssl:
                 type: dict
                 required: true
@@ -64,6 +72,24 @@ argument_specs:
                     type: str
                     required: true
                     description: CA chain path.
+          logrotate:
+            type: dict
+            required: true
+            description:
+              - Rotation for `imap.conf.logfile`. Dovecot's package
+                ships none, because by default it logs to syslog and
+                has nothing of its own to rotate.
+            options:
+              frequency:
+                type: str
+                required: true
+                description:
+                  - A logrotate interval keyword, e.g. `daily` or
+                    `weekly`, emitted verbatim into the config.
+              rotate:
+                type: int
+                required: true
+                description: How many rotated files to keep.
       spam:
         type: dict
         required: true

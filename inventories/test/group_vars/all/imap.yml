@@ -1,7 +1,11 @@
 imap:
   conf:
     maildir: ~/.mail
+    logfile: /var/log/dovecot.log
     ssl:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
       ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
+  logrotate:
+    frequency: weekly
+    rotate: 26
