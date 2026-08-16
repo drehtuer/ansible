@@ -1,0 +1,34 @@
+{{ ansible_managed | comment }}
+#
+# The Client Push daemon that ships with Nextcloud's notify_push app.
+#
+# WHAT IT REPLACES. Without it, every connected client polls Nextcloud
+# every 30 seconds asking whether anything changed - which is most of
+# the idle load an otherwise quiet instance carries, and which means a
+# Talk call can ring up to half a minute late. With it, clients hold one
+# WebSocket open and Nextcloud pushes.
+#
+# It reads Nextcloud's own config.php for the database and Redis
+# details rather than being configured separately, so there is nothing
+# here to keep in step with roles/cloud - which is the point.
+[Unit]
+Description=Nextcloud Client Push (notify_push)
+After=network.target redis-server.service mariadb.service
+Wants=redis-server.service mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Environment=PORT={{ cloud.push.port }}
+# Bound to loopback: nginx terminates TLS and proxies /push/ in. The
+# firewall would refuse it from outside anyway, but there is no reason
+# for it to listen there in the first place.
+Environment=BIND=127.0.0.1
+Environment=NEXTCLOUD_URL=https://cloud.{{ domain }}
+ExecStart={{ cloud.nextcloud.path }}/apps/notify_push/bin/{{ cloud_push_arch }}/notify_push {{ cloud.nextcloud.path }}/config/config.php
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -144,6 +144,20 @@ argument_specs:
                     nothing packaged rotates it either. Nextcloud keeps
                     one previous file, so the real ceiling is twice
                     this.
+          push:
+            type: dict
+            required: true
+            description:
+              - Client Push (the notify_push app). Replaces 30-second
+                polling by every connected client with one WebSocket
+                that Nextcloud pushes over.
+            options:
+              port:
+                type: int
+                required: true
+                description:
+                  - Loopback port the daemon listens on; nginx proxies
+                    /push/ to it.
           ocr:
             type: dict
             required: true

@@ -91,6 +91,26 @@ server {
         }
     }
 
+    # Client Push. `occ notify_push:setup` expects this exact path on
+    # the Nextcloud vhost, and self-tests it - so this is not free
+    # choice. The trailing slash on proxy_pass strips /push before
+    # forwarding, which is what the daemon expects.
+    location ^~ /push/ {
+        proxy_pass http://127.0.0.1:{{ cloud.push.port }}/;
+        proxy_http_version 1.1;
+        # Clients hold this open as a WebSocket; without the upgrade
+        # headers they fall back to polling and the app reports the
+        # push service as unreachable.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # An idle client holds the connection open indefinitely.
+        proxy_read_timeout 3600s;
+    }
+
     location = /robots.txt {
         allow all;
         log_not_found off;
