@@ -1,0 +1,29 @@
+<?php
+{{ ansible_managed | comment }}
+# An additional config file, not config.php - same mechanism as the
+# cache and domains drop-ins beside it.
+#
+# Nextcloud writes its log to a file inside the *data* directory rather
+# than /var/log, so nothing packaged rotates it and neither did this
+# repo. On carcosa that went unnoticed for over a year: 94 MB in one
+# file, oldest entry 2025-08-03, with `log_rotate_size` unset - and
+# unset means zero, which disables rotation entirely rather than
+# choosing a default.
+#
+# Nextcloud's own rotation is used here in preference to a logrotate
+# drop-in. It needs no external coordination over a file the web server
+# owns and holds open, and it is the mechanism upstream documents. The
+# trade to know about: Nextcloud keeps exactly ONE previous file
+# (nextcloud.log.1), so total retention is two generations - at the
+# size below, roughly two years at this host's current rate. logrotate
+# would give arbitrary retention instead, and is the thing to switch to
+# if that ever matters more than the simplicity.
+#
+# Rotation happens lazily: Nextcloud checks the size as it writes, so
+# an oversized log is renamed on the next log line rather than at any
+# scheduled time.
+$CONFIG = [
+    // Bytes. Zero or unset disables rotation altogether, which is the
+    // state this file exists to correct.
+    'log_rotate_size' => {{ cloud.nextcloud.log_rotate_size }},
+];

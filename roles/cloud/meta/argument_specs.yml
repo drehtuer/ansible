@@ -87,6 +87,17 @@ argument_specs:
                 type: str
                 required: true
                 description: Cron schedule for the background job.
+              log_rotate_size:
+                type: int
+                required: true
+                description:
+                  - Bytes before Nextcloud rotates its own log. Unset
+                    or zero disables rotation entirely, which is the
+                    upstream default and leaves nextcloud.log growing
+                    without bound - it lives in the data directory, so
+                    nothing packaged rotates it either. Nextcloud keeps
+                    one previous file, so the real ceiling is twice
+                    this.
           ocr:
             type: dict
             required: true

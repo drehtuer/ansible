@@ -15,6 +15,16 @@ cloud:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     path: /var/www/nextcloud
     # Nextcloud's own recommendation for the background job.
     cron_minute: "*/5"
+    # Bytes before nextcloud.log is rotated. Upstream's documented
+    # value; unset - the state this replaces - means zero, which
+    # disables rotation rather than picking a default, and is why the
+    # log on carcosa reached 94 MB spanning over a year.
+    #
+    # Nextcloud keeps exactly one previous file, so the real ceiling is
+    # twice this. That is deliberate at 100 MB: the log runs about
+    # 95 MB a year here, so two generations is roughly two years of
+    # history for 200 MB of disk.
+    log_rotate_size: 104857600
   ocr:
     # Tesseract training data for OCRmyPDF, one package per language.
     languages:
