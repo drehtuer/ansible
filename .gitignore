@@ -2,6 +2,9 @@
 /log/
 /vault/
 /roles/sshd/keys/
+# Plaintext DNSSEC keys. Only the vault-encrypted copies in
+# roles/nsd/files/dnssec/ belong in git.
+/roles/nsd/keys/
 # Console/rescue credentials for the testlab hosts, kept out of the
 # repo for the same reason as /vault/. Only the password *hashes*
 # belong in git (vaulted, in inventories/group_vars/testlab/users.yml

@@ -69,7 +69,15 @@ include: "/etc/nsd/nsd.conf.d/tsig.conf"
 {% set xfr_key = zone.tsig.name if zone.tsig.secret else 'NOKEY' %}
 zone:
   name: "{{ zone.name }}"
+{% if nsd.dnssec.enabled %}
+  # The signed copy, produced by nsd-sign-zone from the file beside it.
+  # nsd serves whatever this names and does no signing of its own, so
+  # pointing it here is the moment signing takes effect - which is why
+  # the role signs before it writes this file, never after.
+  zonefile: "{{ zone.name }}.zone.signed"
+{% else %}
   zonefile: "{{ zone.name }}.zone"
+{% endif %}
 
   # Hetzner's secondaries pull the zone from here and are told when it
   # changes. NOTIFY makes them fetch promptly rather than waiting out

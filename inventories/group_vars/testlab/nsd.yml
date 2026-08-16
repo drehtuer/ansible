@@ -26,6 +26,18 @@ nsd:
     size: 1000000
     ratelimit: 200
     whitelist_ratelimit: 2000
+  propagation:
+    check: true
+    retries: 10
+    delay: 6
+  dnssec:
+    enabled: false
+    key_dir: /etc/nsd/keys
+    signature_validity: 2592000
+    resign:
+      weekday: "0"
+      hour: "4"
+      minute: "20"
   zones:
     - name: "{{ domain }}"
       ttl: 3600

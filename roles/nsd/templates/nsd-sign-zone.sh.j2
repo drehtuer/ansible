@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Signs one zone and loads the result.
+#
+#   nsd-sign-zone drehtuer.net
+#
+# Run by roles/nsd when a zone's contents change, and by the cron job
+# the same role installs. The cron job is not optional garnish: DNSSEC
+# signatures *expire*, and a zone whose signatures have run out is not
+# treated as unsigned, it is treated as **bogus** - validating
+# resolvers discard the answers entirely rather than falling back. With
+# DMARC at p=reject on these domains that takes mail and web down
+# together, so the periodic re-sign is the part that keeps the zone
+# alive, not the initial signing.
+#
+# WHY THIS SCRIPT COMPUTES THE SERIAL ITSELF. It has to, and that is
+# not obvious - dnssec-signzone has a `-N` flag that looks like it
+# handles exactly this, and none of its modes work here.
+#
+# Every `-N` mode derives the output serial from the *input* file, and
+# the input file is generated from the inventory and does not change
+# between re-signings. So `increment` produces source+1 every time, and
+# `date` produces today's YYYYMMDDNN every time: run the signer three
+# times and the serial is identical on all three. Measured, not
+# assumed. `unixtime` is worse than useless here for a second reason -
+# this repo's serials are already YYYYMMDDNN, around 2026081504, while
+# a unix timestamp in 2026 is around 1786000000, so it would *lower*
+# the serial and dnssec-signzone silently falls back to incrementing.
+#
+# A serial that does not rise is precisely the failure that matters:
+# the secondaries compare serials and nothing else, so they never
+# collect the refreshed signatures, and roughly a month later their
+# copies expire into **bogus** while this host looks perfectly healthy.
+# The whole point of re-signing is defeated by it.
+#
+# So the serial is computed from what is already being served, in the
+# YYYYMMDDNN convention the inventory uses, and substituted into a copy
+# of the source before signing with `-N keep`. `nsd.zones[].serial`
+# from the inventory is therefore the serial of the unsigned source
+# only; the served value belongs to this script. The role's propagation
+# check is unaffected - it compares this host against its secondaries,
+# never against the inventory.
+
+# NSEC rather than NSEC3. NSEC3 exists to stop zone enumeration and is
+# poor at it; RFC 9276 advises against reaching for it by default, and
+# these zones hold nothing that a determined enumerator could not
+# already get from certificate transparency logs.
+
+set -euo pipefail
+
+ZONE="${1:-}"
+ZONE_DIR=/etc/nsd/zones
+KEY_DIR={{ nsd.dnssec.key_dir }}
+# How long the generated signatures remain valid. The cron job re-signs
+# far more often than this; the gap between the two is the margin for a
+# missed run.
+VALIDITY="{{ nsd.dnssec.signature_validity }}"
+
+if [ -z "${ZONE}" ]; then
+  echo "usage: ${0##*/} <zone>" >&2
+  exit 2
+fi
+
+IN="${ZONE_DIR}/${ZONE}.zone"
+OUT="${ZONE_DIR}/${ZONE}.zone.signed"
+
+[ -r "${IN}" ] || { echo "${0##*/}: no such zone file: ${IN}" >&2; exit 1; }
+
+# Signed into a temporary file and moved into place only once it has
+# been checked. A half-written or unparseable .signed file is not a
+# degraded zone, it is a zone nsd refuses to load at all - and the
+# secondaries would then age out their copies and the domain would
+# disappear. The move is atomic; the signing is not.
+# The serial already in effect: from the signed zone when there is one,
+# otherwise from the source. Both spell it the same way - a bare number
+# on a line ending "; serial" - so one parser covers both.
+read_serial() {
+  awk '/;[[:space:]]*serial/ { for (i = 1; i <= NF; i++)
+                                 if ($i ~ /^[0-9]+$/) { print $i; exit } }' "${1}"
+}
+
+CURRENT="$(read_serial "${OUT}" 2>/dev/null || true)"
+[ -n "${CURRENT}" ] || CURRENT="$(read_serial "${IN}")"
+[ -n "${CURRENT}" ] || { echo "${0##*/}: no serial in ${IN}" >&2; exit 1; }
+
+# YYYYMMDDNN, matching the inventory's convention. Today's date wins
+# when it is ahead; otherwise just add one, which is what carries the
+# NN counter through repeated signings on the same day and over the
+# 99-per-day boundary.
+TODAY="$(date -u +%Y%m%d)00"
+if [ "${TODAY}" -gt "${CURRENT}" ]; then
+  NEXT="${TODAY}"
+else
+  NEXT="$((CURRENT + 1))"
+fi
+
+# Signed into a temporary file and moved into place only once it has
+# been checked. A half-written or unparseable .signed file is not a
+# degraded zone, it is a zone nsd refuses to load at all - and the
+# secondaries would then age out their copies and the domain would
+# disappear. The move is atomic; the signing is not.
+TMP="$(mktemp "${OUT}.XXXXXX")"
+SRC="$(mktemp "${IN}.XXXXXX")"
+trap 'rm -f "${TMP}" "${SRC}"' EXIT
+
+# The source with the computed serial substituted in. Only the first
+# such line is touched, which is the SOA's.
+awk -v s="${NEXT}" '
+  /;[[:space:]]*serial/ && !done { sub(/[0-9]+/, s); done = 1 }
+  { print }
+' "${IN}" > "${SRC}"
+
+# -S finds the keys for this zone in KEY_DIR by itself and publishes
+# the matching DNSKEY records, so the key tags never have to be named
+# here - which matters because a key rollover changes them.
+#
+# -a verifies the signatures it just generated rather than trusting
+# that it wrote them correctly.
+#
+# -N keep, because the serial was already decided above.
+dnssec-signzone \
+  -S \
+  -K "${KEY_DIR}" \
+  -o "${ZONE}" \
+  -N keep \
+  -e "+${VALIDITY}" \
+  -a \
+  -f "${TMP}" \
+  "${SRC}" > /dev/null
+
+# The same check the role runs on the unsigned file. Signing is exactly
+# where a zone can become unloadable without anything else noticing.
+nsd-checkzone "${ZONE}" "${TMP}" > /dev/null
+
+chown root:nsd "${TMP}"
+chmod 0640 "${TMP}"
+mv "${TMP}" "${OUT}"
+trap - EXIT
+
+# Reload just this zone. nsd re-reads it from disk and notifies the
+# secondaries, which then see the new serial and transfer.
+nsd-control reload "${ZONE}" > /dev/null
+
+echo "${ZONE}: signed, serial ${CURRENT} -> ${NEXT}"

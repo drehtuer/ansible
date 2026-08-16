@@ -3,6 +3,15 @@
     install_recommends: false
     name:
       - nsd
+      # `dig`, for the serial checks at the end of this role. Present
+      # on the current host already, but nothing declared it, so a
+      # from-scratch provision would only find out at the check.
+      - bind9-dnsutils
+      # dnssec-keygen and dnssec-signzone, for the signing script.
+      # bind9-dnsutils is a different package and does not carry them:
+      # deploying without this got as far as running the script and
+      # failing with "dnssec-signzone: command not found".
+      - bind9-utils
   notify:
     - Restart nsd
 - name: Create zone directory
@@ -35,20 +44,140 @@
   when: nsd.zones | selectattr('tsig.secret') | list | length > 0
   notify:
     - Restart nsd
+- name: Read the serial being served before any change
+  # Taken from the running server rather than from the file, because
+  # what the secondaries compare against is what this host answers
+  # with. Failure is expected and ignored on a host where nsd is not
+  # running yet, or for a zone being added for the first time - both
+  # give an empty result, which the guard below treats as "nothing to
+  # compare against".
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +norecurse +time=3 +tries=1
+      SOA {{ item }} @{{ nsd.listen[0] }}
+  register: nsd_serial_before
+  changed_when: false
+  failed_when: false
+  # Reads nothing but the running server, so it is safe under --check -
+  # and running it there is the point: a forgotten serial bump is then
+  # caught by `invoke check-drift`, before it is deployed.
+  check_mode: false
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: nsd.listen | length > 0
+
 - name: Zone files
+  # Looped over zone *names*, with the zone itself looked up in `vars`.
+  # Ansible prints the whole `item` when a looped task fails, and a
+  # zone carries its TSIG secret - so looping over the zones directly
+  # puts the transfer key for every zone into the output of any
+  # failure here. Found the hard way: a failing task in this role did
+  # exactly that.
   ansible.builtin.template:
     src: templates/zone.j2
-    dest: "/etc/nsd/zones/{{ item.name }}.zone"
+    dest: "/etc/nsd/zones/{{ item }}.zone"
     owner: root
     group: nsd
     mode: "0640"
-  loop: "{{ nsd.zones }}"
+  register: nsd_zone_files
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item }}"
   vars:
-    zone: "{{ item }}"
+    zone: "{{ nsd.zones | selectattr('name', 'eq', item) | first }}"
   notify:
     - Reload nsd
+- name: Create DNSSEC key directory
+  ansible.builtin.file:
+    path: "{{ nsd.dnssec.key_dir }}"
+    state: directory
+    owner: root
+    group: nsd
+    mode: "0750"
+  when: nsd.dnssec.enabled
+
+- name: Deploy DNSSEC keys
+  # Vault-encrypted in the repo and decrypted at deploy time, the same
+  # pattern roles/sshd uses for host keys and for the same reason: a
+  # rebuilt host has to come back with the *same* KSK, or the DS record
+  # published at the registrar points at a key that no longer exists.
+  #
+  # Globbed per zone rather than wholesale, so a host is never handed
+  # the keys of a zone it does not serve.
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: >-
+      {{ nsd.dnssec.key_dir }}/{{ item | basename
+         | regex_replace('\.aes256$', '') }}
+    decrypt: true
+    owner: root
+    group: nsd
+    mode: "0640"
+  with_fileglob: >-
+    {{ nsd.zones | map(attribute='name')
+       | map('regex_replace', '^(.*)$', 'files/dnssec/K\1.*.aes256') | list }}
+  when: nsd.dnssec.enabled
+  no_log: true
+  notify:
+    - Reload nsd
+
+- name: Zone signing script
+  ansible.builtin.template:
+    src: templates/nsd-sign-zone.sh.j2
+    dest: /usr/local/bin/nsd-sign-zone
+    owner: root
+    group: root
+    mode: "0755"
+  when: nsd.dnssec.enabled
+
+- name: Find zones that are not signed yet
+  ansible.builtin.stat:
+    path: "/etc/nsd/zones/{{ item }}.zone.signed"
+  register: nsd_signed
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: nsd.dnssec.enabled
+
+- name: Sign zones
+  # Only when there is a reason to: the source zone changed, or no
+  # signed copy exists yet. Signing unconditionally would be a change
+  # on every run, because `-N unixtime` writes a new serial each time -
+  # which would make the role non-idempotent *and* push a pointless
+  # transfer to the secondaries every time the playbook ran.
+  #
+  # Keeping the signatures fresh is the cron job's business, not this
+  # task's.
+  ansible.builtin.command:
+    cmd: "/usr/local/bin/nsd-sign-zone {{ item }}"
+  register: nsd_signing
+  changed_when: true
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item }}"
+  when:
+    - nsd.dnssec.enabled
+    - nsd_zone_files.results[idx].changed
+      or not nsd_signed.results[idx].stat.exists
+
+- name: Re-sign zones before their signatures expire
+  # The job that keeps a signed zone from turning bogus. See the
+  # signing script for why that failure is worse than being unsigned.
+  ansible.builtin.cron:
+    name: "nsd re-sign {{ item }}"
+    weekday: "{{ nsd.dnssec.resign.weekday }}"
+    hour: "{{ nsd.dnssec.resign.hour }}"
+    minute: "{{ nsd.dnssec.resign.minute }}"
+    user: root
+    job: "/usr/local/bin/nsd-sign-zone {{ item }}"
+    cron_file: nsd-resign
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: nsd.dnssec.enabled
+
 - name: Configure nsd
   ansible.builtin.template:
     src: templates/nsd.conf.j2
@@ -72,13 +201,145 @@
   # missing SOA is, and either would take the zone down at the
   # secondaries once they transferred it.
   ansible.builtin.command:
-    cmd: "nsd-checkzone {{ item.name }} /etc/nsd/zones/{{ item.name }}.zone"
+    cmd: "nsd-checkzone {{ item }} /etc/nsd/zones/{{ item }}.zone"
   changed_when: false
-  loop: "{{ nsd.zones }}"
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item }}"
+- name: Fail if a zone changed without its serial increasing
+  # The failure this catches is the quiet one. Edit a record, forget
+  # `serial`, and everything still looks right: the file is written,
+  # nsd-checkzone passes, nsd reloads and answers with the new data.
+  # The secondaries compare serials, see no increase, and never ask for
+  # the zone - so the world keeps the old answer indefinitely while
+  # this host serves the new one and the playbook reports success.
+  #
+  # Comparing what the server *was* answering against what the
+  # inventory now says is what makes it detectable: neither the file
+  # nor nsd-checkzone knows the previous value.
+  #
+  # Skipped when there is nothing to compare against - a first
+  # deployment, or a zone being added - rather than treated as a
+  # failure.
+  vars:
+    zone: "{{ nsd.zones | selectattr('name', 'eq', item.item) | first }}"
+    soa: "{{ (nsd_serial_before.results[idx].stdout | default('')).split() }}"
+    previous: "{{ soa[2] if soa | length > 2 else '' }}"
+  ansible.builtin.assert:
+    that:
+      - zone.serial | int > previous | int
+    fail_msg: >-
+      Zone {{ item.item }} changed but its serial did not increase:
+      still {{ zone.serial }}, and the nameservers are already
+      serving {{ previous }}. They compare serials, so they will not
+      transfer this change and will keep answering with the old zone.
+      Raise nsd.zones[].serial for {{ item.item }} and re-run.
+    success_msg: >-
+      {{ item.item }}: {{ previous }} -> {{ zone.serial }}
+  loop: "{{ nsd_zone_files.results }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.item }}"
+  when:
+    - nsd_serial_before.results is defined
+    - item.changed
+    - previous != ''
+
 - name: Systemd enable nsd
   ansible.builtin.systemd_service:
     name: nsd
     state: started
     enabled: true
+
+- name: Apply pending zone changes before checking them
+  # The check below asks the nameservers what they are actually
+  # serving, which only means anything once nsd has loaded what this
+  # run just wrote. Handlers otherwise run at the end of the play,
+  # after the check has already passed or failed on the old zone.
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the serial this host is now serving
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +norecurse +time=3 +tries=1
+      SOA {{ item }} @{{ nsd.listen[0] }}
+  register: nsd_serial_now
+  changed_when: false
+  check_mode: false
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: nsd.listen | length > 0
+
+- name: Index those serials by zone name
+  # Keyed by name rather than carried as a parallel list, because the
+  # check below iterates zones *and* their nameservers together and
+  # the two lists no longer line up - a zone may name any number of
+  # nameservers.
+  #
+  # The serial is the third field of the SOA rdata, not the last -
+  # `mname rname serial refresh retry expire minimum` - so it is picked
+  # out by position. A server that answered nothing yields an empty
+  # string, which the check below then waits on and ultimately fails,
+  # which is the right outcome for a primary that is not answering.
+  ansible.builtin.set_fact:
+    nsd_serial_map: >-
+      {{ dict(nsd_serial_now.results
+              | map(attribute='item')
+              | zip(nsd_serial_now.results
+                    | map(attribute='stdout')
+                    | map('regex_replace',
+                          '^\s*\S+\s+\S+\s+(\d+).*$', '\1'))) }}
+  when: nsd_serial_now.results is defined and nsd_serial_now is not skipped
+
+- name: Map each zone to its nameservers
+  # Carries only the two fields the check needs. Feeding `subelements`
+  # the zones themselves would put each zone's TSIG secret into the
+  # failure output of a check whose entire job is to fail.
+  ansible.builtin.set_fact:
+    nsd_ns_map: >-
+      {{ dict(nsd.zones | map(attribute='name')
+              | zip(nsd.zones | map(attribute='nameservers'))) }}
+
+- name: Confirm every nameserver has caught up with this host
+  # The other half of the same problem. The assert above catches a
+  # serial that never moved; this catches one that moved and did not
+  # arrive - a refused transfer, a TSIG key that no longer matches, a
+  # secondary that never got the NOTIFY. Both fail silently otherwise,
+  # and both leave the world on a stale zone.
+  #
+  # Asked of the nameservers named in the zone's own NS records, since
+  # those are the servers the world actually queries, rather than of
+  # the transfer ACL - a zone can permit a transfer to a host nobody
+  # is delegated to.
+  #
+  # Retried rather than checked once: a transfer takes a moment even
+  # when the NOTIFY arrives immediately, so a single query would fail
+  # on a change that is merely in flight.
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +time=3 +tries=1
+      SOA {{ item.0.name }} @{{ item.1 }}
+  register: nsd_propagation
+  changed_when: false
+  check_mode: false
+  # The length guard comes first and is load-bearing: an unreachable
+  # nameserver returns nothing, and indexing [2] into an empty list
+  # is an error rather than a mismatch, which would abort the retry
+  # loop instead of retrying.
+  until: >-
+    nsd_propagation.stdout.split() | length > 2
+    and nsd_propagation.stdout.split()[2] == serial_here
+  retries: "{{ nsd.propagation.retries }}"
+  delay: "{{ nsd.propagation.delay }}"
+  vars:
+    serial_here: "{{ nsd_serial_map[item.0.name] }}"
+  loop: >-
+    {{ nsd_ns_map | dict2items(key_name='name', value_name='nameservers')
+       | subelements('nameservers') }}
+  loop_control:
+    label: "{{ item.0.name }} @ {{ item.1 }}"
+  when:
+    - nsd.propagation.check
+    - nsd_serial_map | default({}) | length > 0
+    - nsd_ns_map | default({}) | length > 0
