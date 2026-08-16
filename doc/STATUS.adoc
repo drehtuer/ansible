@@ -210,7 +210,6 @@ The vhost used to `include locations-enabled/letsencrypt.conf`, which no role cr
 
 | `upgrade`
 | Ubuntu release upgrade (e.g. 24.04 → 26.04). Generic, not tied to any specific release: the target is read from `upgrade.target_release` (unset by default, so the role is a no-op until a host explicitly sets it), and the actual version to move to is resolved by Ubuntu's own `do-release-upgrade` tooling rather than being passed literally. Fully updates and dist-upgrades the current release first, then runs `do-release-upgrade` non-interactively (via `async`/`poll`, since the command can run for over an hour and briefly disrupts networking), reboots, and re-verifies the release afterwards. Deliberately **not** wired into any other playbook: `playbooks/upgrade.yml` tags its tasks `never`/`release-upgrade`, so it only runs when explicitly requested with `--tags release-upgrade` (`invoke run-playbook --playbook=playbooks/upgrade.yml --tags=release-upgrade`, after setting `upgrade.target_release` in the target host's `host_vars`).
-|===
 
 | `fail2ban_ui`
 | The `swissmakers/fail2ban-ui` web interface for fail2ban, run as a Compose stack and reverse-proxied at `f2b.<domain>` for every served domain. The first consumer of the `docker` role. Upstream ships no official UI, and the older `fail2web`/`fail2rest` pair has been unmaintained for years.
@@ -224,6 +223,7 @@ The vhost used to `include locations-enabled/letsencrypt.conf`, which no role cr
 **It writes to the same `jail.local` that `roles/fail2ban` owns.** Its Global Settings are written into that file's `[DEFAULT]` section, so anything changed through the UI is reverted by the next `playbooks/fail2ban.yml` run and shows as drift in between — the same shape as the Nextcloud `trusted_domains` caveat. Verified that it does *not* touch the file merely by starting: after deploying, `jail.local`'s mtime was unchanged and `check-drift` on the fail2ban role reported nothing. `JAIL_AUTOMIGRATION` is deliberately never set; it rewrites `jail.local` into `jail.d/*.local`, which upstream itself marks experimental and advises against in production.
 
 `UPDATE_CHECK` and `DISABLE_EXTERNAL_IP_LOOKUP` are set so the container makes no outbound calls of its own. Verified on the lab that it survives the Docker restart the `firewall` role triggers on every rules change — `live-restore` keeps it up rather than bouncing it.
+|===
 
 == Documentation
 
