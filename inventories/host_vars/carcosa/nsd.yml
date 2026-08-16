@@ -141,6 +141,7 @@ nsd:
         - {name: cloud, type: CNAME, value: "{{ domain }}."}
         - {name: f2b, type: CNAME, value: "{{ domain }}."}
         - {name: spam, type: CNAME, value: "{{ domain }}."}
+        - {name: talk, type: CNAME, value: "{{ domain }}."}
         - {name: status, type: CNAME, value: "{{ domain }}."}
         # DMARC is p=reject with strict alignment, so a message that
         # fails both SPF and DKIM is discarded rather than quarantined.
@@ -261,6 +262,7 @@ nsd:
         - {name: cloud, type: CNAME, value: drehtuer.de.}
         - {name: f2b, type: CNAME, value: drehtuer.de.}
         - {name: spam, type: CNAME, value: drehtuer.de.}
+        - {name: talk, type: CNAME, value: drehtuer.de.}
         - {name: status, type: CNAME, value: drehtuer.de.}
         - name: _dmarc
           type: TXT

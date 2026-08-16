@@ -30,6 +30,10 @@ http:
       - mail
       - spam
       - status
+      # roles/talk serves the signaling WebSocket here. Must match
+      # talk.subdomain or the vhost gets a certificate that does not
+      # cover it.
+      - talk
       - www
   sites:
     - name: default
