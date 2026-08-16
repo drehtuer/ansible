@@ -191,6 +191,16 @@ Install only, never upgrade: the download is gated on `version.php` being absent
 
 Does **not** run the Nextcloud web/`occ` installer (admin account, `config.php`) — that step is manual, and on `carcosa` it has been done by hand: `occ status` reports `installed: true` on 34.0.3, with all three `config/*.php` files in place. So the gap is only felt on the *next* host built from this repo, which is why it stays in `doc/TODO.adoc` rather than being closed.
 
+**A weekly cron job was rewriting every PNG in the installation, and it has been removed.** It ran `find /var/www/nextcloud -type f -name '*.png' -exec mogrify -strip {} +` as `www-data` to silence libpng's "known incorrect sRGB profile" warning — cosmetic log noise. What it actually did, found on 2026-08-16 when Nextcloud reported code integrity failures:
+
+* **Broke the integrity check.** `mogrify -strip` re-encodes the file, so every signed PNG stopped matching its hash: 48 core files plus assets in two apps. Every damaged file carried an mtime of `03:00:0x`, exactly the job's schedule, which is what identified it.
+* **Destroyed at least one file.** `apps/podcast/dist/screenshot2.png` was left at zero bytes — its recorded hash is the SHA-512 of an empty string. So this was not only re-encoding but occasionally truncating.
+* **Was rewriting user uploads.** The data directory lives *inside* the installation directory here, so 2163 of the 2480 PNGs it touched weekly were under `data/` and 425 were files a user had uploaded. Verified on a copy that `mogrify -strip` does alter them. None currently carry an `03:00` mtime, so no user file is known to have been damaged — but that is luck rather than design, and the job would have got to them.
+
+Core was repaired by re-extracting the pinned release over the installation, which is safe precisely because the tarball contains no `data/` or `config/` — the same property the upgrade path relies on. `files_archive` was repaired from its release tarball. `podcast` could not be: its app-store download URL is a CI artifact that now 404s, so the version cannot be fetched again at all.
+
+The lesson worth keeping is narrower than "do not run mogrify". A scheduled job given the *installation root* as its scope will reach application code and user data alike, and neither belongs to it. Anything of this kind needs a path that names what it is actually for.
+
 **Client Push (`notify_push`) replaces polling.** Without it every connected client asks Nextcloud every 30 seconds whether anything changed — most of the idle load a quiet instance carries, and the reason a Talk call can ring up to half a minute late. With it, clients hold one WebSocket open and Nextcloud pushes. The app ships the daemon as a prebuilt binary per architecture, so this is an app install and a systemd unit rather than a build; the unit reads Nextcloud's own `config.php` for its database and Redis details, so there is nothing to keep in step by hand.
 
 It is bound to loopback and reached at `/push/` on the Nextcloud vhost — that exact path, because `occ notify_push:setup` both expects it and self-tests it. That self-test is the useful part: it checks Redis, the database, the connection back to Nextcloud, the trusted-proxy chain and version agreement, and refuses to save a configuration that does not work.
