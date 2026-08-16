@@ -25,6 +25,37 @@ cloud:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # 95 MB a year here, so two generations is roughly two years of
     # history for 200 MB of disk.
     log_rotate_size: 104857600
+    # Where user files live. Note this sits *inside* the installation
+    # directory on the current host, which is what makes an upgrade
+    # delicate: the release tarball never contains `data/`, so
+    # unpacking over the top cannot touch it, but any scheme that
+    # cleaned up stale files by deleting what the tarball does not
+    # contain would delete every user's data. That is why the upgrade
+    # below extracts over the top and removes nothing.
+    data_dir: /var/www/nextcloud/data
+    # First-run installer credentials. Only ever used when
+    # config/config.php does not exist, i.e. once per host - after that
+    # the account is Nextcloud's to manage and changing this does
+    # nothing. Empty by default so the role cannot silently create an
+    # administrator with a guessable password.
+    admin:
+      user: admin
+      password: ""
+    upgrade:
+      # `occ upgrade` migrates the database schema, and that - not the
+      # files - is the part of an upgrade that cannot be undone by
+      # re-extracting a tarball. A dump is taken immediately before it,
+      # named for the transition rather than a timestamp so it is
+      # obvious what it can restore.
+      dump_dir: /var/backups/nextcloud
+      # Run after a successful upgrade. These are the commands behind
+      # the admin overview's "missing indices/columns/primary keys"
+      # warnings; each is idempotent and a no-op when there is nothing
+      # to add.
+      repair_commands:
+        - db:add-missing-indices
+        - db:add-missing-columns
+        - db:add-missing-primary-keys
   ocr:
     # Tesseract training data for OCRmyPDF, one package per language.
     languages:

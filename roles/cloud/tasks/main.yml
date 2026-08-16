@@ -150,6 +150,180 @@
     cmd: "php-fpm{{ cloud_php_version }} -t"
   changed_when: false
 
+- name: Check whether Nextcloud has been installed
+  # config.php is written by the installer, so its absence is what
+  # distinguishes "files unpacked" from "actually installed". version.php
+  # above cannot tell them apart - it ships in the tarball.
+  ansible.builtin.stat:
+    path: "{{ cloud.nextcloud.path }}/config/config.php"
+  register: cloud_configured
+
+- name: Refuse to install without an administrator password
+  # Rather than creating an administrator with an empty or defaulted
+  # password on a host nobody is watching.
+  ansible.builtin.assert:
+    that:
+      - cloud.nextcloud.admin.password | length > 0
+    fail_msg: >-
+      Nextcloud is not installed here and cloud.nextcloud.admin.password
+      is empty. Set it in the inventory (vault-encrypted) before running
+      this role, or the installer would create an administrator account
+      with no password of its own.
+  when: not cloud_configured.stat.exists
+
+- name: Run the Nextcloud installer
+  # The step that was previously done by hand, which is the gap that
+  # mattered: everything else in this role reproduces on a new host, so
+  # this was the one thing standing between the repo and a rebuild.
+  #
+  # no_log because the database and administrator passwords are
+  # arguments - occ takes them no other way. The status read below is
+  # what reports the outcome instead.
+  ansible.builtin.command:
+    cmd: >-
+      sudo -u www-data php occ maintenance:install
+      --database mysql
+      --database-name {{ cloud.mysql.nextcloud.database }}
+      --database-user {{ cloud.mysql.nextcloud.user }}
+      --database-pass {{ cloud.mysql.nextcloud.password }}
+      --admin-user {{ cloud.nextcloud.admin.user }}
+      --admin-pass {{ cloud.nextcloud.admin.password }}
+      --data-dir {{ cloud.nextcloud.data_dir }}
+    chdir: "{{ cloud.nextcloud.path }}"
+  when: not cloud_configured.stat.exists
+  changed_when: true
+  no_log: true
+
+- name: Read the installed Nextcloud version
+  # `versionstring` rather than `version`: the latter carries a fourth
+  # component (34.0.3.2) that the inventory's pinned release does not.
+  ansible.builtin.command:
+    cmd: sudo -u www-data php occ status --output=json
+    chdir: "{{ cloud.nextcloud.path }}"
+  changed_when: false
+  check_mode: false
+  register: cloud_status
+
+- name: Note the installed version
+  ansible.builtin.set_fact:
+    cloud_installed_version: >-
+      {{ (cloud_status.stdout | from_json).versionstring }}
+
+- name: Upgrade Nextcloud
+  when: cloud_installed_version != cloud.nextcloud.version
+  block:
+    - name: Refuse to skip a major version
+      # Nextcloud supports one major version per upgrade and refuses
+      # more, but it refuses *after* the files have been replaced -
+      # which leaves the installation unusable until someone puts the
+      # old release back by hand. Checking first keeps that from
+      # happening.
+      ansible.builtin.assert:
+        that:
+          - (cloud.nextcloud.version.split('.')[0] | int)
+            - (cloud_installed_version.split('.')[0] | int) <= 1
+          - (cloud.nextcloud.version.split('.')[0] | int)
+            >= (cloud_installed_version.split('.')[0] | int)
+        fail_msg: >-
+          Refusing to move from {{ cloud_installed_version }} to
+          {{ cloud.nextcloud.version }}. Nextcloud upgrades one major
+          version at a time and cannot go backwards; do it in steps,
+          letting each one complete before bumping again.
+
+    - name: Enable maintenance mode
+      ansible.builtin.command:
+        cmd: sudo -u www-data php occ maintenance:mode --on
+        chdir: "{{ cloud.nextcloud.path }}"
+      changed_when: true
+
+    - name: Create the dump directory
+      ansible.builtin.file:
+        path: "{{ cloud.nextcloud.upgrade.dump_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Dump the database before migrating its schema
+      # The files can be restored by re-extracting a tarball; the
+      # schema migration cannot be undone. This is the only thing that
+      # makes the upgrade reversible, and it is deliberately taken
+      # after maintenance mode so nothing is writing during it.
+      community.mysql.mysql_db:
+        name: "{{ cloud.mysql.nextcloud.database }}"
+        state: dump
+        target: >-
+          {{ cloud.nextcloud.upgrade.dump_dir }}/nextcloud-{{
+          cloud_installed_version }}-to-{{ cloud.nextcloud.version }}.sql.gz
+        single_transaction: true
+        # Nextcloud's own account, not root. Two reasons, and the
+        # second is not optional: it already holds every privilege on
+        # this one database and nothing beyond it, and `root@localhost`
+        # authenticates by unix_socket here - so handing mariadb-dump a
+        # root password makes it fail with "Access denied (1698)" even
+        # though the other tasks in this role connect as root happily,
+        # because they go through the socket rather than forcing a
+        # password login. Found on the lab, before it could happen here.
+        login_user: "{{ cloud.mysql.nextcloud.user }}"
+        login_password: "{{ cloud.mysql.nextcloud.password }}"
+
+    - name: Download the new Nextcloud release
+      ansible.builtin.get_url:
+        url: >-
+          https://download.nextcloud.com/server/releases/{{ cloud_archive }}
+        dest: "/tmp/{{ cloud_archive }}"
+        checksum: "sha256:{{ cloud.nextcloud.checksum }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Extract the new release over the old one
+      # Over the top, removing nothing. The tarball contains no `data/`
+      # or `config/`, so neither is touched - and on this host `data/`
+      # holds every user's files inside the installation directory, so
+      # any "delete what the tarball does not contain" cleanup would be
+      # catastrophic. Stale files from the previous release are left
+      # behind; they are inert, and that is the right trade.
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ cloud_archive }}"
+        dest: "{{ cloud.nextcloud.path }}"
+        remote_src: true
+        extra_opts: [--strip-components=1]
+
+    - name: Set ownership for the new files
+      ansible.builtin.file:
+        path: "{{ cloud.nextcloud.path }}"
+        owner: www-data
+        group: www-data
+        recurse: true
+
+    - name: Run the Nextcloud upgrade
+      ansible.builtin.command:
+        cmd: sudo -u www-data php occ upgrade
+        chdir: "{{ cloud.nextcloud.path }}"
+      changed_when: true
+
+    - name: Add anything the new schema wants
+      # The commands behind the admin overview's "missing indices",
+      # "missing columns" and "missing primary keys" warnings. Each is
+      # idempotent and does nothing when there is nothing to add.
+      ansible.builtin.command:
+        cmd: "sudo -u www-data php occ {{ item }}"
+        chdir: "{{ cloud.nextcloud.path }}"
+      loop: "{{ cloud.nextcloud.upgrade.repair_commands }}"
+      changed_when: true
+
+  always:
+    - name: Leave maintenance mode
+      # In `always`, so a failure anywhere above does not leave the
+      # instance bricked behind a maintenance page. An upgrade that
+      # failed is recoverable; one that failed *and* locked everyone
+      # out needs someone at a terminal.
+      ansible.builtin.command:
+        cmd: sudo -u www-data php occ maintenance:mode --off
+        chdir: "{{ cloud.nextcloud.path }}"
+      changed_when: true
+
 - name: Nextcloud trusted domains
   # Same config/*.config.php mechanism as the cache settings below.
   ansible.builtin.template:

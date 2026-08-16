@@ -42,6 +42,23 @@ cloud:
     cron_minute: "*/5"
     # Overriding `cloud` replaces the role default wholesale, so
     # this key has to be repeated here too. Unset means no rotation.
+    data_dir: /var/www/nextcloud/data
+    admin:
+      user: admin
+      password: !vault |
+        $ANSIBLE_VAULT;1.1;AES256
+        35373337376538666233626565626562333737626634653937663136643536373763323739643932
+        3062373234303163626363363365616165663532393136320a323764613637386331376536306131
+        31363239666335653430623465363966353462383661366434613663373365353964646639643761
+        3633313834643937310a313236376338666265613039356463663533636632613063643435356232
+        30626438636263313532356634393261363234353565303838636662393832353966643666646231
+        6661376131613030363639666132643432666238353830613237
+    upgrade:
+      dump_dir: /var/backups/nextcloud
+      repair_commands:
+        - db:add-missing-indices
+        - db:add-missing-columns
+        - db:add-missing-primary-keys
     log_rotate_size: 104857600
   ocr:
     # Tesseract training data for OCRmyPDF, one package per language.
