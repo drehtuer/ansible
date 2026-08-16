@@ -203,13 +203,6 @@
       -w {{ http.letsencrypt.webroot_path }}
       {{ http_cert_names | map('regex_replace', '^', '-d ') | join(' ') }}
       --expand
-      # Keeps the private key across renewals. Load-bearing for DANE:
-      # the TLSA records in roles/nsd pin this key's SPKI hash (3 1 1),
-      # and certbot otherwise generates a fresh key on every renewal -
-      # which would leave the published TLSA pointing at a key the
-      # server no longer presents. For DANE-validating senders that is
-      # not a warning, it is mail refused.
-      --reuse-key
       --non-interactive
       --agree-tos
       --email {{ http.letsencrypt.email }}
@@ -220,35 +213,6 @@
   # something when it ran. The deploy hook installed above reloads
   # nginx, postfix and dovecot afterwards.
   changed_when: true
-- name: Keep the key across renewals for existing certificates
-  # The issuance task above only runs when the certificate is missing or
-  # its name set changed, so on a host whose certificate already exists
-  # its --reuse-key never reaches certbot. The renewal configuration is
-  # where certbot actually reads the setting from at renewal time, so it
-  # is set there directly - otherwise DANE would break at the next
-  # renewal on precisely the hosts that already work.
-  ansible.builtin.lineinfile:
-    path: /etc/letsencrypt/renewal/{{ http.letsencrypt.cert_name }}.conf
-    regexp: '^reuse_key\s*='
-    line: reuse_key = True
-    insertafter: '^\[renewalparams\]'
-    owner: root
-    group: root
-    mode: "0644"
-
-- name: Confirm DANE still matches the certificate
-  # Runs the same check certbot's deploy hook runs on renewal, so a
-  # mismatch is caught at deploy time too rather than only when a
-  # renewal happens to fire. Read-only.
-  #
-  # Skipped when no TLSA records are published: the script exits 0
-  # having found nothing to compare, which is the correct answer on a
-  # host that does not do DANE.
-  ansible.builtin.command:
-    cmd: /etc/letsencrypt/renewal-hooks/deploy/reload-services.sh --verify
-  changed_when: false
-  check_mode: false
-
 - name: Enable certbot renewal timer
   # certbot.service is a oneshot without an [Install] section - it can
   # be neither enabled nor reloaded. The timer is what schedules
