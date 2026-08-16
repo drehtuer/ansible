@@ -30,6 +30,20 @@
     group: root
     mode: '0755'
 
+- name: Rotate the dovecot log
+  # dovecot.conf's `log_path` takes Dovecot off syslog and onto its own
+  # file, which nothing else then rotates - see the template for what
+  # that cost before it was noticed. No handler: logrotate reads this
+  # directory afresh on every run, so there is no service to reload.
+  ansible.builtin.template:
+    src: templates/logrotate/dovecot.j2
+    dest: /etc/logrotate.d/dovecot
+    owner: root
+    group: root
+    # logrotate refuses to act on a config that is group- or
+    # world-writable, and silently skips it.
+    mode: '0644'
+
 - name: Create sieve-pipe directory
   ansible.builtin.file:
     path: /etc/dovecot/sieve-pipe

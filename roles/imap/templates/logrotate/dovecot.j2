@@ -1,0 +1,43 @@
+{{ ansible_managed | comment }}
+#
+# Dovecot's own package ships no logrotate config, and correctly so:
+# out of the box it logs to syslog, which rsyslog already rotates.
+# `log_path` in dovecot.conf is what takes it off syslog and onto a
+# file of its own, so the file only exists because this role asked for
+# it - and nothing was rotating it.
+#
+# That had gone unnoticed for a year on the production host: 63 MB and
+# 305410 lines in a single file, oldest entry a year old, while every
+# other service there (nginx, rspamd, mariadb, redis, php-fpm,
+# fail2ban) had rotation from its own package.
+#
+# `copytruncate` is deliberately NOT used. It copies the file and then
+# truncates the original, and anything written between those two steps
+# is lost - on a log that is also an audit trail for authentication
+# failures, that is the wrong trade. Dovecot has a real reopen instead,
+# so the file is renamed and Dovecot is told to open the new one.
+#
+# Note the interaction with roles/fail2ban: its `dovecot` jail reads
+# this same file. fail2ban follows a rotated file by inode and picks up
+# the replacement on its own, so nothing has to be coordinated here -
+# but it is why `delaycompress` earns its place below.
+{{ imap.conf.logfile }} {
+  {{ imap.logrotate.frequency }}
+  rotate {{ imap.logrotate.rotate }}
+  compress
+  # One cycle uncompressed. fail2ban may still be reading the rotated
+  # file when it is renamed, and it cannot read a .gz.
+  delaycompress
+  missingok
+  notifempty
+  # Dovecot creates this file 0600 root:root. Recreate it the same way
+  # rather than letting logrotate pick a default, since it holds
+  # usernames and source addresses for every failed login.
+  create 0600 root root
+  postrotate
+    # Guarded twice over, because a postrotate script that exits
+    # non-zero makes logrotate report the whole run as failed - and
+    # logrotate runs whether or not Dovecot happens to be up.
+    systemctl -q is-active dovecot && doveadm log reopen > /dev/null 2>&1 || true
+  endscript
+}
