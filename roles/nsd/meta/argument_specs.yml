@@ -76,6 +76,47 @@ argument_specs:
                 type: int
                 required: true
                 description: Seconds between those attempts.
+          dnssec:
+            type: dict
+            required: true
+            description:
+              - Zone signing. Enabling it signs and serves the zones;
+                nothing validates until a DS record for the KSK is
+                published in the parent zone at the registrar, which is
+                deliberately a separate manual step.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether to sign the zones at all.
+              key_dir:
+                type: str
+                required: true
+                description: Where the deployed KSK/ZSK pairs live.
+              signature_validity:
+                type: int
+                required: true
+                description:
+                  - Seconds the generated signatures stay valid. Must
+                    comfortably exceed the re-sign interval below;
+                    expired signatures make a zone bogus, not unsigned.
+              resign:
+                type: dict
+                required: true
+                description: Schedule for the re-signing cron job.
+                options:
+                  weekday:
+                    type: str
+                    required: true
+                    description: Cron weekday field.
+                  hour:
+                    type: str
+                    required: true
+                    description: Cron hour field.
+                  minute:
+                    type: str
+                    required: true
+                    description: Cron minute field.
           zones:
             type: list
             elements: dict

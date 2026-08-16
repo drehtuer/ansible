@@ -61,6 +61,19 @@ nsd:
     check: true
     retries: 10
     delay: 6
+  dnssec:
+    # Signed since 2026-08-16. Note this alone changes nothing for the
+    # world: without a DS record for the KSK in the parent zone, a
+    # signed zone is treated exactly as an unsigned one. Publishing
+    # that DS at the registrar is the separate, deliberate step that
+    # actually turns validation on.
+    enabled: true
+    key_dir: /etc/nsd/keys
+    signature_validity: 2592000
+    resign:
+      weekday: "0"
+      hour: "4"
+      minute: "20"
   zones:
     - name: "{{ domain }}"
       ttl: 3600

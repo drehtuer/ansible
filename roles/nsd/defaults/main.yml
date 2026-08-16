@@ -59,6 +59,32 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     check: true
     retries: 10
     delay: 6
+  # DNSSEC. Off by default, because turning it on is only half the job:
+  # the zone is signed here, but nothing validates until a DS record
+  # for the KSK is published in the *parent* zone at the registrar.
+  # Until that DS exists a signed zone is treated exactly as an
+  # unsigned one, which is what makes enabling this safe to do first
+  # and check at leisure.
+  #
+  # The order matters and only runs one way. Sign, confirm the
+  # secondaries carry the signed zone, and only then publish the DS. Do
+  # it the other way round and the parent points at a key nobody is
+  # serving, which is not a partial outage - the zone becomes bogus and
+  # validating resolvers refuse every answer.
+  dnssec:
+    enabled: false
+    key_dir: /etc/nsd/keys
+    # Seconds. dnssec-signzone's own default is 30 days; the cron job
+    # below re-signs weekly, so this is three weeks of margin for a run
+    # that does not happen.
+    signature_validity: 2592000
+    # Weekly, at a fixed quiet hour. Re-signing is what keeps a signed
+    # zone from expiring into bogus, so this job is load-bearing rather
+    # than housekeeping.
+    resign:
+      weekday: "0"
+      hour: "4"
+      minute: "20"
   # No zones by default: the role is a no-op until a host declares
   # what it is authoritative for.
   #
