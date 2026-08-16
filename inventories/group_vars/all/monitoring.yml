@@ -23,7 +23,6 @@ monitoring:
     config_file: /etc/prometheus/prometheus.yml
     rules_dir: /etc/prometheus/rules
   alertmanager:
-    path: /alerts/
     listen_address: 127.0.0.1
     port: 9093
     config_file: /etc/prometheus/alertmanager.yml

@@ -44,11 +44,12 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
   alertmanager:
-    # As with Prometheus, this becomes its route prefix, which is why
-    # prometheus.yml has to name it as `path_prefix` when pointing at
-    # it - otherwise Prometheus pushes alerts to a path that no longer
-    # exists and alerting fails silently.
-    path: /alerts/
+    # Deliberately not served through the vhost, unlike Prometheus and
+    # Grafana: it stays on loopback with no route prefix. Its web
+    # interface adds little over the alert list Prometheus already
+    # shows, and the one thing it does add - creating silences - is
+    # exactly the thing worth keeping off a page guarded by a single
+    # shared credential. Silences are made with `amtool` on the host.
     listen_address: 127.0.0.1
     port: 9093
     config_file: /etc/prometheus/alertmanager.yml

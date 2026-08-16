@@ -19,13 +19,12 @@ global:
 
 alerting:
   alertmanagers:
-    # Alertmanager serves under a route prefix now, so its API has
-    # moved with it. Without this Prometheus posts alerts to a path
-    # that returns 404 and alerting fails without saying so.
-    - path_prefix: {{ a.path }}
-      static_configs:
-          - targets:
-              - {{ a.listen_address }}:{{ a.port }}
+    # No path_prefix: Alertmanager is not served through the vhost and
+    # keeps its default root path. Prometheus is the one with a route
+    # prefix, and only because it *is* served there.
+    - static_configs:
+        - targets:
+            - {{ a.listen_address }}:{{ a.port }}
 
 # A glob rather than a list, so adding a rule file is one file rather
 # than two edits. Note that this makes a rule file left behind by an
@@ -46,14 +45,14 @@ scrape_configs:
           - {{ n.listen_address }}:{{ n.port }}
 
   - job_name: prometheus
-    # Both of these serve under a route prefix, so /metrics moved too.
+    # Prometheus serves under a route prefix, so /metrics moved with
+    # everything else it serves. Alertmanager above has none.
     metrics_path: {{ p.path }}metrics
     static_configs:
       - targets:
           - {{ p.listen_address }}:{{ p.port }}
 
   - job_name: alertmanager
-    metrics_path: {{ a.path }}metrics
     static_configs:
       - targets:
           - {{ a.listen_address }}:{{ a.port }}

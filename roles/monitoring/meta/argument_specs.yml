@@ -83,13 +83,6 @@ argument_specs:
             required: true
             description: Alert routing and delivery.
             options:
-              path:
-                type: str
-                required: true
-                description:
-                  - Path under the vhost, and Alertmanager's route
-                    prefix. Prometheus has to be told the same value
-                    as path_prefix or it posts alerts to a 404.
               listen_address:
                 type: str
                 required: true

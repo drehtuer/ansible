@@ -2,21 +2,20 @@
 #
 # {{ monitoring.subdomain }}.<domain> - the monitoring frontend.
 #
-# Three applications on one vhost, behind one basic-auth credential:
-# Grafana at /, Prometheus at {{ monitoring.prometheus.path }} and
-# Alertmanager at {{ monitoring.alertmanager.path }}.
+# Two applications on one vhost, behind one basic-auth credential:
+# Grafana at / and Prometheus at {{ monitoring.prometheus.path }}.
+#
+# Alertmanager is deliberately not here. Its interface adds little over
+# the alert list Prometheus already shows, and the one thing it does
+# add - creating silences - is exactly what should not sit behind a
+# single shared credential. It stays on loopback; silences are made
+# with `amtool` on the host.
 #
 # This name previously served a static placeholder through http.sites.
 # That entry is gone and the role deletes the vhost file it left
 # behind, because the http role creates and enables sites from its list
 # but never removes one dropped from it - two vhosts claiming the same
 # server_name pass `nginx -t` and whichever loaded first wins.
-#
-# WHAT EXPOSING ALERTMANAGER MEANS. Its web interface is where alerts
-# are silenced, so anyone holding the basic-auth credential can switch
-# monitoring off without leaving a trace anywhere else. That was a
-# deliberate decision rather than an oversight; the alternative is an
-# SSH tunnel to 127.0.0.1:{{ monitoring.alertmanager.port }}.
 #
 # conf-server/security.conf is deliberately NOT included here. It sets
 # the same headers at server level, and nginx *accumulates* add_header
@@ -36,7 +35,7 @@ server {
   # http.letsencrypt.subdomains, which must list monitoring.subdomain.
   server_name {{ http.domains | map('regex_replace', '^', monitoring.subdomain ~ '.') | join(' ') }};
 
-  # Declared once at server level so all three locations inherit them.
+  # Declared once at server level so every location inherits them.
   # None of the locations below may declare an add_header of its own:
   # nginx drops every inherited one the moment a block sets any, which
   # is the rule roles/cloud has to work around, and it is invisible to
@@ -109,24 +108,9 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    # Neither of these has authentication of its own, so the credential
+    # Prometheus has no authentication of its own, so the credential
     # would simply be ignored - cleared anyway, so that the one secret
-    # guarding this vhost is not handed to three separate processes.
-    proxy_set_header Authorization "";
-  }
-
-  # Alertmanager: current alerts, and silences. Same route-prefix
-  # reasoning as Prometheus above.
-  location {{ monitoring.alertmanager.path }} {
-    auth_basic "Restricted Access";
-    auth_basic_user_file /etc/nginx/sites-enabled/monitoring.htpasswd;
-
-    proxy_pass http://{{ monitoring.alertmanager.listen_address }}:{{ monitoring.alertmanager.port }};
-
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    # guarding this vhost is not handed to a second process.
     proxy_set_header Authorization "";
   }
 }
