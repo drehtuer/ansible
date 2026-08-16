@@ -73,6 +73,8 @@ Restoring the rules flushes the whole `filter` table, taking Docker's own chains
 
 The installed fail2ban bans with the **nftables** action, not the iptables one, which was an open question for a while: it means its chains live in the `nft` ruleset and are *not* taken out by the `iptables-restore` flush in the `firewall` role. That role restarts fail2ban after a rules change anyway. Harmless, and cheaper to leave in place than to make conditional on a ban action the host could change under it.
 
+**`nginx-http-auth` is confirmed to match, as of 2026-08-16.** It had never fired once, which was consistent with nobody having failed basic auth rather than with a broken jail — nginx logs an error only when credentials are actually *submitted*, not for the 401 challenge itself, so an untouched counter proved nothing either way. Failed logins against the `f2b.<domain>` realm took it from 0 to 5 `Total failed`, so the filter and its `logpath` are right. Note what this does not yet show: `maxretry = 5` within `findtime = 10m` was never reached inside one window, so the ban *action* here remains untested — a much lower bar than the filter, but not the same claim. Worth knowing before testing it deliberately: a ban is 1h, and `recidive` escalates a repeated one to 1w against `port = all`, which locks the address out of SSH as well as HTTPS.
+
 | `time`
 | `ntpsec` with Hetzner NTP servers, hardware clock in UTC, timezone `Europe/Berlin`.
 
