@@ -64,7 +64,7 @@ Worth re-checking when the UI is next upgraded: an upstream option to target a s
 
 == Documentation gaps
 
-* No day-2 operations runbook: how to rotate the vault password, rotate a compromised user/mail password, restore a host from scratch, add a second host, or renew/replace host SSH keys.
+* No day-2 operations runbook: how to rotate the vault password, rotate a compromised user/mail password, restore a host from scratch, add a second host, or renew/replace host SSH keys. Three more have since been performed without being written down, and each has a non-obvious ordering that cost time to discover: rotating a TSIG secret (two-ended and with no rollover — the console must be updated or transfers stop, and a green playbook run does not prove they still work), rolling a DNSSEC key (the DS in the parent must be published *before* the old key stops being served, or the zone goes bogus rather than unsigned), and seeding the RSpamd Bayes classifier from an imported corpus (never re-run a bulk seed to chase a shortfall). `doc/STATUS.adoc` records what was learned in each case next to the thing it explains, but none of it is a procedure anyone could follow under pressure.
 * No documented backup/restore procedure (depends on the backup strategy item above).
 * `doc/environment-setup.adoc` covers the Dev Container only — there's no doc for the target *production* host prerequisites (base OS version/image, disk layout, initial bootstrap access before Ansible can connect, DNS delegation setup for the zone/aliases).
 * No changelog or versioning convention for the infrastructure itself (e.g. how config drift or emergency manual changes on the host get reconciled back into the repo).
