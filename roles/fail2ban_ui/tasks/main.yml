@@ -38,15 +38,6 @@
     # the digest already decides which image this is.
     pull: missing
   register: fail2ban_ui_compose
-- name: Deploy the WebSocket upgrade map for nginx
-  ansible.builtin.copy:
-    src: files/nginx/websocket_upgrade_map.conf
-    dest: /etc/nginx/conf.d/websocket_upgrade_map.conf
-    owner: root
-    group: root
-    mode: "0644"
-  notify:
-    - Reload nginx
 - name: Add htaccess for fail2ban web ui
   # Vault-encrypted and decrypted at deploy time, the same pattern as
   # the spam role's htpasswd. `copy` compares content, so replacing the
