@@ -1,0 +1,93 @@
+# Promoted out of roles/monitoring/defaults/main.yml because the
+# Grafana admin password belongs in inventory rather than in a role
+# default, the same move roles/spam made with its controller password.
+#
+# An inventory dict REPLACES the role default rather than merging into
+# it, so this file has to repeat every key the role reads - not only
+# the one that differs. See doc/STATUS.adoc.
+monitoring:
+  prometheus:
+    # Both servers listen on every interface out of the box; these
+    # bindings are what keep them off the public addresses, and there
+    # is no firewall rule for them either.
+    listen_address: 127.0.0.1
+    port: 9090
+    scrape_interval: 15s
+    evaluation_interval: 15s
+    # Prometheus keeps 15d if neither is set. Whichever is reached
+    # first wins.
+    retention_time: 90d
+    retention_size: 8GB
+    config_file: /etc/prometheus/prometheus.yml
+    rules_dir: /etc/prometheus/rules
+  alertmanager:
+    listen_address: 127.0.0.1
+    port: 9093
+    config_file: /etc/prometheus/alertmanager.yml
+    mail:
+      smarthost: 127.0.0.1:25
+      from: "monitoring@{{ domain }}"
+      # root already forwards to the administrator through
+      # mail.aliases, so alerts need no alias of their own.
+      to: "root@{{ domain }}"
+      require_tls: false
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 24h
+    resolve_timeout: 5m
+    # The always-firing Watchdog is mailed on this interval and its
+    # absence is the signal. See doc/STATUS.adoc.
+    watchdog_interval: 24h
+  node_exporter:
+    listen_address: 127.0.0.1
+    port: 9100
+    collectors:
+      - systemd
+    textfile_dir: /var/lib/prometheus/node-exporter
+  grafana:
+    image: grafana/grafana-oss
+    tag: "13.0.2"
+    digest: >-
+      sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    compose_dir: /etc/grafana
+    data_dir: /opt/grafana
+    uid: 472
+    listen_address: 127.0.0.1
+    port: 3000
+    # Also present in http.letsencrypt.subdomains, which nothing
+    # enforces - the same standing trap as spam and f2b.
+    subdomain: status
+    admin_user: admin
+    # The nginx basic-auth credential in front of this is a separate
+    # secret, vault-encrypted at
+    # roles/monitoring/files/nginx/monitoring.htpasswd.aes256.
+    admin_password: !vault |
+            $ANSIBLE_VAULT;1.1;AES256
+            32356262353833383436633130373164643532366662333031303463656663393262343066643534
+            6330616261386537663534373735373466393333306133300a633566383536343364366666313062
+            64343031323063653663343332636235313033316665656261393839646539373132616365613936
+            3961393231343264380a336361313463323236353063633634333730666134653236393638383237
+            61383863653766623232383137636433333733666136373964366339343635636661
+    datasource_uid: prometheus
+  alerts:
+    disk:
+      warning_percent: 10
+      critical_percent: 5
+      predict_window: 6h
+      predict_horizon_days: 4
+      predict_below_percent: 30
+    inodes:
+      warning_percent: 10
+    memory:
+      available_percent: 10
+    load:
+      per_cpu: 2.0
+    clock:
+      max_offset_seconds: 0.05
+    network:
+      interface: "{{ ansible_facts['default_ipv4'].interface }}"
+      # Placeholders until this host has a baseline to set them from.
+      # Treat a firing as a question rather than a finding until then.
+      egress_mbit: 500
+      ingress_mbit: 800
+      window: 15m

@@ -32,6 +32,23 @@ monitoring:
     collectors:
       - systemd
     textfile_dir: /var/lib/prometheus/node-exporter
+  grafana:
+    image: grafana/grafana-oss
+    tag: "13.0.2"
+    # The real digest rather than a placeholder: it is public
+    # information, and a fake would stop this being a working example
+    # of what the role expects.
+    digest: >-
+      sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    compose_dir: /etc/grafana
+    data_dir: /opt/grafana
+    uid: 472
+    listen_address: 127.0.0.1
+    port: 3000
+    subdomain: status
+    admin_user: admin
+    admin_password: test-grafana-admin-password
+    datasource_uid: prometheus
   alerts:
     disk:
       warning_percent: 10

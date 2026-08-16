@@ -26,6 +26,15 @@ platforms:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
 provisioner:
   name: ansible
+  options:
+    # The Grafana half needs a Docker daemon and a running nginx, and
+    # this container has neither - Docker-in-Docker-in-Docker is the
+    # same blocker roles/fail2ban_ui has. Those tasks carry the
+    # `grafana` tag purely so this scenario can skip them; the real
+    # playbooks never pass --skip-tags. What is left is still the
+    # whole of the collection and alerting half, which is where the
+    # idempotence risk actually lives.
+    skip-tags: grafana
   env:
     # Molecule does not add the repository's roles/ directory to
     # the roles path, so the role under test cannot be resolved by

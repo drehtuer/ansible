@@ -66,10 +66,12 @@ VERIFY_UNITS=(ssh cron ntpsec fail2ban nginx mariadb redis-server unbound docker
               prometheus prometheus-alertmanager prometheus-node-exporter)
 # "port:address-fragment" - loopback-only services must NOT be on 0.0.0.0.
 VERIFY_LISTEN=(22 25 80 443 587 993)
-# 9090/9093/9100 are roles/monitoring. Note what is deliberately absent:
+# 9090/9093/9100 are roles/monitoring, 3000 is its Grafana container -
+# on host networking, so it binds the host's own loopback and `ss` sees
+# it like any other local service. Note what is deliberately absent:
 # 9094, Alertmanager's HA gossip listener, which it opens on every
 # interface unless --cluster.listen-address is emptied.
-VERIFY_LOOPBACK=(3306 6379 53 9090 9093 9100)
+VERIFY_LOOPBACK=(3306 6379 53 9090 9093 9100 3000)
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 info() { printf '  %s\n' "$*"; }

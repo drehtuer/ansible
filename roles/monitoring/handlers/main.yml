@@ -30,3 +30,17 @@
     name: prometheus-node-exporter
     state: restarted
     enabled: true
+
+# Grafana reads its provisioning and its admin credential at startup
+# only, so a change to either needs the container to come back rather
+# than merely to keep running.
+- name: Restart grafana
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring.grafana.compose_dir }}"
+    state: restarted
+
+- name: Reload nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded
+    enabled: true

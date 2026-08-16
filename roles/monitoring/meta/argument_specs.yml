@@ -1,13 +1,14 @@
 argument_specs:
   main:
-    short_description: Metrics collection and mail alerting
+    short_description: Metrics, mail alerting and the status frontend
     description:
       - Installs Prometheus, Alertmanager and node_exporter from the
         Ubuntu archive, binds all three to loopback, deploys the
         alert rules, and routes firing alerts to mail through the
         Postfix this repo already configures.
-      - Phase 1 of the monitoring work. Nothing is served to the
-        outside; the status.<domain> vhost and Grafana come later.
+      - Runs Grafana as a container behind an nginx vhost at
+        status.<domain>, which is the only part reachable from off the
+        host and only through basic auth.
     options:
       monitoring:
         type: dict
@@ -167,6 +168,86 @@ argument_specs:
                 description:
                   - Directory scanned for *.prom files, for metrics
                     that have no exporter of their own.
+          grafana:
+            type: dict
+            required: true
+            description:
+              - The frontend served at status.<domain>. A container,
+                unlike the rest of this stack, because Grafana is not
+                packaged for Ubuntu.
+            options:
+              image:
+                type: str
+                required: true
+                description: Image repository.
+              tag:
+                type: str
+                required: true
+                description: Image tag, pinned alongside the digest.
+              digest:
+                type: str
+                required: true
+                description:
+                  - Multi-arch index digest. A tag can be moved under
+                    you; a digest cannot.
+              compose_dir:
+                type: str
+                required: true
+                description:
+                  - Holds the compose file, the provisioning tree and
+                    the admin credential. Owned by this repo.
+              data_dir:
+                type: str
+                required: true
+                description:
+                  - Grafana's own database, written by the container
+                    and preserved across a recreate.
+              uid:
+                type: int
+                required: true
+                description:
+                  - The uid the image runs as, which data_dir must be
+                    owned by.
+              listen_address:
+                type: str
+                required: true
+                description:
+                  - Address the container binds. Loopback, since the
+                    nginx vhost is the only way in.
+              port:
+                type: int
+                required: true
+                description:
+                  - Loopback port the container binds, reached only
+                    through the nginx vhost.
+              subdomain:
+                type: str
+                required: true
+                description:
+                  - Serves <subdomain>.<domain> for every entry in
+                    http.domains. Must also appear in
+                    http.letsencrypt.subdomains, which nothing
+                    enforces.
+              admin_user:
+                type: str
+                required: true
+                description: Grafana's own admin account.
+              admin_password:
+                type: str
+                required: true
+                description:
+                  - Password for that account. Empty in the role
+                    defaults; the real value is vault-encrypted in
+                    inventory.
+              datasource_uid:
+                type: str
+                required: true
+                description:
+                  - Fixed uid for the provisioned Prometheus
+                    datasource, referenced by the dashboards. A
+                    generated one would leave every panel pointed at a
+                    datasource that does not exist, which renders as
+                    an empty panel rather than an error.
           alerts:
             type: dict
             required: true

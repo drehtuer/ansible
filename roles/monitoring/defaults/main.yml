@@ -1,14 +1,14 @@
 monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
-  # Phase 1: collection and mail alerting only. Nothing here is
-  # reachable from off-host - every listener is on loopback, and
-  # roles/firewall opens no port for any of them. The status.<domain>
-  # vhost and Grafana are phase 2; see doc/TODO.adoc.
+  # Collection and mail alerting (phase 1) plus the Grafana frontend
+  # at status.<domain> (phase 2). Every listener is still on loopback
+  # and roles/firewall opens no port for any of them - nginx is the
+  # only way in, and only to Grafana.
   #
-  # These defaults are complete and correct for carcosa, so there is
-  # deliberately no inventories/group_vars/all/monitoring.yml. Adding
-  # one to tune a threshold means repeating EVERY key below: an
-  # inventory dict replaces the role default rather than merging into
-  # it. See doc/STATUS.adoc.
+  # The live values are in inventories/group_vars/all/monitoring.yml,
+  # which exists because the Grafana admin password belongs in
+  # inventory rather than in a role default. That file REPLACES this
+  # dict rather than merging into it, so anything added here has to be
+  # added there too or the role stops seeing it. See doc/STATUS.adoc.
   prometheus:
     # The packaged binary listens on 0.0.0.0:9090 - read out of the
     # .deb rather than assumed - so this override is the only thing
@@ -86,6 +86,50 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # directory is created so the collector does not log an error on
     # every scrape.
     textfile_dir: /var/lib/prometheus/node-exporter
+  grafana:
+    # The one piece of this stack that is not in the Ubuntu archive,
+    # which is the whole reason it is a container while Prometheus,
+    # Alertmanager and node_exporter are packages. Pinned by tag *and*
+    # multi-arch index digest, the stance roles/fail2ban_ui and
+    # roles/talk take: a tag can be moved under you, a digest cannot.
+    # Bumping the version means editing both, which is the point.
+    image: grafana/grafana-oss
+    tag: "13.0.2"
+    digest: >-
+      sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    # Compose file, provisioning and the admin credential. Kept apart
+    # from the data directory below, which the container writes and
+    # which must survive a recreate - the same split as
+    # roles/fail2ban_ui.
+    compose_dir: /etc/grafana
+    data_dir: /opt/grafana
+    # The image runs as this uid and does not change it. The data
+    # directory has to be owned by it or Grafana cannot write its
+    # database, which it reports as a failed migration at startup
+    # rather than as a permission error.
+    uid: 472
+    # Loopback only, reached through the vhost below and never
+    # directly. See the compose template for why host networking makes
+    # that literally true rather than merely intended. Its own setting
+    # rather than borrowing the Prometheus one: they happen to share a
+    # value, and coupling them would move Grafana if that ever changed.
+    listen_address: 127.0.0.1
+    port: 3000
+    # Serves <subdomain>.<domain> for every entry in http.domains, and
+    # must also appear in http.letsencrypt.subdomains - the standing
+    # trap roles/spam and roles/fail2ban_ui both carry. `status` is
+    # already listed there; this role takes the name over from the
+    # static placeholder http.sites used to serve, and removes that
+    # vhost itself, because the http role never deletes a site dropped
+    # from its list.
+    subdomain: status
+    admin_user: admin
+    # Real value in inventories/group_vars/all/monitoring.yml, the
+    # same promotion roles/spam does with its controller password.
+    admin_password: ""
+    # Referenced by the provisioned dashboards, so it is a setting
+    # rather than a literal in two files that could drift apart.
+    datasource_uid: prometheus
   alerts:
     disk:
       # Percentage of a filesystem still free.

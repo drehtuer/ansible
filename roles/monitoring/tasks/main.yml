@@ -141,3 +141,181 @@
     - prometheus
     - prometheus-alertmanager
     - prometheus-node-exporter
+
+- name: Configure the grafana frontend
+  # Needs roles/docker (the engine and Compose v2) and roles/http
+  # (nginx plus a certificate covering the subdomain). Neither is
+  # asserted here - the repo has no umbrella playbook yet, so the
+  # ordering is recorded in doc/STATUS.adoc with the other
+  # constraints.
+  #
+  # Tagged as a whole so the molecule scenario can skip it, the same
+  # device roles/system uses for setting the hostname: this half needs
+  # a Docker daemon and a running nginx, and the test container has
+  # neither. The real playbooks never pass --skip-tags, so it runs
+  # normally on a host.
+  tags:
+    - grafana
+  block:
+    - name: Create grafana directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ monitoring.grafana.compose_dir }}"
+          mode: "0755"
+        - path: "{{ monitoring.grafana.compose_dir }}/provisioning"
+          mode: "0755"
+        - path: "{{ monitoring.grafana.compose_dir }}/provisioning/datasources"
+          mode: "0755"
+        - path: "{{ monitoring.grafana.compose_dir }}/provisioning/dashboards"
+          mode: "0755"
+        - path: "{{ monitoring.grafana.compose_dir }}/dashboards"
+          mode: "0755"
+        # Grafana's own database, written by the container's uid. Not
+        # world-readable: it holds sessions for an interface that can read
+        # every metric this host collects.
+        - path: "{{ monitoring.grafana.data_dir }}"
+          mode: "0750"
+          owner: "{{ monitoring.grafana.uid }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Configure the grafana admin credential
+      # Its own file rather than an environment block in compose.yml, so
+      # that a --diff from `invoke check-drift` cannot print it. Same
+      # reasoning as the nsd role's separate tsig.conf.
+      ansible.builtin.template:
+        src: templates/grafana/admin.env.j2
+        dest: "{{ monitoring.grafana.compose_dir }}/admin.env"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      notify:
+        - Restart grafana
+
+    - name: Provision the grafana datasource
+      vars:
+        monitoring_prov: "{{ monitoring.grafana.compose_dir }}/provisioning"
+      ansible.builtin.template:
+        src: templates/grafana/provisioning/datasources/prometheus.yml.j2
+        dest: "{{ monitoring_prov }}/datasources/prometheus.yml"
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Restart grafana
+
+    - name: Provision the grafana dashboard provider
+      vars:
+        monitoring_prov: "{{ monitoring.grafana.compose_dir }}/provisioning"
+      ansible.builtin.template:
+        src: templates/grafana/provisioning/dashboards/dashboards.yml.j2
+        dest: "{{ monitoring_prov }}/dashboards/dashboards.yml"
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Restart grafana
+
+    - name: Deploy the grafana dashboards
+      ansible.builtin.template:
+        src: "templates/grafana/dashboards/{{ item }}.json.j2"
+        dest: "{{ monitoring.grafana.compose_dir }}/dashboards/{{ item }}.json"
+        owner: root
+        group: root
+        mode: "0644"
+        # Grafana logs a malformed dashboard and carries on without it, so
+        # the failure is a missing page rather than an error. Same stance
+        # as promtool on the alert rules.
+        validate: python3 -m json.tool %s /dev/null
+      loop:
+        - host
+      notify:
+        - Restart grafana
+
+    - name: Configure the grafana compose stack
+      ansible.builtin.template:
+        src: templates/grafana/compose.yml.j2
+        dest: "{{ monitoring.grafana.compose_dir }}/compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start grafana
+      # docker_compose_v2 rather than docker_container, as roles/fail2ban_ui
+      # and roles/talk do: it drives the `docker compose` CLI the docker
+      # role installs, so nothing needs the Python docker SDK on the
+      # target and the compose file stays the readable description.
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring.grafana.compose_dir }}"
+        state: present
+        # `missing`, not `always`: the digest already decides which image
+        # this is, so a converged host has no reason to reach Docker Hub.
+        pull: missing
+
+    - name: Remove the superseded status vhost
+      # This name used to be a static placeholder declared in http.sites.
+      # The http role renders and enables that list but never removes an
+      # entry dropped from it, so without this the old vhost stays on disk
+      # and claims the same server_name as the one below. nginx resolves a
+      # duplicate by keeping whichever loaded first and warning, which
+      # `nginx -t` reports as a success.
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nginx/sites-enabled/status.conf
+        - /etc/nginx/sites-available/status.conf
+      notify:
+        - Reload nginx
+
+    - name: Add htaccess for the monitoring frontend
+      # Vault-encrypted and decrypted at deploy time, the same pattern as
+      # the spam and fail2ban_ui roles. `copy` compares content, so
+      # replacing the credential is picked up without a separate checksum.
+      ansible.builtin.copy:
+        src: files/nginx/monitoring.htpasswd.aes256
+        dest: /etc/nginx/sites-available/monitoring.htpasswd
+        decrypt: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable the monitoring htpasswd in nginx
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/monitoring.htpasswd
+        dest: /etc/nginx/sites-enabled/monitoring.htpasswd
+        state: link
+      notify:
+        - Reload nginx
+
+    - name: Add the monitoring vhost in nginx
+      ansible.builtin.template:
+        src: templates/nginx/monitoring.conf.j2
+        dest: /etc/nginx/sites-available/monitoring.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Reload nginx
+
+    - name: Enable the monitoring site in nginx
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/monitoring.conf
+        dest: /etc/nginx/sites-enabled/monitoring.conf
+        state: link
+      notify:
+        - Reload nginx
+
+    - name: Validate nginx configuration
+      # Same stance as the http, cloud and fail2ban_ui roles: reloading a
+      # broken configuration leaves the old one serving, so the run would
+      # go green with this vhost not actually loaded.
+      ansible.builtin.command:
+        cmd: nginx -t
+      changed_when: false

@@ -1,0 +1,73 @@
+{{ ansible_managed | comment }}
+#
+# Grafana, the frontend half of roles/monitoring.
+#
+# HOST NETWORKING, NOT A PUBLISHED PORT - the same reasoning as
+# roles/fail2ban_ui. With GF_SERVER_HTTP_ADDR below the listener is on
+# the host's loopback and provably nowhere else, so `ss -ltn` is the
+# whole story. A published port would instead be DNATed and traverse
+# FORWARD rather than INPUT, which is the case `firewall.docker.published`
+# exists to cover - this way there is no port to forget to list. Note
+# the trap if the two are ever swapped: on a *bridge* network that same
+# address would bind the container's own loopback and be unreachable
+# from nginx.
+#
+# NO SECRET IN THIS FILE. The admin password is in admin.env, written
+# 0600 by a task with no_log, so that `invoke check-drift` - which runs
+# with --diff - cannot print it. Same reasoning as the nsd role keeping
+# its TSIG secret in a file of its own.
+services:
+  grafana:
+    image: "{{ monitoring.grafana.image }}:{{ monitoring.grafana.tag }}@{{ monitoring.grafana.digest }}"
+    container_name: grafana
+    # Survives a reboot and a daemon restart, but stays down if it was
+    # stopped deliberately. `live-restore` in the docker role keeps it
+    # running when the firewall role bounces dockerd.
+    restart: unless-stopped
+    network_mode: host
+    user: "{{ monitoring.grafana.uid }}"
+    env_file:
+      - admin.env
+    environment:
+      # Loopback only. Correct *because* this is host networking.
+      GF_SERVER_HTTP_ADDR: "{{ monitoring.grafana.listen_address }}"
+      GF_SERVER_HTTP_PORT: "{{ monitoring.grafana.port }}"
+      # Grafana builds absolute URLs - password reset links, OAuth
+      # redirects, share links - from this and cannot derive it from a
+      # proxied request. It takes exactly one value, so it names the
+      # primary domain even though the vhost answers for every entry
+      # in http.domains; the others still serve, their generated links
+      # just point at the primary.
+      GF_SERVER_ROOT_URL: "https://{{ monitoring.grafana.subdomain }}.{{ domain }}/"
+      # The cookie is only ever sent over the TLS vhost in front.
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: "strict"
+      # There is one operator. Sign-up would let anyone who gets past
+      # basic auth create an account; anonymous access would make the
+      # dashboards readable to anyone who does.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # No outbound calls of its own, the same stance as
+      # roles/fail2ban_ui. All four default to on and none earns its
+      # keep: usage reporting and the version check phone home on a
+      # schedule, and the other two only decorate the interface.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # To the journal, via Docker's json-file driver, which the docker
+      # role already caps at 10 MB x 3 - so this needs no rotation of
+      # its own, unlike the Dovecot and Nextcloud logs.
+      GF_LOG_MODE: console
+    volumes:
+      # Grafana's own database - dashboards created by hand, users,
+      # sessions. Must survive a recreate, and is the reason the uid
+      # above matters.
+      - "{{ monitoring.grafana.data_dir }}:/var/lib/grafana"
+      # Read-only: this repo owns the datasource and the dashboards,
+      # and Grafana has no reason to write to either. A dashboard
+      # edited in the browser can still be saved - it goes to the
+      # database above - but it will not survive as the provisioned
+      # copy, which is re-read at startup.
+      - "{{ monitoring.grafana.compose_dir }}/provisioning:/etc/grafana/provisioning:ro"
+      - "{{ monitoring.grafana.compose_dir }}/dashboards:/var/lib/grafana/dashboards:ro"

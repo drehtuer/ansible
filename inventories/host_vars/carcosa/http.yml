@@ -42,11 +42,11 @@ http:
         - www
       root: /var/www/html
       include_locations: true
-    - name: status
-      subdomains:
-        - status
-      root: /var/www/html
-      include_locations: false
+    # `status` is deliberately absent: roles/monitoring serves that
+    # name now. It stays in letsencrypt.subdomains above, since the
+    # certificate still has to cover it. Note that dropping a site
+    # from this list does not remove the vhost the http role already
+    # wrote - roles/monitoring deletes that file itself.
     - name: mail
       subdomains:
         - mail
