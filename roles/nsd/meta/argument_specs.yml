@@ -37,35 +37,6 @@ argument_specs:
               - Addresses told when the zone changes. IPv4 only for
                 Hetzner, which refuses a NOTIFY sent from this host's
                 IPv6 address whatever key signs it.
-          tsig:
-            type: dict
-            required: true
-            description:
-              - Shared secret authenticating zone transfers to the
-                secondaries (TSIG). An empty secret disables it and
-                falls back to source-address restriction alone.
-            options:
-              name:
-                type: str
-                required: true
-                description:
-                  - Key name. Both ends must agree on it; it travels in
-                    the clear as part of the transfer.
-              algorithm:
-                type: str
-                required: true
-                choices:
-                  - hmac-md5
-                  - hmac-sha1
-                  - hmac-sha256
-                description:
-                  - HMAC algorithm. Hetzner accepts these three; only
-                    hmac-sha256 is unbroken.
-              secret:
-                type: str
-                required: true
-                description:
-                  - Base64 shared secret, or empty to disable TSIG.
           rrl:
             type: dict
             required: true
@@ -103,6 +74,43 @@ argument_specs:
                 description:
                   - Zone serial. Must be increased whenever the records
                     change, or secondaries keep their old copy.
+              tsig:
+                type: dict
+                required: true
+                description:
+                  - Shared secret authenticating this one zone's
+                    transfers to the secondaries (TSIG). Declared per
+                    zone rather than per server, because Hetzner
+                    derives the key name from the zone and this host's
+                    address - so two zones cannot share a name anyway,
+                    and a rotated key costs one zone instead of all of
+                    them. An empty secret disables it and falls back to
+                    source-address restriction alone.
+                options:
+                  name:
+                    type: str
+                    required: true
+                    description:
+                      - Key name. Both ends must agree on it; it
+                        travels in the clear as part of the transfer.
+                        Hetzner derives it as "<zone>.<primary-ip>."
+                        and offers no way to choose it.
+                  algorithm:
+                    type: str
+                    required: true
+                    choices:
+                      - hmac-md5
+                      - hmac-sha1
+                      - hmac-sha256
+                    description:
+                      - HMAC algorithm. Hetzner accepts these three;
+                        only hmac-sha256 is unbroken.
+                  secret:
+                    type: str
+                    required: true
+                    description:
+                      - Base64 shared secret, or empty to disable TSIG
+                        for this zone.
               soa:
                 type: dict
                 required: true

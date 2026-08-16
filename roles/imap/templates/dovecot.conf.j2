@@ -5,6 +5,30 @@ listen = *, ::
 # Auth
 disable_plaintext_auth = yes
 auth_mechanisms = plain login
+
+# This one line is what makes the whole multi-domain setup share a
+# single set of mailboxes, so it is load-bearing rather than cosmetic.
+# %n is the local part alone: the domain is dropped before either
+# lookup below, so a bare <user> and <user>@<domain> for every domain
+# this host serves - {{ ([domain] + domain_aliases) | join(', ') }} -
+# are one and the same account.
+#
+# It applies to every auth request, not only to logins - Dovecot looks
+# the recipient up the same way when Postfix hands a message over on
+# LMTP. That is what puts mail addressed to any of this host's domains
+# into one inbox instead of one inbox per domain, and it is why a client
+# configured with either domain authenticates identically.
+#
+# Accounts are system users (pam/passwd below), which have no domain to
+# begin with, so there is nothing here that could distinguish them per
+# domain even if that were wanted. Note what that implies and is worth
+# knowing rather than discovering: the domain part is *discarded*, not
+# checked, so an IMAP client offering <user>@anything.example logs in
+# just as well as one offering a domain this host actually serves. It
+# is one account either way, so nothing is reachable that would not
+# otherwise be - but Dovecot is not the component that decides which
+# domains this host answers for. Postfix is, for mail, through
+# virtual_mailbox_domains in roles/mail.
 auth_username_format = %n
 passdb {
   driver = pam

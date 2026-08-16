@@ -40,7 +40,8 @@
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
     ip_version: 4
     # roles/nsd renders one zone file per entry in nsd.zones, with the
-    # entry passed in as `zone`; supply the first one here.
+    # entry passed in as `zone`; supply the first one here. The
+    # per-zone render below covers the rest.
     zone: "{{ nsd.zones[0] }}"
     # Facts, which this play does not gather - no host is contacted.
     # roles/system checks its own addresses against these before
@@ -140,6 +141,43 @@
       register: firewall_diff
       changed_when: false
       failed_when: firewall_diff.rc == 0
+
+    - name: Render the zone file for every zone
+      # The generic render above only covers nsd.zones[0], through the
+      # `zone` play var. This host is authoritative for more than one
+      # zone, and a second one is exactly where a template that quietly
+      # assumed a single zone would show up.
+      ansible.builtin.template:
+        src: "{{ repo }}/roles/nsd/templates/zone.j2"
+        dest: "{{ rendered }}/nsd_{{ item.name }}.zone"
+        mode: "0600"
+      loop: "{{ nsd.zones }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        zone: "{{ item }}"
+
+    - name: Read the rendered transfer keys
+      ansible.builtin.slurp:
+        src: "{{ rendered }}/roles_nsd_templates_tsig.conf.j2"
+      register: nsd_tsig
+
+    - name: Confirm every zone got a transfer key of its own
+      # One key per zone, not one per server, which is what the role
+      # used to emit. A single shared block would leave both zones
+      # transferring under the same name - and would silently break the
+      # moment a secondary derives the name from the zone, as Hetzner's
+      # console does.
+      vars:
+        key_names: >-
+          {{ nsd_tsig.content | b64decode
+             | regex_findall('name: "([^"]+)"') | unique }}
+      ansible.builtin.assert:
+        that:
+          - key_names | length == nsd.zones | length
+        fail_msg: >-
+          tsig.conf renders {{ key_names | length }} distinct key
+          name(s) for {{ nsd.zones | length }} zone(s): {{ key_names }}
 
     - name: Report
       ansible.builtin.debug:

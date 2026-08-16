@@ -5,8 +5,10 @@ Guidance for Claude Code when working in this repository.
 
 == What this repo is
 
-Ansible configuration that builds and documents the complete server stack for `drehtuer.net` (primary) and `drehtuer.de` (CNAME alias).
-The domain `drehtuer.de` is still pointing at another host, but the plan is to switch it over to this server once the configuration is complete and tested.
+Ansible configuration that builds and documents the complete server stack for `drehtuer.net` (primary) and `drehtuer.de` (secondary).
+Both are full domains rather than one being an alias of the other: they carry the same subdomains, the same certificate, the same vhosts and the same mailboxes, all driven by `domain` + `domain_aliases` in `inventories/machines.yml`.
+Both zones are also authored here, in `nsd.zones`, each as a hidden primary with its own TSIG transfer key.
+The *delegation* for `drehtuer.de` still points at another host, so the `.de` half of the configuration is written and tested but not yet live — see the migration checklist in `doc/TODO.adoc` for the order in which it has to be switched over, which is not interchangeable.
 The explicit goal is documentation-as-code: the repo should be complete enough that the whole server could be rebuilt from scratch on a new host.
 
 See `doc/STATUS.adoc` for the current implementation state and `doc/TODO.adoc` for known gaps and next steps. Keep both up to date as the repo evolves — update them in the same change that alters the behavior they describe, don't let them drift.

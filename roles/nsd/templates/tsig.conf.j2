@@ -1,10 +1,16 @@
 {{ ansible_managed | comment }}
 #
-# Shared secret authenticating zone transfers to the secondaries
-# (TSIG, RFC 8945). The secondary uses it to verify that the zone it
+# Shared secrets authenticating zone transfers to the secondaries
+# (TSIG, RFC 8945). The secondary uses one to verify that the zone it
 # received really came from this host and was not altered in transit,
 # and this host uses it to refuse a transfer to anyone who cannot
 # prove they hold the same secret.
+#
+# One key per zone, not one per server. Hetzner's console derives the
+# key name from the zone and this host's address ("<zone>.<primary-ip>."),
+# so the names differ whether or not the secrets do - and keeping the
+# secrets separate as well means rotating one zone's key never touches
+# another's.
 #
 # This is NOT DNSSEC, which is a separate matter still open. TSIG
 # authenticates the hop between these two servers with a shared secret
@@ -15,12 +21,23 @@
 # a DNSSEC-signed zone transferred without TSIG is still fully
 # verifiable by resolvers. Neither substitutes for the other.
 #
-# Kept out of nsd.conf so that the secret does not show up in a
-# --diff, which the drift check runs routinely. Both ends must agree
-# on the key *name* as well as the secret; the name travels in the
-# clear as part of the transfer.
+# Kept out of nsd.conf so that the secrets do not show up in a --diff,
+# which the drift check runs routinely. Both ends must agree on the key
+# *name* as well as the secret; the name travels in the clear as part
+# of the transfer.
+{# Deduplicated by name: NSD rejects the config outright if the same
+   key name is defined twice, which two zones sharing a key would
+   otherwise cause. Sharing one is not the intent here, but a config
+   that fails to parse is a worse way to find that out. #}
+{% set emitted = [] %}
+{% for z in nsd.zones if z.tsig.secret %}
+{% if z.tsig.name not in emitted %}
+{% set _ = emitted.append(z.tsig.name) %}
 
+# {{ z.name }}
 key:
-  name: "{{ nsd.tsig.name }}"
-  algorithm: {{ nsd.tsig.algorithm }}
-  secret: "{{ nsd.tsig.secret }}"
+  name: "{{ z.tsig.name }}"
+  algorithm: {{ z.tsig.algorithm }}
+  secret: "{{ z.tsig.secret }}"
+{% endif %}
+{% endfor %}

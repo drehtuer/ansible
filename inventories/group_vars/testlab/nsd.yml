@@ -1,6 +1,11 @@
-# The test hosts serve a zone for their fictional domain, so the role
-# can be exercised without touching anything real. No secondary will
-# ever pull it.
+# The test hosts serve a zone per fictional domain, so the role can be
+# exercised without touching anything real. No secondary will ever pull
+# them.
+#
+# Two zones rather than one, mirroring production: `lab.lan` stands in
+# for the primary domain and `lab.test` for the alias domain, each with
+# its own transfer key. That is what makes a deploy here exercise the
+# multi-zone, one-key-per-zone path rather than the single-zone one.
 nsd:
   listen:
     - "{{ ip_v4 }}"
@@ -17,13 +22,6 @@ nsd:
   # IPv4/IPv6 split to model.
   notify:
     - "{{ ip_v4 }}"
-  # Throwaway secret: the lab has no real secondaries, and this exists
-  # so the TSIG path is the one actually exercised in testing rather
-  # than the NOKEY fallback.
-  tsig:
-    name: transfer
-    algorithm: hmac-sha256
-    secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
   rrl:
     size: 1000000
     ratelimit: 200
@@ -32,6 +30,15 @@ nsd:
     - name: "{{ domain }}"
       ttl: 3600
       serial: 2026081501
+      # Throwaway secret: the lab has no real secondaries, and this
+      # exists so the TSIG path is the one actually exercised in
+      # testing rather than the NOKEY fallback. The key *name* follows
+      # the shape Hetzner imposes in production ("<zone>.<primary-ip>."),
+      # so the lab proves that shape parses rather than a simpler one.
+      tsig:
+        name: "{{ domain }}.{{ ip_v4 }}."
+        algorithm: hmac-sha256
+        secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
       soa:
         primary: "{{ hostname_fqdn }}."
         contact: "postmaster.{{ domain }}."
@@ -45,3 +52,26 @@ nsd:
         - {name: "@", type: A, value: "{{ ip_v4 }}"}
         - {name: mail, type: A, value: "{{ ip_v4 }}"}
         - {name: www, type: CNAME, value: "{{ domain }}."}
+    # The alias domain, as its own zone with its own key - a different
+    # secret, not only a different name, so that a run here would catch
+    # the template emitting one zone's key for another.
+    - name: "{{ domain_aliases[0] }}"
+      ttl: 3600
+      serial: 2026081601
+      tsig:
+        name: "{{ domain_aliases[0] }}.{{ ip_v4 }}."
+        algorithm: hmac-sha256
+        secret: bGFiLWFsaWFzLXRzaWctc2VjcmV0LW5vdC1yZWFsLWVpdGhlcg==
+      soa:
+        primary: "{{ hostname_fqdn }}."
+        contact: "postmaster.{{ domain_aliases[0] }}."
+        refresh: 86400
+        retry: 10800
+        expire: 3600000
+        minimum: 3600
+      nameservers:
+        - "{{ hostname_fqdn }}."
+      records:
+        - {name: "@", type: A, value: "{{ ip_v4 }}"}
+        - {name: mail, type: A, value: "{{ ip_v4 }}"}
+        - {name: www, type: CNAME, value: "{{ domain_aliases[0] }}."}

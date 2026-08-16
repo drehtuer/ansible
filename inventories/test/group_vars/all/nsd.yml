@@ -1,6 +1,12 @@
-# The test hosts serve a zone for their fictional domain, so the role
-# can be exercised without touching anything real. No secondary will
-# ever pull it.
+# The test host serves a zone per fictional domain, so the role can be
+# exercised without touching anything real. No secondary will ever pull
+# them.
+#
+# Two zones rather than one, in the same shape production uses: a zone
+# for `domain` and a zone for the entry in `domain_aliases`, each with
+# its own transfer key. The static tests render the zone template
+# against every entry, so a template that only ever worked for the
+# first zone fails here.
 nsd:
   listen:
     - "{{ ip_v4 }}"
@@ -10,13 +16,6 @@ nsd:
   # IPv4/IPv6 split to model.
   notify:
     - 192.0.2.53
-  # Throwaway secret: the lab has no real secondaries, and this exists
-  # so the TSIG path is the one actually exercised in testing rather
-  # than the NOKEY fallback.
-  tsig:
-    name: transfer
-    algorithm: hmac-sha256
-    secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
   rrl:
     size: 1000000
     ratelimit: 200
@@ -25,6 +24,13 @@ nsd:
     - name: "{{ domain }}"
       ttl: 3600
       serial: 2026081501
+      # Throwaway secret: there are no real secondaries here, and this
+      # exists so the TSIG path is the one actually exercised in
+      # testing rather than the NOKEY fallback.
+      tsig:
+        name: "{{ domain }}.{{ ip_v4 }}."
+        algorithm: hmac-sha256
+        secret: dGVzdC10c2lnLXNlY3JldC1ub3QtdXNlZC1hbnl3aGVyZQ==
       soa:
         primary: "{{ hostname_fqdn }}."
         contact: "postmaster.{{ domain }}."
@@ -38,3 +44,26 @@ nsd:
         - {name: "@", type: A, value: "{{ ip_v4 }}"}
         - {name: mail, type: A, value: "{{ ip_v4 }}"}
         - {name: www, type: CNAME, value: "{{ domain }}."}
+    # The alias domain, with a different secret as well as a different
+    # name - so a template emitting one zone's key for another, or one
+    # key block for two zones, does not render identically.
+    - name: "{{ domain_aliases[0] }}"
+      ttl: 3600
+      serial: 2026081601
+      tsig:
+        name: "{{ domain_aliases[0] }}.{{ ip_v4 }}."
+        algorithm: hmac-sha256
+        secret: dGVzdC1hbGlhcy10c2lnLXNlY3JldC1ub3QtdXNlZC1laXRoZXI=
+      soa:
+        primary: "{{ hostname_fqdn }}."
+        contact: "postmaster.{{ domain_aliases[0] }}."
+        refresh: 86400
+        retry: 10800
+        expire: 3600000
+        minimum: 3600
+      nameservers:
+        - "{{ hostname_fqdn }}."
+      records:
+        - {name: "@", type: A, value: "{{ ip_v4 }}"}
+        - {name: mail, type: A, value: "{{ ip_v4 }}"}
+        - {name: www, type: CNAME, value: "{{ domain_aliases[0] }}."}

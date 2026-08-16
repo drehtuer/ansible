@@ -74,7 +74,10 @@ Two checks, both in `tests/static.yml`:
 
 *Argument specs.* Every `roles/*/meta/argument_specs.yml` is validated against the test inventory. This catches a role and its inventory drifting apart, and in particular the trap that has caused the most trouble here: overriding a role's top-level dictionary in `group_vars` *replaces* the role default rather than merging into it, so an override that forgets a single key breaks the role at run time.
 
-*Template rendering.* Every `*.j2` in every role is rendered. This catches Jinja errors and undefined variables without needing a host. The firewall rules are rendered twice, for IPv4 and IPv6, and the test asserts that the two outputs actually differ — that specific branch previously compared a string against an integer and silently emitted the IPv4 ruleset into the IPv6 file.
+*Template rendering.* Every `*.j2` in every role is rendered. This catches Jinja errors and undefined variables without needing a host. Two templates get extra attention, both because a per-item branch is where silent wrong-output bugs have actually lived:
+
+* The firewall rules are rendered twice, for IPv4 and IPv6, and the test asserts that the two outputs actually differ — that branch previously compared a string against an integer and silently emitted the IPv4 ruleset into the IPv6 file.
+* The `nsd` zone template is rendered once per entry in `nsd.zones` rather than only for the first, and the test asserts that `tsig.conf` renders as many distinct key names as there are zones. The role used to emit one transfer key for the whole server; one key per zone is what Hetzner's naming scheme forces, and a template regressing to a single shared block would otherwise render perfectly valid config that no secondary could use. The test inventory carries two zones for exactly this reason.
 
 These tests are quick and need no container, which is why CI runs them before anything else.
 
@@ -176,6 +179,14 @@ do-release-upgrade  FAILED rc=1
 That is Ubuntu's LTS gate, not a defect: 24.04 -> 26.04 is not offered until the 26.04.1 point release. Everything up to that point works - both assertions, the version comparison, the full upgrade of the current release, the prompt-mode change - as does the no-op path when the target is already reached (`ok=5 changed=0 skipped=8`). What remains unproven is a `do-release-upgrade` that actually completes, reboots and passes the closing assert. Rehearse on `hastur` once Ubuntu offers the upgrade, *before* pointing the role at production.
 
 The run also surfaced a real defect, since fixed: the role read `ansible_distribution`/`ansible_distribution_version` as bare top-level variables, which ansible-core 2.24 deprecates in favour of `ansible_facts[...]`. Worth noting as the kind of thing only a real run finds — the deprecation is a run-time warning, so no linter and no static test could have reported it.
+
+*`nsd`, `mail` and `imap` are verified on the VM, and the multi-domain behaviour with them.* All three converge on a pristine 24.04 guest and are idempotent. What was checked is the behaviour rather than the exit status:
+
+* *Two zones, two transfer keys.* `nsd-control zonestatus` reports both zones as `master`, and `tsig.conf` carries two `key:` blocks with distinct names. An AXFR of each zone succeeds when presented with **its own** key, and `lab.test` is answered `REFUSED` when offered `lab.lan`'s key — which is what proves the keys are genuinely per zone rather than one key rendered twice. An unsigned transfer is refused, and a query for a foreign name is still `REFUSED` with no `ra` flag, so the multi-zone configuration has not turned it into a resolver.
+* *One inbox across both domains.* Messages to the account at the primary domain, at the alias domain, and to `postmaster@<alias domain>` all arrive in the same Maildir; `postfix check` is silent. `doveadm user` resolves the account under either domain to the same uid and home, and an IMAP login succeeds with either — the same 7-message INBOX.
+* *The old behaviour was reproduced before it was fixed.* Putting the previous `virtual_mailbox_domains`/`virtual_alias_domains` back and re-sending showed the alias-domain message leaving the host — `relay=none ... status=bounced (Host or domain name not found)` — rather than being refused, which is what corrected the account of it in `doc/STATUS.adoc`.
+
+That run also found two defects that had nothing to do with the change being tested, both invisible on `carcosa` because they only bite a host being built from nothing: `sievec` compiled without `-c` and failed the whole `imap` role, and `fail2ban` starts before nginx has created the logs its jails watch and exits `255`. The first is fixed; the second is an ordering constraint recorded in `doc/TODO.adoc`. That is the argument for this layer in one paragraph.
 
 *This is not a substitute for a from-scratch provision.* The metal machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
 

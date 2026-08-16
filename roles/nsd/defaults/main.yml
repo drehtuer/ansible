@@ -3,9 +3,10 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # loopback. Empty by default so the role cannot accidentally bind
   # every interface on a host that has not declared its addresses.
   listen: []
-  # Addresses permitted to pull the zone by AXFR: Hetzner's three
+  # Addresses permitted to pull the zones by AXFR: Hetzner's three
   # secondary nameservers, both families, since a transfer may reach
-  # this host over either.
+  # this host over either. The same three serve every zone, so this is
+  # one list rather than one per zone.
   # https://docs.hetzner.com/de/networking/dns/overview
   secondaries:
     - 213.239.242.238      # ns1.first-ns.de
@@ -14,7 +15,7 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     - 2a01:4f8:0:1::5ddc:2
     - 193.47.99.3          # robotns3.second-ns.com
     - 2001:67c:192c::add:a3
-  # Addresses told when the zone changes, so they fetch it promptly
+  # Addresses told when a zone changes, so they fetch it promptly
   # instead of waiting out the SOA refresh interval.
   #
   # The same three servers, but their IPv4 addresses only, and that is
@@ -35,26 +36,6 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     - 213.239.242.238      # ns1.first-ns.de
     - 213.133.100.103      # robotns2.second-ns.de
     - 193.47.99.3          # robotns3.second-ns.com
-  # Shared secret authenticating the zone transfer, so a secondary can
-  # verify the zone it received really came from this host and was not
-  # altered in transit (TSIG, RFC 8945). This is *not* DNSSEC: TSIG
-  # authenticates the transfer between these two servers and is not
-  # stored in the zone, whereas DNSSEC signs the zone data itself so
-  # that any validating resolver can check an answer. Neither
-  # substitutes for the other.
-  #
-  # An empty secret disables it and falls back to unauthenticated
-  # transfers restricted by source address alone, which is what
-  # Hetzner's own example configuration shows. Left empty here so the
-  # role does not require a secret from a host that has no zones.
-  #
-  # hmac-sha256 because it is the strongest of the three algorithms
-  # Hetzner accepts - the other two are hmac-md5 and hmac-sha1, both
-  # long broken.
-  tsig:
-    name: transfer
-    algorithm: hmac-sha256
-    secret: ""
   # Response rate limiting, against reflection abuse. NSD cannot be an
   # open resolver, but a spoofed source address can still make it send
   # a reply to a victim; this caps how often the same answer goes to
@@ -66,4 +47,31 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     whitelist_ratelimit: 2000
   # No zones by default: the role is a no-op until a host declares
   # what it is authoritative for.
+  #
+  # Each zone carries its own `tsig` block - the shared secret
+  # authenticating *its* transfers, so a secondary can verify the zone
+  # it received really came from this host and was not altered in
+  # transit (TSIG, RFC 8945). One key per zone rather than one key for
+  # the server, for two reasons:
+  #
+  #   * Hetzner leaves no choice. Their console takes only the
+  #     algorithm and the secret and derives the key name itself as
+  #     "<zone>.<primary-ip>.", so two zones cannot share a name even
+  #     if they shared a secret.
+  #   * A compromised or rotated key then costs one zone, not all of
+  #     them. Rotating means changing the secret here and in Hetzner's
+  #     console for that zone alone.
+  #
+  # An empty secret disables TSIG for that zone and falls back to
+  # unauthenticated transfers restricted by source address alone, which
+  # is what Hetzner's own example configuration shows.
+  #
+  # hmac-sha256 because it is the strongest of the three algorithms
+  # Hetzner accepts - the other two are hmac-md5 and hmac-sha1, both
+  # long broken.
+  #
+  # TSIG is *not* DNSSEC. TSIG authenticates the transfer between these
+  # two servers and is not stored in the zone, whereas DNSSEC signs the
+  # zone data itself so that any validating resolver can check an
+  # answer. Neither substitutes for the other.
   zones: []

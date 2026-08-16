@@ -5,11 +5,25 @@ argument_specs:
       - Installs Dovecot core/IMAP/LMTP/Sieve and deploys Sieve-pipe
         scripts that call RSpamd's ham/spam learning API, so moving
         mail into or out of the Spam folder trains the filter.
+      - Accounts are domainless. `auth_username_format = %n` strips the
+        domain from every auth request, login and LMTP recipient
+        lookup alike, so all of this host's domains share one inbox per
+        account instead of one per domain.
     options:
       domain:
         type: str
         required: true
         description: Primary domain, used as the LMTP postmaster address.
+      domain_aliases:
+        type: list
+        elements: str
+        required: true
+        description:
+          - Secondary domains this host also serves. Not configured
+            anywhere in Dovecot - accounts have no domain at all - and
+            read only to record in dovecot.conf which domains the
+            stripped-username rule is covering. The mail role is what
+            decides which of them reach LMTP.
       hostname_fqdn:
         type: str
         required: true

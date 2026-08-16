@@ -1,20 +1,41 @@
-# Authoritative zone data for this host, transcribed from what
-# ns1.first-ns.de served on 2026-08-15 before the primary moved here.
+# Authoritative zone data for this host.
+#
+# `drehtuer.net` was transcribed from what ns1.first-ns.de served on
+# 2026-08-15, before the primary moved here. `drehtuer.de` was
+# transcribed the same way on 2026-08-16 and then extended: what
+# Hetzner served for it was only an apex A, an MX pointing at the apex,
+# `v=spf1 mx -all`, and A records for `www` and `mail`, all aimed at
+# 78.46.107.174 - a different host. The zone below aims every name at
+# this one and gives the domain the same shape `drehtuer.net` has.
+#
+# Neither domain is DNSSEC-signed and neither has a DS record in its
+# parent (checked against the .de/.net delegations on 2026-08-16), so
+# moving a primary here breaks no chain of trust. That also means the
+# DNSSEC question in doc/TODO.adoc now covers two zones rather than one.
 #
 # This host is a *hidden primary*: the NS records still point at
-# Hetzner's nameservers, which pull the zone from here by AXFR. The
-# world queries them, so an outage here does not take the zone down -
-# it only stops updates propagating.
+# Hetzner's nameservers, which pull each zone from here by AXFR. The
+# world queries them, so an outage here does not take a zone down - it
+# only stops updates propagating.
 #
-# Bump `serial` on every change. Secondaries compare serials and will
-# keep serving their old copy if it does not increase.
+# Bump a zone's `serial` on every change to it. Secondaries compare
+# serials and will keep serving their old copy if it does not increase.
+#
+# The zone list is deliberately NOT derived from `domain` /
+# `domain_aliases` the way `http.domains` is. Those say which domains
+# this host *serves*; this file says which zones it is *authoritative*
+# for, and the two are not the same question - a served domain whose
+# DNS stays elsewhere has no zone here. A zone also needs hand-written
+# records, its own serial and its own transfer key, none of which can
+# be derived from a domain name.
 nsd:
   # Overriding the role's top-level dict replaces its defaults, so
   # every key the role requires is repeated here even where the value
   # matches the default - see doc/STATUS.adoc.
   #
   # Hetzner's secondary nameservers: the only addresses allowed to
-  # transfer this zone, and the ones notified when it changes.
+  # transfer these zones, and the ones notified when one changes. The
+  # same three serve both domains.
   # https://docs.hetzner.com/de/networking/dns/overview
   secondaries:
     - 213.239.242.238      # ns1.first-ns.de
@@ -29,29 +50,6 @@ nsd:
     - 213.239.242.238      # ns1.first-ns.de
     - 213.133.100.103      # robotns2.second-ns.de
     - 193.47.99.3          # robotns3.second-ns.com
-  # Shared secret authenticating the AXFR to Hetzner's secondaries, so
-  # they can verify the zone came from here unaltered.
-  #
-  # The name is NOT free to choose. Hetzner's console takes only the
-  # algorithm and the secret, and derives the key name itself as
-  # "<zone>.<primary-ip>." - so it must be written out here exactly as
-  # they send it. Getting it wrong is not a soft failure: NSD answers
-  # BADKEY, no transfer ever succeeds, and once their copy passes the
-  # SOA expire time they stop answering for the zone entirely and the
-  # domain goes dark. Recovering means fixing the name and waiting for
-  # the transfer, so check the name against a real transfer attempt
-  # (`journalctl -u nsd | grep tsig`) rather than assuming.
-  tsig:
-    name: drehtuer.net.88.198.12.17.
-    algorithm: hmac-sha256
-    secret: !vault |
-        $ANSIBLE_VAULT;1.1;AES256
-        32376362383262663463363139623062346434393734343731323337626366323164346232666362
-        3761646462623631326431306638613565633266623434340a386161343537333038643262316139
-        38633036343265373635323439326434386361303835623039623730643535316235306530373937
-        3562336238333138340a376531646238353632633037393034373665386537366266666163303331
-        35343534643865643066626233316664633535363036666334643163323166626566323261326264
-        6265366233383336633936623137646233386164623032393236
   rrl:
     size: 1000000
     ratelimit: 200
@@ -63,6 +61,31 @@ nsd:
     - name: "{{ domain }}"
       ttl: 3600
       serial: 2026081501
+      # Shared secret authenticating the AXFR of this zone to Hetzner's
+      # secondaries, so they can verify it came from here unaltered.
+      # Each zone has its own key; see `drehtuer.de` below.
+      #
+      # The name is NOT free to choose. Hetzner's console takes only
+      # the algorithm and the secret, and derives the key name itself
+      # as "<zone>.<primary-ip>." - so it must be written out here
+      # exactly as they send it. Getting it wrong is not a soft
+      # failure: NSD answers BADKEY, no transfer ever succeeds, and
+      # once their copy passes the SOA expire time they stop answering
+      # for the zone entirely and the domain goes dark. Recovering
+      # means fixing the name and waiting for the transfer, so check
+      # the name against a real transfer attempt
+      # (`journalctl -u nsd | grep tsig`) rather than assuming.
+      tsig:
+        name: drehtuer.net.88.198.12.17.
+        algorithm: hmac-sha256
+        secret: !vault |
+            $ANSIBLE_VAULT;1.1;AES256
+            32376362383262663463363139623062346434393734343731323337626366323164346232666362
+            3761646462623631326431306638613565633266623434340a386161343537333038643262316139
+            38633036343265373635323439326434386361303835623039623730643535316235306530373937
+            3562336238333138340a376531646238353632633037393034373665386537366266666163303331
+            35343534643865643066626233316664633535363036666334643163323166626566323261326264
+            6265366233383336633936623137646233386164623032393236
       soa:
         primary: ns1.first-ns.de.
         contact: dns.hetzner.com.
@@ -87,7 +110,9 @@ nsd:
         - {name: "@", type: CAA, value: '128 issuewild ""'}
         - {name: "@", type: CAA, value: '128 iodef "mailto:root@{{ domain }}"'}
         # The host itself, and the name every TLS consumer reads out of
-        # /etc/letsencrypt/live/.
+        # /etc/letsencrypt/live/. Only this zone carries it: the
+        # certificate lineage is named after the host's FQDN, which is
+        # in this domain and not in the alias domain.
         - {name: "{{ hostname }}", type: A, value: "{{ ip_v4 }}"}
         - {name: "{{ hostname }}", type: AAAA, value: "{{ ip_v6 }}"}
         # mail is an A/AAAA rather than a CNAME on purpose: it is the
@@ -119,3 +144,98 @@ nsd:
           value: >-
             "v=DKIM1; k=ed25519; "
             "p=9w24peXmzA+r8Z3oodRBfeYChYc/YXx2vyD0Zv5N1x4="
+    # The secondary domain, written out rather than derived: see the
+    # note at the top of this file. Same shape as the zone above, so
+    # both domains offer the same subdomains and the same policy -
+    # which is what the http, cloud, spam and mail roles already assume
+    # when they fan out over `[domain] + domain_aliases`.
+    #
+    # `drehtuer.de` is spelled literally here rather than as
+    # `domain_aliases[0]`: the record values below name it a dozen
+    # times, and an indexed reference reads worse than the name itself
+    # while silently changing meaning if the alias list is reordered.
+    - name: drehtuer.de
+      ttl: 3600
+      serial: 2026081601
+      # A different secret from the zone above, and necessarily a
+      # different name - Hetzner derives it from the zone, so the two
+      # could not collide even if they shared a secret. Keeping the
+      # secrets separate as well means rotating one domain's key never
+      # touches the other's, and a leak costs one zone.
+      #
+      # Register it in Hetzner's console together with the algorithm
+      # when converting this zone to a secondary of this host. Read it
+      # back - selected by zone name, so reordering this list cannot
+      # print the wrong key - with:
+      #   ansible -i inventories/machines.yml carcosa \
+      #     -m ansible.builtin.debug -a "msg={{ nsd.zones
+      #     | selectattr('name','eq','drehtuer.de')
+      #     | map(attribute='tsig') | first }}"
+      tsig:
+        name: drehtuer.de.88.198.12.17.
+        algorithm: hmac-sha256
+        secret: !vault |
+            $ANSIBLE_VAULT;1.1;AES256
+            61393530323134386636323064313231346430373466323462386436633964386537656266626564
+            6464646335336566636537646633336261613537363631300a633262623766373937376135643438
+            36653562353237346532323865323061616333343266626438336261346633363966393062386434
+            3766316561633132310a653732636163343532333438353431363337306534643630353962313436
+            65373961633866313231303162353734613334383266346336346564313232633534306636396564
+            3937343466643737373433353430396630646533356561396533
+      soa:
+        primary: ns1.first-ns.de.
+        contact: dns.hetzner.com.
+        refresh: 86400
+        retry: 10800
+        expire: 3600000
+        minimum: 3600
+      nameservers:
+        - ns1.first-ns.de.
+        - robotns2.second-ns.de.
+        - robotns3.second-ns.com.
+      records:
+        - {name: "@", type: A, value: "{{ ip_v4 }}"}
+        - {name: "@", type: AAAA, value: "{{ ip_v6 }}"}
+        # Its own MX rather than the primary domain's: mail.drehtuer.de
+        # is on the certificate and resolves here, so the domain stands
+        # on its own. Postfix accepts it because the mail role lists
+        # every alias domain in virtual_mailbox_domains.
+        - {name: "@", type: MX, value: "10 mail.drehtuer.de."}
+        # Replaces the `v=spf1 mx -all` Hetzner served: identical in
+        # effect while the MX pointed at the only sending host, but the
+        # addresses are what actually authorise this host, and naming
+        # them keeps the record true if the MX ever changes.
+        - {name: "@", type: TXT,
+           value: '"v=spf1 ip4:{{ ip_v4 }} ip6:{{ ip_v6 }} -all"'}
+        - {name: "@", type: CAA, value: '128 issue "letsencrypt.org"'}
+        - {name: "@", type: CAA, value: '128 issuewild ""'}
+        - {name: "@", type: CAA, value: '128 iodef "mailto:root@drehtuer.de"'}
+        - {name: mail, type: A, value: "{{ ip_v4 }}"}
+        - {name: mail, type: AAAA, value: "{{ ip_v6 }}"}
+        - {name: www, type: CNAME, value: drehtuer.de.}
+        - {name: cloud, type: CNAME, value: drehtuer.de.}
+        - {name: spam, type: CNAME, value: drehtuer.de.}
+        - {name: status, type: CNAME, value: drehtuer.de.}
+        - name: _dmarc
+          type: TXT
+          value: >-
+            "v=DMARC1; p=reject; rua=mailto:postmaster@drehtuer.de;
+            adkim=s; aspf=s"
+        # NO DKIM RECORD YET, and that is deliberate rather than an
+        # oversight. The spam role generates one RSA key per served
+        # domain, so `drehtuer.de.mail.key` only comes into existence
+        # when playbooks/spam.yml runs; its public half is written
+        # beside it as `/var/lib/rspamd/dkim/drehtuer.de.mail.txt` and
+        # cannot be known before that. Publishing a guessed or
+        # placeholder record would be worse than publishing none: a
+        # record that does not match the signing key makes every signed
+        # message fail verification, whereas no record at all simply
+        # leaves DKIM unevaluated.
+        #
+        # Nothing breaks in the meantime. DMARC above passes on SPF
+        # alone, which is aligned for mail this host sends.
+        #
+        # To finish it: run playbooks/spam.yml, read the record with
+        # `sudo cat /var/lib/rspamd/dkim/drehtuer.de.mail.txt`, add it
+        # here in the two-quoted-string form used above, and bump this
+        # zone's serial. Tracked in doc/TODO.adoc.

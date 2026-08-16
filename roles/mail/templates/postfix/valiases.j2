@@ -18,9 +18,22 @@
   falls through to virtual_mailbox_domains and is delivered to the
   matching system account, which is what was wanted all along.
 
-  The alias domains stay accepted because they still appear on the
-  left of this map through the per-alias entries below, and Postfix
-  derives virtual_alias_domains from virtual_alias_maps.
+  What this map does NOT do is make the alias domains local. An
+  earlier version of this comment claimed it did - "they appear on the
+  left of this map, and Postfix derives virtual_alias_domains from
+  virtual_alias_maps" - and that is wrong. With virtual_alias_domains
+  set to a map, Postfix looks up the *bare domain* as a key; the
+  entries below are keyed on full addresses, so `postmap -q lab.test`
+  misses and the domain was never in that class at all. It worked for
+  the addresses listed here only because alias rewriting runs for
+  every recipient regardless of address class.
+
+  The consequence was worse than a refusal, and it is why
+  virtual_mailbox_domains in main.cf now names every alias domain
+  explicitly. An ordinary account at an alias domain matched no class,
+  fell through to the default one, and Postfix tried to deliver it
+  *off-host*: `relay=none ... status=bounced (Host or domain name not
+  found)`. Verified on the lab by putting the old settings back.
 #}
 # Virtual aliases for Postfix
 {% for d in [domain] + domain_aliases %}
