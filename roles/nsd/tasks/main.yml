@@ -3,6 +3,10 @@
     install_recommends: false
     name:
       - nsd
+      # `dig`, for the serial checks at the end of this role. Present
+      # on the current host already, but nothing declared it, so a
+      # from-scratch provision would only find out at the check.
+      - bind9-dnsutils
   notify:
     - Restart nsd
 - name: Create zone directory
@@ -35,6 +39,29 @@
   when: nsd.zones | selectattr('tsig.secret') | list | length > 0
   notify:
     - Restart nsd
+- name: Read the serial being served before any change
+  # Taken from the running server rather than from the file, because
+  # what the secondaries compare against is what this host answers
+  # with. Failure is expected and ignored on a host where nsd is not
+  # running yet, or for a zone being added for the first time - both
+  # give an empty result, which the guard below treats as "nothing to
+  # compare against".
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +norecurse +time=3 +tries=1
+      SOA {{ item.name }} @{{ nsd.listen[0] }}
+  register: nsd_serial_before
+  changed_when: false
+  failed_when: false
+  # Reads nothing but the running server, so it is safe under --check -
+  # and running it there is the point: a forgotten serial bump is then
+  # caught by `invoke check-drift`, before it is deployed.
+  check_mode: false
+  loop: "{{ nsd.zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: nsd.listen | length > 0
+
 - name: Zone files
   ansible.builtin.template:
     src: templates/zone.j2
@@ -42,6 +69,7 @@
     owner: root
     group: nsd
     mode: "0640"
+  register: nsd_zone_files
   loop: "{{ nsd.zones }}"
   loop_control:
     label: "{{ item.name }}"
@@ -77,8 +105,127 @@
   loop: "{{ nsd.zones }}"
   loop_control:
     label: "{{ item.name }}"
+- name: Fail if a zone changed without its serial increasing
+  # The failure this catches is the quiet one. Edit a record, forget
+  # `serial`, and everything still looks right: the file is written,
+  # nsd-checkzone passes, nsd reloads and answers with the new data.
+  # The secondaries compare serials, see no increase, and never ask for
+  # the zone - so the world keeps the old answer indefinitely while
+  # this host serves the new one and the playbook reports success.
+  #
+  # Comparing what the server *was* answering against what the
+  # inventory now says is what makes it detectable: neither the file
+  # nor nsd-checkzone knows the previous value.
+  #
+  # Skipped when there is nothing to compare against - a first
+  # deployment, or a zone being added - rather than treated as a
+  # failure.
+  vars:
+    soa: "{{ (nsd_serial_before.results[idx].stdout | default('')).split() }}"
+    previous: "{{ soa[2] if soa | length > 2 else '' }}"
+  ansible.builtin.assert:
+    that:
+      - item.item.serial | int > previous | int
+    fail_msg: >-
+      Zone {{ item.item.name }} changed but its serial did not increase:
+      still {{ item.item.serial }}, and the nameservers are already
+      serving {{ previous }}. They compare serials, so they will not
+      transfer this change and will keep answering with the old zone.
+      Raise nsd.zones[].serial for {{ item.item.name }} and re-run.
+    success_msg: >-
+      {{ item.item.name }}: {{ previous }} -> {{ item.item.serial }}
+  loop: "{{ nsd_zone_files.results }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.item.name }}"
+  when:
+    - nsd_serial_before.results is defined
+    - item.changed
+    - previous != ''
+
 - name: Systemd enable nsd
   ansible.builtin.systemd_service:
     name: nsd
     state: started
     enabled: true
+
+- name: Apply pending zone changes before checking them
+  # The check below asks the nameservers what they are actually
+  # serving, which only means anything once nsd has loaded what this
+  # run just wrote. Handlers otherwise run at the end of the play,
+  # after the check has already passed or failed on the old zone.
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the serial this host is now serving
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +norecurse +time=3 +tries=1
+      SOA {{ item.name }} @{{ nsd.listen[0] }}
+  register: nsd_serial_now
+  changed_when: false
+  check_mode: false
+  loop: "{{ nsd.zones }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: nsd.listen | length > 0
+
+- name: Index those serials by zone name
+  # Keyed by name rather than carried as a parallel list, because the
+  # check below iterates zones *and* their nameservers together and
+  # the two lists no longer line up - a zone may name any number of
+  # nameservers.
+  #
+  # The serial is the third field of the SOA rdata, not the last -
+  # `mname rname serial refresh retry expire minimum` - so it is picked
+  # out by position. A server that answered nothing yields an empty
+  # string, which the check below then waits on and ultimately fails,
+  # which is the right outcome for a primary that is not answering.
+  ansible.builtin.set_fact:
+    nsd_serial_map: >-
+      {{ dict(nsd_serial_now.results
+              | map(attribute='item.name')
+              | zip(nsd_serial_now.results
+                    | map(attribute='stdout')
+                    | map('regex_replace',
+                          '^\s*\S+\s+\S+\s+(\d+).*$', '\1'))) }}
+  when: nsd_serial_now.results is defined and nsd_serial_now is not skipped
+
+- name: Confirm every nameserver has caught up with this host
+  # The other half of the same problem. The assert above catches a
+  # serial that never moved; this catches one that moved and did not
+  # arrive - a refused transfer, a TSIG key that no longer matches, a
+  # secondary that never got the NOTIFY. Both fail silently otherwise,
+  # and both leave the world on a stale zone.
+  #
+  # Asked of the nameservers named in the zone's own NS records, since
+  # those are the servers the world actually queries, rather than of
+  # the transfer ACL - a zone can permit a transfer to a host nobody
+  # is delegated to.
+  #
+  # Retried rather than checked once: a transfer takes a moment even
+  # when the NOTIFY arrives immediately, so a single query would fail
+  # on a change that is merely in flight.
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +time=3 +tries=1
+      SOA {{ item.0.name }} @{{ item.1 }}
+  register: nsd_propagation
+  changed_when: false
+  check_mode: false
+  # The length guard comes first and is load-bearing: an unreachable
+  # nameserver returns nothing, and indexing [2] into an empty list
+  # is an error rather than a mismatch, which would abort the retry
+  # loop instead of retrying.
+  until: >-
+    nsd_propagation.stdout.split() | length > 2
+    and nsd_propagation.stdout.split()[2] == serial_here
+  retries: "{{ nsd.propagation.retries }}"
+  delay: "{{ nsd.propagation.delay }}"
+  vars:
+    serial_here: "{{ nsd_serial_map[item.0.name] }}"
+  loop: "{{ nsd.zones | subelements('nameservers') }}"
+  loop_control:
+    label: "{{ item.0.name }} @ {{ item.1 }}"
+  when:
+    - nsd.propagation.check
+    - nsd_serial_map | default({}) | length > 0

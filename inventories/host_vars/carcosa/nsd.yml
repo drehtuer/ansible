@@ -57,6 +57,10 @@ nsd:
   listen:
     - "{{ ip_v4 }}"
     - "{{ ip_v6 }}"
+  propagation:
+    check: true
+    retries: 10
+    delay: 6
   zones:
     - name: "{{ domain }}"
       ttl: 3600

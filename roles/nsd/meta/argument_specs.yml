@@ -54,6 +54,28 @@ argument_specs:
                 type: int
                 required: true
                 description: Rate limit for whitelisted sources.
+          propagation:
+            type: dict
+            required: true
+            description:
+              - Post-deploy check that every nameserver in a zone's NS
+                records is serving the serial this host now has.
+            options:
+              check:
+                type: bool
+                required: true
+                description:
+                  - Whether to run the check at all. Turning it off
+                    means a transfer that silently stopped working is
+                    not noticed here.
+              retries:
+                type: int
+                required: true
+                description: Attempts before a nameserver is called stale.
+              delay:
+                type: int
+                required: true
+                description: Seconds between those attempts.
           zones:
             type: list
             elements: dict

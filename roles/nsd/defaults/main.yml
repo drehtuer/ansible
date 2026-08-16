@@ -45,6 +45,20 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     size: 1000000
     ratelimit: 200
     whitelist_ratelimit: 2000
+  # After a zone changes, the role asks every nameserver named in that
+  # zone's NS records whether it is serving the new serial yet, and
+  # fails the run if one never catches up. A stale secondary is
+  # otherwise completely silent: this host answers correctly, so every
+  # check made *here* passes while the world keeps the old zone.
+  #
+  # Retried rather than asked once, because a transfer takes a moment
+  # even when the NOTIFY arrives immediately. Ten attempts six seconds
+  # apart is a minute, which is far longer than a working transfer
+  # needs and short enough not to hide a broken one.
+  propagation:
+    check: true
+    retries: 10
+    delay: 6
   # No zones by default: the role is a no-op until a host declares
   # what it is authoritative for.
   #
