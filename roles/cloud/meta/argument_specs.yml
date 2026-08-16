@@ -4,8 +4,10 @@ argument_specs:
     description:
       - Creates the Nextcloud database and user, installs a pinned
         Nextcloud release, and adds its own PHP-FPM pool, nginx
-        upstream and vhost. The Nextcloud installer itself is not run,
-        see doc/TODO.adoc.
+        upstream and vhost. Runs the installer on a host that has none,
+        and upgrades one whose pinned version has moved on - taking a
+        database dump first, since the schema migration is the part
+        that re-extracting files cannot undo.
     options:
       http:
         type: dict
@@ -87,6 +89,50 @@ argument_specs:
                 type: str
                 required: true
                 description: Cron schedule for the background job.
+              data_dir:
+                type: str
+                required: true
+                description:
+                  - Where user files live. On this host it sits inside
+                    the installation directory, which is why the upgrade
+                    extracts over the top and deletes nothing.
+              admin:
+                type: dict
+                required: true
+                description:
+                  - First-run installer credentials, used only when
+                    config/config.php is absent.
+                options:
+                  user:
+                    type: str
+                    required: true
+                    description: Administrator account to create.
+                  password:
+                    type: str
+                    required: true
+                    description:
+                      - Its password. The role refuses to install with
+                        an empty one rather than creating an
+                        administrator anybody could log in as.
+              upgrade:
+                type: dict
+                required: true
+                description: Upgrade behaviour.
+                options:
+                  dump_dir:
+                    type: str
+                    required: true
+                    description:
+                      - Where the pre-upgrade database dump is written.
+                        The schema migration is the part of an upgrade
+                        that cannot be undone by re-extracting files.
+                  repair_commands:
+                    type: list
+                    elements: str
+                    required: true
+                    description:
+                      - occ commands run after a successful upgrade,
+                        e.g. db:add-missing-indices.
               log_rotate_size:
                 type: int
                 required: true

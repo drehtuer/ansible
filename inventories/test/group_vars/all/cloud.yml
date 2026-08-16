@@ -13,6 +13,16 @@ cloud:
       d7ed36ac0e14a2d9bbd167d6f6d4fc498f0f39fcccdf304e67e35bfc42e4506d
     path: /var/www/nextcloud
     cron_minute: "*/5"
+    data_dir: /var/www/nextcloud/data
+    admin:
+      user: admin
+      password: test-nextcloud-admin-password
+    upgrade:
+      dump_dir: /var/backups/nextcloud
+      repair_commands:
+        - db:add-missing-indices
+        - db:add-missing-columns
+        - db:add-missing-primary-keys
     log_rotate_size: 104857600
   ocr:
     languages:

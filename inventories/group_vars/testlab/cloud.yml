@@ -27,6 +27,23 @@ cloud:
     cron_minute: "*/5"
     # Overriding `cloud` replaces the role default wholesale, so
     # this key has to be repeated here too. Unset means no rotation.
+    data_dir: /var/www/nextcloud/data
+    admin:
+      user: admin
+      password: !vault |
+        $ANSIBLE_VAULT;1.1;AES256
+        63663031643134336262363639623564326639646232316661326332373031643363613139393738
+        6439386663616165373266323836323361393966653336300a313334623064336238306236333631
+        66666162653666306438376238396234303236356565373765363337333038623134663930363138
+        3435633831616163350a396262656530643134336665316231323030383939386130306139643235
+        30613035396362613563363563376335646262353336323636626430313461333965363834386330
+        6466363839616539343534653532323330633030323461643064
+    upgrade:
+      dump_dir: /var/backups/nextcloud
+      repair_commands:
+        - db:add-missing-indices
+        - db:add-missing-columns
+        - db:add-missing-primary-keys
     log_rotate_size: 104857600
   ocr:
     languages:
