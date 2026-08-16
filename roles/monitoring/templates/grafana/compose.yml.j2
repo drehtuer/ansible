@@ -55,6 +55,18 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # The fourth outbound path, and the one the three settings above
+      # do not cover. `preinstall_disabled` defaults to false and
+      # `preinstall_auto_update` to true, so on every start Grafana
+      # asks grafana.com about its preinstalled plugins and tries to
+      # update them. Found on carcosa, where it also failed - the
+      # bundled plugin directory lives inside the image and is not
+      # writable by the uid this runs as, so it logged
+      # `Failed to install plugin pluginId=elasticsearch ...
+      # permission denied` on every start. Nothing here uses those
+      # plugins; disabling the feature removes both the network call
+      # and the error.
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
       # To the journal, via Docker's json-file driver, which the docker
       # role already caps at 10 MB x 3 - so this needs no rotation of
       # its own, unlike the Dovecot and Nextcloud logs.
