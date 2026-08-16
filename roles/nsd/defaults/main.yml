@@ -81,10 +81,21 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Weekly, at a fixed quiet hour. Re-signing is what keeps a signed
     # zone from expiring into bogus, so this job is load-bearing rather
     # than housekeeping.
+    #
+    # A systemd timer rather than a cron job, for Persistent=true: cron
+    # silently skips a run whose moment passed while the host was down,
+    # and `roles/upgrade` exists to reboot this machine. The timer
+    # catches up instead.
     resign:
-      weekday: "0"
-      hour: "4"
-      minute: "20"
+      on_calendar: "Sun *-*-* 04:20:00"
+      randomized_delay: 3600
+    # The safety net under all of the above. Scheduling proves nothing
+    # about whether the signing *worked* - a missing key, a full disk, a
+    # broken nsd-control all fail quietly - so the role checks what is
+    # actually being served and fails if the signatures are closer to
+    # expiry than this. At 30-day signatures re-signed weekly the real
+    # figure should never fall below about 23.
+    min_signature_days: 7
   # No zones by default: the role is a no-op until a host declares
   # what it is authoritative for.
   #

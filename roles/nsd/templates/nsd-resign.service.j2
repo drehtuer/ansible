@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+#
+# Re-signs every zone this host serves. Driven by nsd-resign.timer, not
+# enabled directly.
+#
+# This is the unit that keeps the zones alive. DNSSEC signatures expire,
+# and a zone whose signatures have run out is not treated as unsigned -
+# it is bogus, and validating resolvers refuse every answer. With DMARC
+# at p=reject on these domains that takes mail and web down together.
+[Unit]
+Description=Re-sign DNSSEC zones
+After=nsd.service
+Requires=nsd.service
+
+[Service]
+Type=oneshot
+# One ExecStart per zone. Type=oneshot runs them in order and fails the
+# unit if any of them fails, which is what makes the timer's failure
+# visible rather than partial.
+{% for zone in nsd.zones %}
+ExecStart=/usr/local/bin/nsd-sign-zone {{ zone.name }}
+{% endfor %}

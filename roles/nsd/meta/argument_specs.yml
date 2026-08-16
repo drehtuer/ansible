@@ -103,20 +103,24 @@ argument_specs:
               resign:
                 type: dict
                 required: true
-                description: Schedule for the re-signing cron job.
+                description: Schedule for the re-signing systemd timer.
                 options:
-                  weekday:
+                  on_calendar:
                     type: str
                     required: true
-                    description: Cron weekday field.
-                  hour:
-                    type: str
+                    description: systemd OnCalendar expression.
+                  randomized_delay:
+                    type: int
                     required: true
-                    description: Cron hour field.
-                  minute:
-                    type: str
-                    required: true
-                    description: Cron minute field.
+                    description: RandomizedDelaySec, in seconds.
+              min_signature_days:
+                type: int
+                required: true
+                description:
+                  - Fail the run if the signatures actually being served
+                    expire sooner than this. Catches a re-sign that is
+                    scheduled but not working, which scheduling alone
+                    cannot.
           zones:
             type: list
             elements: dict

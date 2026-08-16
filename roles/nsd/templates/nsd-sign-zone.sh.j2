@@ -142,4 +142,11 @@ trap - EXIT
 # secondaries, which then see the new serial and transfer.
 nsd-control reload "${ZONE}" > /dev/null
 
-echo "${ZONE}: signed, serial ${CURRENT} -> ${NEXT}"
+# Quiet unless run by hand. This is driven by a systemd timer whose
+# failure mail is the only thing that will ever tell anyone the zone
+# stopped being re-signed - and a job that reports success every week
+# trains its reader to ignore exactly the message that matters. On a
+# terminal it still says what it did.
+if [ -t 1 ]; then
+  echo "${ZONE}: signed, serial ${CURRENT} -> ${NEXT}"
+fi
