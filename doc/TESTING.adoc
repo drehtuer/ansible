@@ -129,7 +129,7 @@ The rest are not covered, for concrete reasons rather than lack of effort:
 | Runs `do-release-upgrade` and reboots. Not meaningfully automatable.
 |===
 
-Roles needing a VM or remote host rather than a container are tracked in `doc/TODO.adoc` (*Molecule roles needing a VM*) so they get picked up later rather than forgotten.
+This table is the single record of what molecule covers and why the rest is not covered; `doc/TODO.adoc` points here rather than repeating it. Update it here when a scenario is added.
 
 == Deployment test
 
@@ -175,7 +175,7 @@ do-release-upgrade  FAILED rc=1
 
 That is Ubuntu's LTS gate, not a defect: 24.04 -> 26.04 is not offered until the 26.04.1 point release. Everything up to that point works - both assertions, the version comparison, the full upgrade of the current release, the prompt-mode change - as does the no-op path when the target is already reached (`ok=5 changed=0 skipped=8`). What remains unproven is a `do-release-upgrade` that actually completes, reboots and passes the closing assert. Rehearse on `hastur` once Ubuntu offers the upgrade, *before* pointing the role at production.
 
-The run also surfaced a real defect, recorded in `doc/TODO.adoc`: the role reads `ansible_distribution`/`ansible_distribution_version` as bare top-level variables, which ansible-core deprecates.
+The run also surfaced a real defect, since fixed: the role read `ansible_distribution`/`ansible_distribution_version` as bare top-level variables, which ansible-core 2.24 deprecates in favour of `ansible_facts[...]`. Worth noting as the kind of thing only a real run finds — the deprecation is a run-time warning, so no linter and no static test could have reported it.
 
 *This is not a substitute for a from-scratch provision.* The metal machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
 
