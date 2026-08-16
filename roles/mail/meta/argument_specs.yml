@@ -6,6 +6,8 @@ argument_specs:
         wires RSpamd in as a milter on spam.milter_port
         (milter_default_action = accept, i.e. fails open if RSpamd is
         unreachable).
+      - Accepts mail for the primary domain and every alias domain,
+        all delivered into the same per-account mailbox.
     options:
       domain:
         type: str
@@ -15,7 +17,14 @@ argument_specs:
         type: list
         elements: str
         required: true
-        description: Extra domains given a virtual catch-all alias.
+        description:
+          - Secondary domains this host also accepts mail for. Each is
+            added to virtual_mailbox_domains alongside the primary and
+            gets its own copy of every entry in mail.aliases, so an
+            address behaves the same whichever domain it was sent to.
+          - Delivery is by LMTP to Dovecot, which strips the domain
+            before looking the account up, so every domain here shares
+            one inbox per account rather than having its own.
       hostname_fqdn:
         type: str
         required: true

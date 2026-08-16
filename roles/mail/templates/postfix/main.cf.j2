@@ -67,8 +67,46 @@ virtual_transport = lmtp:unix:private/dovecot-lmtp
 # local_transport = error:local delivery disabled
 
 mydestination = $myhostname, localhost.$mydomain, localhost
-relay_domains = 
-virtual_mailbox_domains = $mydomain $myhostname
+relay_domains =
+
+# Every domain whose mail is delivered into a mailbox here: the primary
+# domain, each alias domain, and this host's own name.
+#
+# The alias domains are what make a second domain real rather than
+# decorative. Previously only $mydomain was listed, and an alias domain
+# was not in ANY address class: virtual_alias_domains defaults to
+# $virtual_alias_maps, but that looks the bare domain up as a key and
+# the entries in /etc/valiases are keyed on full addresses, so it never
+# matched. The addresses with an alias entry still worked, because
+# alias rewriting runs for every recipient whatever class it is in -
+# which is exactly what made the gap easy to miss.
+#
+# An ordinary account at the alias domain therefore fell through to the
+# default class and Postfix tried to deliver it *off-host*:
+# "relay=none ... status=bounced (Host or domain name not found)" - or
+# was refused as an unauthorised relay when the client was not trusted.
+# Not a refusal to notice, and not something correct DNS would fix.
+# Verified on the lab by restoring the old settings and watching the
+# same message bounce.
+#
+# One inbox per account, not one per domain. Delivery goes over LMTP to
+# Dovecot, whose `auth_username_format = %n` strips the domain before
+# the userdb lookup, so <user>@<any domain in this list> resolves to the
+# same system account and lands in the same Maildir. That is also why an
+# account authenticates the same whichever domain the client is
+# configured with. See roles/imap.
+{% set mailbox_domains = [domain] + domain_aliases + ['$myhostname'] %}
+virtual_mailbox_domains = {{ mailbox_domains | join(' ') }}
+
+# Set explicitly, and deliberately empty. It defaults to
+# $virtual_alias_maps, which would put every domain on the left of
+# /etc/valiases into virtual_alias_domains *as well as* the list above -
+# and Postfix warns against a domain being in both, because a domain
+# treated as alias-only has no mailboxes and rejects anything the alias
+# map does not rewrite. Leaving it empty makes the line above the single
+# answer to "which domains does this host accept mail for", and the
+# alias map purely a rewriting table.
+virtual_alias_domains =
 
 # Mail aliases
 alias_maps = hash:/etc/aliases

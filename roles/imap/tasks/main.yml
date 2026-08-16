@@ -95,8 +95,24 @@
   #
   # Compiling is deterministic and cheap, so it is not reported as a
   # change; the copy tasks above are what notify the reload.
+  #
+  # `-c` is load-bearing and was missing. Without it sievec does not
+  # read dovecot.conf at all - it compiles against a standalone default
+  # set of extensions - so `sieve_plugins` and `sieve_extensions` are
+  # never applied and both training scripts fail to compile:
+  #
+  #   error: require command: unknown Sieve capability `vnd.dovecot.pipe'
+  #   error: require command: unknown Sieve capability `imapsieve'
+  #
+  # which is not a missing package. The plugins are installed and
+  # `doveconf plugin/sieve_plugins` reports them correctly; only the
+  # compiler was looking somewhere else. Found on a from-scratch VM
+  # provision, where it fails the whole role - the ordering comment
+  # above addresses a different, earlier failure of the same task.
   ansible.builtin.command:
-    cmd: "sievec /etc/dovecot/sieve/{{ item }}.sieve"
+    cmd: >-
+      sievec -c /etc/dovecot/dovecot.conf
+      /etc/dovecot/sieve/{{ item }}.sieve
   changed_when: false
   loop:
     - learn-ham
