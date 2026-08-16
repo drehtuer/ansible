@@ -1,5 +1,9 @@
 imap:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   conf:
+    # Where mail is stored, in the form Dovecot's mail_location wants.
+    # Read by maildir-import as well, so that a migration cannot put
+    # mail somewhere Dovecot is not looking.
+    maildir: ~/.mail
     ssl:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem

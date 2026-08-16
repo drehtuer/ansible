@@ -1,5 +1,6 @@
 imap:
   conf:
+    maildir: ~/.mail
     ssl:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem

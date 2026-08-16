@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Import a Maildir from another server into this host's mail store,
+# for migrating an account off an existing server.
+#
+#   maildir-import drehtuer@78.46.107.174
+#   maildir-import drehtuer@old.example:.maildir --stage-spam /srv/import
+#   maildir-import drehtuer@old.example --dry-run
+#
+# Copies the message files themselves rather than fetching over IMAP.
+# That is the right shape whenever both ends are Maildir, and it is
+# not merely the faster option:
+#
+#   - Message flags (seen, answered, flagged, deleted) live in the
+#     filename suffix, so a file copy preserves them for free. So does
+#     the folder hierarchy, which in Maildir++ is just the directory
+#     name.
+#   - It does not touch Dovecot, and therefore cannot trigger the
+#     imapsieve rules in dovecot.conf. Those fire on IMAP COPY into
+#     and out of TrainSpam, so an IMAP-based migration would mass-train
+#     RSpamd as a side effect of the copy - thousands of learn calls
+#     nobody asked for, in whatever order the messages happened to
+#     arrive. Training stays a separate, deliberate step here; see
+#     rspamd-train-bulk, which this script prints the invocation for.
+#   - 100k messages is a few minutes of rsync and several hours of
+#     IMAP round trips.
+#
+# Spam folders are diverted to a staging directory rather than
+# imported, because on a real mailbox they are usually most of the
+# messages and none of the value: they exist to seed the Bayes
+# classifier, after which they are deleted. --keep-spam imports them
+# as normal folders instead.
+#
+# Nothing is ever deleted on either end: no rsync here runs with
+# --delete, so this is additive on the destination and read-only on
+# the source. Re-running it is safe - Maildir filenames are unique
+# per message, so a second pass copies only what is new.
+
+set -euo pipefail
+
+# Where this host keeps mail. The same variable dovecot.conf is
+# rendered from, so the two cannot drift apart.
+#
+# It is written the way Dovecot wants it, "~/.mail", and a tilde in a
+# quoted bash string is a literal - expanding it here rather than
+# hoping is the difference between the destination being the user's
+# home and being a directory called "~" in the current directory.
+MAILDIR="{{ imap.conf.maildir }}"
+MAILDIR="${MAILDIR/#\~/$HOME}"
+
+STAGE_DIR=/srv/import
+# Folders diverted to the staging directory instead of imported. These
+# match the mailbox names declared in dovecot.conf; a source server
+# using different ones needs --spam-folder.
+SPAM_FOLDERS=(.Spam .TrainSpam)
+# Maildir paths to probe when the source is given without one.
+PROBE_PATHS=(.maildir Maildir .mail mail)
+
+DRY_RUN=0
+KEEP_SPAM=0
+RESYNC=1
+SRC=""
+SRC_PATH=""
+SPAM_OVERRIDDEN=0
+# How to reach the source. Deliberately a whole command rather than
+# just a key path, so that anything ssh can be told on a command line
+# works here - a jump host, a port, a specific identity.
+SSH_CMD="ssh"
+
+usage() {
+  cat <<'USAGE'
+maildir-import <[user@]host>[:<path>] [options]
+
+  <[user@]host>      source server, reachable over SSH
+  <path>             source Maildir, relative to that user's home or
+                     absolute. Probed when omitted.
+
+  --stage-spam DIR   where to put the spam folders for training
+                     (default /srv/import)
+  --spam-folder NAME folder to divert to the staging directory,
+                     repeatable. Replaces the default set.
+  --keep-spam        import the spam folders as normal mail folders
+                     instead of staging them
+  --dest DIR         destination Maildir, for importing into an
+                     account other than the invoking user's
+  -e, --rsh CMD      SSH command to reach the source, e.g.
+                     "ssh -i ~/.ssh/migration" (default "ssh")
+  --no-resync        skip the Dovecot index rebuild
+  --dry-run          report what would be copied, transfer nothing
+
+Run this as the user whose mail is being imported, not as root: the
+files must end up owned by that user, and doing it this way means the
+copy cannot get the ownership wrong whatever uid the source uses.
+
+SSH to the source therefore uses that user's credentials. Note that
+agent forwarding ("ssh -A") does NOT supply them on a host configured
+by this repo - roles/sshd sets AllowAgentForwarding no, so SSH_AUTH_SOCK
+is simply unset here and every connection to the source fails with
+"Permission denied (publickey)". Do not relax that for a migration.
+Give this host a key of its own instead, and authorize it on the
+source narrowly and temporarily:
+
+  # here
+  ssh-keygen -t ed25519 -N "" -f ~/.ssh/migration
+  # on the source, restricted to this host and to no interactive use
+  echo 'restrict,from="<this-host-ip>" '"$(cat ~/.ssh/migration.pub)" \
+    >> ~/.ssh/authorized_keys
+  # then
+  maildir-import <source> -e "ssh -i ~/.ssh/migration"
+
+Remove that line from the source and delete the key pair once the
+import is verified.
+USAGE
+}
+
+die() { echo "maildir-import: $*" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stage-spam) STAGE_DIR="${2:-}"; shift 2 ;;
+    --spam-folder)
+      # First use replaces the defaults rather than adding to them, so
+      # that a source server with one differently-named spam folder
+      # does not also drag in this host's names.
+      if [[ "$SPAM_OVERRIDDEN" -eq 0 ]]; then SPAM_FOLDERS=(); SPAM_OVERRIDDEN=1; fi
+      SPAM_FOLDERS+=("${2:-}"); shift 2 ;;
+    --keep-spam) KEEP_SPAM=1; shift ;;
+    --dest) MAILDIR="${2:-}"; shift 2 ;;
+    -e|--rsh) SSH_CMD="${2:-}"; shift 2 ;;
+    --no-resync) RESYNC=0; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) usage >&2; die "unknown option $1" ;;
+    *)
+      [[ -z "$SRC" ]] || { usage >&2; die "more than one source given"; }
+      SRC="$1"; shift ;;
+  esac
+done
+
+[[ -n "$SRC" ]] || { usage >&2; exit 2; }
+[[ "$(id -u)" -ne 0 ]] || die "run this as the mail user, not root (see --help)"
+
+# A "host:path" source splits on the last colon, so that an IPv6
+# literal in brackets survives.
+if [[ "$SRC" == *:* ]]; then
+  SRC_PATH="${SRC##*:}"
+  SRC="${SRC%:*}"
+fi
+
+MAIL_USER="$(id -un)"
+command -v rsync >/dev/null || die "rsync is not installed"
+
+# SSH_CMD is intentionally unquoted so that a multi-word --rsh splits
+# into arguments the way rsync -e treats the same string.
+# shellcheck disable=SC2086
+src_ssh() { $SSH_CMD -o BatchMode=yes "$SRC" "$@"; }
+
+echo "==> source      ${SRC}"
+echo "==> destination ${MAILDIR} (user ${MAIL_USER})"
+
+# Checked before anything else, and with ssh's own error left visible.
+# The Maildir probe below has to silence stderr in order to try several
+# paths, so without this an unreachable source - a refused key, an
+# unknown host key, no agent - is reported as "no Maildir found", which
+# sends you looking for the wrong problem entirely.
+echo "==> checking access"
+src_ssh true || die "cannot reach ${SRC} over SSH (ssh's error is above)"
+
+# --- source discovery ------------------------------------------------
+#
+# A Maildir is identified by holding cur, new and tmp. Probing for it
+# rather than assuming a path matters because the convention differs
+# per server: Dovecot's own default is ~/Maildir, this host uses
+# ~/.mail, and the server this was written against used ~/.maildir.
+
+is_maildir_cmd='[ -d "$1/cur" ] && [ -d "$1/new" ] && [ -d "$1/tmp" ]'
+
+if [[ -n "$SRC_PATH" ]]; then
+  src_ssh "bash -s -- '$SRC_PATH'" <<<"$is_maildir_cmd" \
+    || die "${SRC}:${SRC_PATH} is not a Maildir (no cur/new/tmp)"
+else
+  echo "==> probing for a Maildir"
+  for candidate in "${PROBE_PATHS[@]}"; do
+    if src_ssh "bash -s -- '$candidate'" <<<"$is_maildir_cmd" 2>/dev/null; then
+      SRC_PATH="$candidate"
+      echo "    found ${SRC}:${SRC_PATH}"
+      break
+    fi
+  done
+  [[ -n "$SRC_PATH" ]] \
+    || die "no Maildir found on ${SRC}; give one as ${SRC}:<path>"
+fi
+
+# --- what is over there ----------------------------------------------
+#
+# Reported before anything is copied, because the message mix is what
+# decides whether the spam folders are worth staging at all - and
+# because a wildly wrong number here means the wrong path was probed.
+
+echo "==> surveying ${SRC}:${SRC_PATH}"
+# The remote side prints "count<TAB>folder", INBOX first. Folder names
+# are read on stdin rather than interpolated, so spaces and the
+# modified-UTF7 escapes Maildir++ uses for non-ASCII folder names
+# ("Vertr&AOQ-ge") cannot break the quoting.
+SURVEY="$(src_ssh "bash -s -- '$SRC_PATH'" <<'REMOTE'
+cd "$1" || exit 1
+printf '%s\t%s\n' "$(find cur new -type f 2>/dev/null | wc -l)" INBOX
+for d in .*/; do
+  d="${d%/}"
+  [[ "$d" == "." || "$d" == ".." ]] && continue
+  [[ -d "$d/cur" ]] || continue
+  printf '%s\t%s\n' "$(find "$d/cur" "$d/new" -type f 2>/dev/null | wc -l)" "$d"
+done
+REMOTE
+)"
+
+survey_count() {
+  # Total messages across the folders named on stdin, or all of them
+  # when nothing is named.
+  local total=0 n
+  while IFS=$'\t' read -r n _; do total=$((total + n)); done
+  echo "$total"
+}
+
+TOTAL_MSGS="$(survey_count <<<"$SURVEY")"
+FOLDERS="$(wc -l <<<"$SURVEY")"
+echo "    ${TOTAL_MSGS} message(s) in ${FOLDERS} folder(s)"
+
+# Report the staged folders separately, since they are usually the
+# bulk of the count above and are not being imported.
+STAGE_MSGS=0
+if [[ "$KEEP_SPAM" -eq 0 ]]; then
+  for f in "${SPAM_FOLDERS[@]}"; do
+    n="$(awk -F'\t' -v f="$f" '$2 == f { print $1 }' <<<"$SURVEY")"
+    [[ -n "$n" ]] || { echo "    ${f}: not present, nothing to stage"; continue; }
+    echo "    ${f}: ${n} message(s), staged for training rather than imported"
+    STAGE_MSGS=$((STAGE_MSGS + n))
+  done
+  echo "    importing $((TOTAL_MSGS - STAGE_MSGS)) message(s)"
+fi
+
+# --- rsync -----------------------------------------------------------
+
+RSYNC_OPTS=(-a --human-readable --rsh "$SSH_CMD")
+# progress2 redraws a single line with carriage returns, which is what
+# you want when watching it and useless the rest of the time: run
+# non-interactively - over ssh, from a playbook, into a log - it emits
+# tens of thousands of progress lines and buries the actual output.
+# This import is most naturally driven over ssh, so the quiet form is
+# the one that matters.
+if [[ -t 1 ]]; then
+  RSYNC_OPTS+=(--info=progress2)
+else
+  RSYNC_OPTS+=(--info=stats2)
+fi
+[[ "$DRY_RUN" -eq 0 ]] || RSYNC_OPTS+=(--dry-run)
+
+# Deliberately NOT --delete: this host is already live and receiving
+# mail, so anything delivered here since the cutover must survive the
+# import. Maildir filenames are unique per message, so merging into a
+# populated store cannot collide.
+#
+# The excludes are the state Dovecot owns rather than the mail itself:
+#
+#   tmp/                  partially written deliveries, never messages
+#   dovecot.index*        index and cache, rebuilt from the messages
+#   dovecot.list.index*   mailbox list index, likewise
+#   dovecot.mailbox.log*  per-mailbox change log
+#   dovecot-uidlist       UID-to-filename map, tied to the source
+#   dovecot-uidvalidity*  the UIDVALIDITY stamp it is keyed on
+#
+# Carrying the last two across would tell every client that these are
+# the same mailboxes it already knows, on a server where the UIDs are
+# about to be reassigned - which is precisely the situation
+# UIDVALIDITY exists to signal. Leaving them behind gives each folder
+# a fresh stamp and one clean resync.
+#
+# dovecot-keywords is deliberately NOT excluded, and the distinction is
+# easy to miss: it is the only one of these files that holds
+# information the messages do not. Custom keywords are stored in the
+# filename as bare letters a-z, and this file is what maps them back to
+# names, so dropping it turns every user-defined label and every
+# client-set tag into an anonymous flag that nothing can resolve.
+#
+# subscriptions is excluded here and merged separately below.
+EXCLUDES=(
+  --exclude 'tmp/'
+  --exclude 'dovecot.index*'
+  --exclude 'dovecot.list.index*'
+  --exclude 'dovecot.mailbox.log*'
+  --exclude 'dovecot-uidlist'
+  --exclude 'dovecot-uidvalidity*'
+  --exclude 'subscriptions'
+)
+if [[ "$KEEP_SPAM" -eq 0 ]]; then
+  for f in "${SPAM_FOLDERS[@]}"; do EXCLUDES+=(--exclude "/${f}/"); done
+fi
+
+# rsync exits 24 when a file vanished between the scan and the
+# transfer. On a live mail store that is routine - a client expunged
+# something mid-run - and it is not a failure of the import.
+run_rsync() {
+  local rc=0
+  rsync "$@" || rc=$?
+  [[ "$rc" -eq 0 || "$rc" -eq 24 ]] || return "$rc"
+  return 0
+}
+
+echo "==> importing mail into ${MAILDIR}"
+mkdir -p "$MAILDIR"
+run_rsync "${RSYNC_OPTS[@]}" "${EXCLUDES[@]}" \
+  "${SRC}:${SRC_PATH}/" "${MAILDIR}/"
+
+# --- spam corpus -----------------------------------------------------
+
+STAGED=()
+if [[ "$KEEP_SPAM" -eq 0 && "$STAGE_MSGS" -gt 0 ]]; then
+  echo "==> staging the spam corpus in ${STAGE_DIR}"
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    # Outside the mail store on purpose. Anything under $MAILDIR is a
+    # folder the user sees in their client, and this corpus is meant to
+    # be fed to the classifier and deleted.
+    mkdir -p "$STAGE_DIR" \
+      || die "cannot create ${STAGE_DIR} - create it and chown it to ${MAIL_USER}"
+  fi
+  for f in "${SPAM_FOLDERS[@]}"; do
+    awk -F'\t' -v f="$f" '$2 == f { found = 1 } END { exit !found }' \
+      <<<"$SURVEY" || continue
+    dest="${STAGE_DIR}/${f#.}"
+    run_rsync "${RSYNC_OPTS[@]}" --exclude 'tmp/' --exclude 'dovecot*' \
+      --exclude 'maildirfolder' --exclude 'subscriptions' \
+      "${SRC}:${SRC_PATH}/${f}/" "${dest}/"
+    STAGED+=("$dest")
+  done
+fi
+
+# --- subscriptions ---------------------------------------------------
+#
+# The union of both sides, not a replacement. The source file is the
+# user's own folder list and is the point of copying it at all, but
+# this host has its own entries - dovecot.conf declares Spam and
+# TrainSpam as "auto = subscribe" - and overwriting would drop them
+# until Dovecot next re-added them.
+
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  echo "==> merging subscriptions"
+  subs_remote="$(src_ssh "cat '$SRC_PATH/subscriptions' 2>/dev/null" || true)"
+  if [[ -n "$subs_remote" ]]; then
+    subs_new="$(mktemp)"
+    { echo "$subs_remote"; cat "${MAILDIR}/subscriptions" 2>/dev/null || true; } \
+      | grep -v '^$' | sort -u > "$subs_new"
+    install -m 0600 "$subs_new" "${MAILDIR}/subscriptions"
+    rm -f "$subs_new"
+    echo "    $(wc -l < "${MAILDIR}/subscriptions") folder(s) subscribed"
+  fi
+fi
+
+# --- indexes ---------------------------------------------------------
+#
+# The excluded index files above are rebuilt by Dovecot on demand, but
+# on demand means "when a client next opens that folder", and a folder
+# whose index is missing while its directory contents changed
+# underneath a running Dovecot is exactly the case that shows up as
+# messages missing from a client until something forces a rescan.
+# Doing it here means the mailbox is consistent before anyone looks.
+
+if [[ "$DRY_RUN" -eq 0 && "$RESYNC" -eq 1 ]]; then
+  echo "==> rebuilding Dovecot indexes"
+  if sudo -n true 2>/dev/null; then
+    sudo doveadm force-resync -u "$MAIL_USER" '*' \
+      || echo "    force-resync reported errors; check 'doveadm mailbox list'" >&2
+  else
+    echo "    skipped: needs root. Run:" >&2
+    echo "      sudo doveadm force-resync -u ${MAIL_USER} '*'" >&2
+  fi
+fi
+
+# --- report ----------------------------------------------------------
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "==> dry run, nothing was transferred"
+  exit 0
+fi
+
+echo "==> imported"
+IMPORTED="$(find "$MAILDIR" -type f -path '*/cur/*' -o -type f -path '*/new/*' \
+  2>/dev/null | wc -l)"
+echo "    ${IMPORTED} message(s) now in ${MAILDIR}"
+echo "    expected at least $((TOTAL_MSGS - STAGE_MSGS)) from the source"
+
+# Training is not done here on purpose. How much of a spam corpus to
+# learn, and against how much ham, is a judgement about the specific
+# mailbox rather than a step in a copy: a classifier taught 84k spam
+# and 12k ham is measurably worse than one taught a balanced subset,
+# and which folders count as ham is something only the owner knows.
+if [[ -n "${STAGED[*]}" ]]; then
+  echo
+  echo "==> spam corpus staged, not yet learned. To train:"
+  echo
+  echo "    # ham: every imported folder except the spam ones and Trash,"
+  echo "    # which is a mix of both and teaches the classifier nothing."
+  echo "    cd ${MAILDIR}"
+  echo "    mapfile -t HAM < <(find . -mindepth 1 -maxdepth 1 -type d \\"
+  printf '      ! -name tmp'
+  for f in "${SPAM_FOLDERS[@]}"; do printf " ! -name '%s'" "$f"; done
+  printf " ! -name '.Trash')\\n"
+  echo "    sudo rspamd-train-bulk ham \"\${HAM[@]}\""
+  echo
+  echo "    # spam: match the volume to the ham count rather than"
+  echo "    # learning everything, and prefer the folder the user"
+  echo "    # curated by hand over whatever the old filter auto-filed."
+  for d in "${STAGED[@]}"; do
+    echo "    sudo rspamd-train-bulk spam ${d}"
+  done
+  echo
+  echo "    # rspamd-train-bulk prints the classifier stats itself when"
+  echo "    # it finishes - read them there. A bare 'rspamc stat' will"
+  echo "    # NOT work: the controller requires a password, and this"
+  echo "    # script is world-readable so it cannot hold one. Use"
+  echo "    # rspamc -P <spam.controller_password> stat to re-check later."
+  echo
+  echo "    # once the counts look right, the corpus has served its"
+  echo "    # purpose and is just disk:"
+  echo "    rm -rf ${STAGE_DIR}"
+fi

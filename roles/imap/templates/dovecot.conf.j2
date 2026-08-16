@@ -41,7 +41,7 @@ userdb {
 log_path = /var/log/dovecot.log
 
 # Mailbox
-mail_location = maildir:~/.mail
+mail_location = maildir:{{ imap.conf.maildir }}
 namespace inbox {
   type = private
   inbox = yes

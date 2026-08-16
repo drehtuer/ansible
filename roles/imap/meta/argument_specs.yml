@@ -38,6 +38,15 @@ argument_specs:
             required: true
             description: Dovecot config settings.
             options:
+              maildir:
+                type: str
+                required: true
+                description:
+                  - Mail store location, as Dovecot's mail_location
+                    expects it (e.g. `~/.mail`). Also read by the
+                    maildir-import tool, so that importing an account
+                    from another server cannot write it somewhere
+                    Dovecot does not read.
               ssl:
                 type: dict
                 required: true
