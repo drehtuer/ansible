@@ -95,7 +95,15 @@ relay_domains =
 # same system account and lands in the same Maildir. That is also why an
 # account authenticates the same whichever domain the client is
 # configured with. See roles/imap.
-{% set mailbox_domains = [domain] + domain_aliases + ['$myhostname'] %}
+{# $myhostname is deliberately NOT in this list. It is in
+   mydestination above, and Postfix advises against a name appearing in
+   both without saying which wins - so it was established by experiment
+   on 2026-08-16 rather than assumed: mail to root@mail.<domain> is
+   handled by `relay=local`, which applies the alias and only then hands
+   the rewritten address to Dovecot over LMTP. The local transport owns
+   the name, so listing it here changed nothing and only kept the
+   warning in the log. See doc/STATUS.adoc. #}
+{% set mailbox_domains = [domain] + domain_aliases %}
 virtual_mailbox_domains = {{ mailbox_domains | join(' ') }}
 
 # Set explicitly, and deliberately empty. It defaults to
