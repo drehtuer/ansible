@@ -169,6 +169,18 @@
     group: www-data
     mode: "0640"
     validate: php -l %s
+- name: Nextcloud log rotation
+  # Nextcloud logs into its data directory, not /var/log, so nothing
+  # packaged rotates it - and `log_rotate_size` defaults to unset,
+  # which means no rotation at all. See the template.
+  ansible.builtin.template:
+    src: templates/logging.config.php.j2
+    dest: "{{ cloud.nextcloud.path }}/config/logging.config.php"
+    owner: www-data
+    group: www-data
+    mode: "0640"
+    validate: php -l %s
+
 - name: Nextcloud nginx upstream
   ansible.builtin.template:
     src: templates/nextcloud-fpm.conf.j2
