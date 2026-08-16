@@ -16,6 +16,19 @@ fail2ban:
       port: ssh
       filter: sshd
       backend: systemd
+    # Carries `options` deliberately: it is the only jail here that
+    # does, and without one the template's options loop is never
+    # rendered by the static test. The real postfix jail depends on
+    # that loop to emit its `journalmatch` override, so leaving the
+    # branch uncovered would mean the one mechanism the fix relies on
+    # was never exercised.
+    - name: postfix
+      port: smtp,submission
+      filter: postfix
+      backend: systemd
+      options:
+        mode: normal
+        journalmatch: _SYSTEMD_UNIT=postfix@-.service
     - name: nginx-404
       port: https
       filter: nginx-404

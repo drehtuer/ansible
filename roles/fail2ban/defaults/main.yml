@@ -37,6 +37,27 @@ fail2ban:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
       backend: systemd
       options:
         mode: normal
+        # Overrides the journal match the *packaged* filter ships,
+        # which is `_SYSTEMD_UNIT=postfix.service` and can never match
+        # on Debian or Ubuntu. Both run Postfix as the instantiated
+        # template unit `postfix@-.service`; `postfix.service` is only
+        # a wrapper that starts it and then says nothing. The
+        # difference is not marginal - measured on the host, the
+        # wrapper emitted 14 journal lines in a fortnight and zero
+        # authentication failures, while `postfix@-.service` emitted
+        # 26186 lines and 399 failures.
+        #
+        # So the jail was reading a unit with no failures in it and
+        # reporting `Total failed: 0` on a host with hundreds of real
+        # ones. `fail2ban-regex` against the journal makes it stark:
+        # 0 lines and 0 matched with the packaged value, 281429 lines
+        # and 9897 matched with this one.
+        #
+        # Set here rather than in a filter.d override because the
+        # packaged filter is not ours to edit - `.conf` files belong to
+        # the distribution - and because a per-jail `journalmatch` is
+        # what fail2ban documents for exactly this case.
+        journalmatch: _SYSTEMD_UNIT=postfix@-.service
     - name: dovecot
       port: imaps
       filter: dovecot
