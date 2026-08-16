@@ -11,7 +11,29 @@ spam:
     3239363233393062650a303938373733393261613962386537326661333638356631353138363764
     61346239316135316434396630363432663866626165373633326562666537303333
   dkim:
-    selector: mail
+    # Rotated from `mail` on 2026-08-16. One selector covers every
+    # served domain, so this rotates both at once - which is the point
+    # of it being a single setting: the signing config cannot drift out
+    # of step with the keys on disk.
+    #
+    # The rotation was forced by drehtuer.net, whose `mail` key is
+    # ed25519 - generated before the role settled on RSA, and never
+    # replaced afterwards because the generator refuses to regenerate an
+    # existing key. Gmail, Microsoft 365 and Yahoo do not verify
+    # ed25519-sha256 at all (Gmail answers `dkim=neutral (no key)`), so
+    # under DMARC p=reject that domain had no usable DKIM at the three
+    # largest receivers and DMARC rested entirely on SPF - which is
+    # exactly what forwarding breaks.
+    #
+    # Dated rather than a bare counter, so the next rotation is obvious
+    # and the records sort. Leading letter because a DNS label starting
+    # with a digit still trips some tooling.
+    #
+    # Changing this is a three-step operation, not an edit: generate the
+    # keys, publish the records *alongside* the old ones, and only then
+    # point signing at them. Doing it in one step signs mail against a
+    # record that is not published yet.
+    selector: s202608
     bits: 2048
   milter_port: 11332
   http_port: 11334

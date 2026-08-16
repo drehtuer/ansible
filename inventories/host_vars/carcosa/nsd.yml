@@ -60,7 +60,7 @@ nsd:
   zones:
     - name: "{{ domain }}"
       ttl: 3600
-      serial: 2026081501
+      serial: 2026081503
       # Shared secret authenticating the AXFR of this zone to Hetzner's
       # secondaries, so they can verify it came from here unaltered.
       # Each zone has its own key; see `drehtuer.de` below.
@@ -144,6 +144,33 @@ nsd:
           value: >-
             "v=DKIM1; k=ed25519; "
             "p=9w24peXmzA+r8Z3oodRBfeYChYc/YXx2vyD0Zv5N1x4="
+        # The RSA replacement, published alongside the ed25519 record
+        # above rather than instead of it. Gmail, Microsoft 365 and
+        # Yahoo do not verify ed25519-sha256 at all - Gmail answers
+        # `dkim=neutral (no key)` - so with DMARC p=reject this domain
+        # effectively had no working DKIM at the three biggest
+        # receivers, leaving DMARC to rest entirely on SPF. SPF is what
+        # breaks when mail is forwarded, which is precisely the case
+        # DKIM exists to survive.
+        #
+        # Both records stay published until no mail signed with the old
+        # key can still be in flight; removing the ed25519 one is
+        # tracked in doc/TODO.adoc. A new selector rather than a
+        # replacement under `mail` is what makes the switch seamless:
+        # the new name was never cached, so there is no window in which
+        # a receiver holds the old record and sees a new signature.
+        - name: s202608._domainkey
+          type: TXT
+          value: >-
+            "v=DKIM1; k=rsa; "
+            "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkfzWt1KzHR"
+            "BfjU3VjQUo7eooaaebgY/Xusk7QoJ38jQ5surauuCaEt5q9yOIO6uZ"
+            "jkufOorLnE6XC62FSf1iKj/PXgfb20lMgPFKBfh/mkiNifoG7I6uhJ"
+            "l6T5u8/BqrJ+hYJx7Y6cUSkE8zaLOlaps7y+8Hz5zmRe4gK42Tilrl"
+            "e4MWPNVw05xPEMlUgl1TVEG6ZaE7QQs9/bS2lA41Ptj9fTjk+ZnNjc"
+            "1mkLSb1Bq4a8vxk1VgUWXl5uK94oNvtF3NJSex1rbM7VbgpmpYz4O/"
+            "Vn7JZ0JQ36Aq5Z3CexmkoVh6QwUOb59STOmVveLOsTFHz0Y/5+OLUH"
+            "VYL4LFywIDAQAB"
     # The secondary domain, written out rather than derived: see the
     # note at the top of this file. Same shape as the zone above, so
     # both domains offer the same subdomains and the same policy -
@@ -156,7 +183,7 @@ nsd:
     # while silently changing meaning if the alias list is reordered.
     - name: drehtuer.de
       ttl: 3600
-      serial: 2026081602
+      serial: 2026081603
       # A different secret from the zone above, and necessarily a
       # different name - Hetzner derives it from the zone, so the two
       # could not collide even if they shared a secret. Keeping the
@@ -253,3 +280,21 @@ nsd:
             "m0LM7pibYZyesS1uvOfEt0F4GWdjBgZ7R09mYZSyCvCNaHabDAXXWv"
             "YI65gDILufYobiIOybsBEwi1I2WezwZJRtuHyUHgA7GCiCuau65nhe"
             "d4n7/E8QIDAQAB"
+        # Same rotation as drehtuer.net. This key is RSA either way, so
+        # nothing was wrong with the `mail` one - but the selector is a
+        # single global setting shared by both domains (spam.dkim), so
+        # rotating one rotates both. That is a deliberate property of
+        # the role rather than an accident: one selector means the
+        # signing config cannot drift out of step with the keys.
+        - name: s202608._domainkey
+          type: TXT
+          value: >-
+            "v=DKIM1; k=rsa; "
+            "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1KHLXCm0G4"
+            "crlu0rAbqTKWGc8kiHa/HQ2AfG9xSiq8glakOmGRuGe7Izj90fKtpv"
+            "n4thZdfEEUNmUEXaNSQ07ovQqU+y3cfG82hQX5wUgzRwneLHFohqIG"
+            "KPKTs92wIcSvoadcVlN6ci1XhkgpAPlYWxfJNQMyWMt1r/2DpcEYYA"
+            "XavledO88fv+F8308e5mwffnFOWIXnnDGo5c7Wx1INJeacHcjax38o"
+            "LGM8Y+5iZH6aLVJo5X7I/R6Oz/Plc2EKTG79gphLh7jMM5ZwdxhKfz"
+            "/WqqVWrEUqoHovthngP5C1yI716P6FWPv+USWrZjVGBRtKPXFIutgf"
+            "nfVwPDkQIDAQAB"
