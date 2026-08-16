@@ -122,8 +122,8 @@ The rest are not covered, for concrete reasons rather than lack of effort:
 |===
 | Role | Blocker
 
-| `firewall`, `docker`
-| netfilter and Docker-in-Docker-in-Docker. These want a VM.
+| `firewall`, `docker`, `fail2ban_ui`
+| netfilter and Docker-in-Docker-in-Docker. These want a VM - which is where `fail2ban_ui` was in fact verified, see below.
 
 | `http`, `cloud`, `mail`, `imap`, `spam`, `dns`, `database`
 | Need real certificates and real services talking to each other. See <<Not covered>>.
@@ -187,6 +187,10 @@ The run also surfaced a real defect, since fixed: the role read `ansible_distrib
 * *The old behaviour was reproduced before it was fixed.* Putting the previous `virtual_mailbox_domains`/`virtual_alias_domains` back and re-sending showed the alias-domain message leaving the host — `relay=none ... status=bounced (Host or domain name not found)` — rather than being refused, which is what corrected the account of it in `doc/STATUS.adoc`.
 
 That run also found two defects that had nothing to do with the change being tested, both invisible on `carcosa` because they only bite a host being built from nothing: `sievec` compiled without `-c` and failed the whole `imap` role, and `fail2ban` starts before nginx has created the logs its jails watch and exits `255`. The first is fixed; the second is an ordering constraint recorded in `doc/TODO.adoc`. That is the argument for this layer in one paragraph.
+
+*`fail2ban_ui` is verified on the VM.* It converges, is idempotent over two runs, and the end state was checked rather than assumed: the container runs the pinned digest, `ss -ltn` shows it bound to `127.0.0.1` and nothing else, nginx answers 401 without credentials and 200 with them, and the container can read both `/var/run/fail2ban/fail2ban.sock` and `/etc/fail2ban`. `/api/settings` returns live JSON through the proxy, which is what proves the reverse proxy and the app agree rather than merely that a port is open.
+
+Two interactions were worth testing separately. Restarting Docker - which `playbooks/firewall.yml` does on every rules change - leaves the container untouched thanks to `live-restore`, and a full `firewall.yml` run afterwards left the UI answering. And the certificate: adding `f2b` to `http.letsencrypt.subdomains` means `lab.sh seed-certs` has to be re-run before `http.yml`, or the SAN comparison finds a mismatch and tries to reach certbot.
 
 *This is not a substitute for a from-scratch provision.* The metal machine is not pristine — several services predate the skill — so a green run proves the roles converge and the services come up, not that a bare Ubuntu install would reach the same place. That gap is the *No cross-role or full-stack testing* item in `doc/TODO.adoc`.
 

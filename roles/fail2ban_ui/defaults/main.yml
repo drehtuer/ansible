@@ -1,0 +1,35 @@
+fail2ban_ui:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  # swissmakers/fail2ban-ui, AGPL-3.0. The only maintained web
+  # interface for fail2ban - upstream ships no official one, and the
+  # older fail2web/fail2rest pair has been unmaintained for years.
+  #
+  # Pinned by tag *and* digest, the same stance `cloud` takes with
+  # Nextcloud's checksum: a tag can be moved under you, a digest
+  # cannot. This is the multi-arch *index* digest rather than one
+  # platform's, so the pin stays valid on a host of another
+  # architecture. Bumping the version means changing both, which is
+  # the point - the digest is what makes the tag a claim rather than a
+  # hope.
+  image: swissmakers/fail2ban-ui
+  tag: v1.5.3
+  digest: >-
+    sha256:a9bcc7db6a59d5497f693cbba3983b016981b97c0df1b248a64cfb0fe85ddb09
+  # Compose file, and the container's own persistent state. Separate
+  # directories on purpose: the first is configuration this repo owns
+  # and rewrites, the second is data the container writes and must
+  # survive a recreate.
+  compose_dir: /etc/fail2ban-ui
+  config_dir: /opt/fail2ban-ui
+  # The UI listens on loopback only and is reached through the nginx
+  # vhost below - never directly. See the compose template for why this
+  # is host networking with a loopback bind rather than a published
+  # port, and why that means no `firewall.docker.published` entry is
+  # needed.
+  port: 8090
+  # Serves <subdomain>.<domain> for every entry in http.domains.
+  #
+  # This has to also appear in `http.letsencrypt.subdomains`, or the
+  # certificate will not cover the name this vhost answers for and
+  # every request gets a name mismatch. Nothing enforces the pairing -
+  # the same standing trap the `spam` role has.
+  subdomain: f2b

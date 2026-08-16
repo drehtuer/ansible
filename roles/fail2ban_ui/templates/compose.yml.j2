@@ -1,0 +1,65 @@
+{{ ansible_managed | comment }}
+#
+# The fail2ban web UI, and the first consumer of the `docker` role.
+#
+# WHAT THIS CONTAINER CAN DO. It mounts fail2ban's control socket and
+# its configuration directory read-write, so it is root-equivalent with
+# respect to the host's packet filter: anything that reaches it can ban
+# an arbitrary address - including yours - and unban an attacker. It
+# also has no authentication of its own; upstream offers OIDC only, and
+# this host runs no identity provider. The nginx vhost in front of it
+# therefore *is* the authentication, not merely a convenience.
+#
+# HOST NETWORKING, NOT A PUBLISHED PORT. Upstream's own example uses
+# `--network=host`, and it is the right choice here for a reason beyond
+# following the example: with BIND_ADDRESS below, the listener is on the
+# host's loopback and provably nowhere else. A published port would
+# instead be DNATed and traverse FORWARD rather than INPUT, which is
+# exactly the case `firewall.docker.published` exists to cover - so this
+# way there is no port to forget to list, and no way for a published
+# port to end up reachable from the internet. `ss -ltn` on the host is
+# the whole story.
+#
+# DO NOT ADD `JAIL_AUTOMIGRATION`. It rewrites the monolithic
+# jail.local into jail.d/*.local, which upstream itself marks
+# experimental and advises against on production systems - and here it
+# would fight `roles/fail2ban`, which owns jail.local and re-templates
+# it on every run. Note that the UI writes to that same file for its
+# Global Settings even without the flag; see doc/STATUS.adoc.
+#
+# `CONTAINER` is deliberately not set: the image's own Dockerfile sets
+# it, and upstream documents that setting or unsetting it by hand
+# changes where SSH keys are read from.
+services:
+  fail2ban-ui:
+    image: "{{ fail2ban_ui.image }}:{{ fail2ban_ui.tag }}@{{ fail2ban_ui.digest }}"
+    container_name: fail2ban-ui
+    # Survives a reboot and a daemon restart, but stays down if it was
+    # stopped deliberately. `live-restore` in the docker role keeps it
+    # running when the firewall role bounces dockerd.
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      PORT: "{{ fail2ban_ui.port }}"
+      # Loopback only. Correct *because* this is host networking - on a
+      # bridge network this same value would bind the container's own
+      # loopback and be unreachable from nginx, which is a tempting and
+      # wrong "fix" if the two are ever swapped.
+      BIND_ADDRESS: "127.0.0.1"
+      # No outbound calls. Both default to on and neither earns its
+      # keep here: the release check phones GitHub on a schedule, and
+      # the IP lookup exists to decorate the UI.
+      UPDATE_CHECK: "false"
+      DISABLE_EXTERNAL_IP_LOOKUP: "true"
+    volumes:
+      # The UI's own state - sessions, its database. Survives recreate.
+      - "{{ fail2ban_ui.config_dir }}:/config"
+      # Read-write: this is how the UI edits jails. It is also what
+      # makes it collide with roles/fail2ban.
+      - /etc/fail2ban:/etc/fail2ban
+      # The control socket. /var/run is a symlink to /run on this host,
+      # so this resolves to the same directory fail2ban.conf names.
+      - /var/run/fail2ban:/var/run/fail2ban
+      # Read-only, and only so the UI can show the log lines behind a
+      # ban. It has no reason to write here.
+      - /var/log:/var/log:ro

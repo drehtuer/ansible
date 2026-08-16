@@ -1,0 +1,16 @@
+# Mirrors the role defaults, because the static tests render templates
+# from this inventory alone - without role defaults - so anything a
+# template reads has to be defined here or the render fails.
+#
+# The digest is the real one rather than a placeholder: it is public
+# information, and a fake would make this file stop being a working
+# example of what the role expects.
+fail2ban_ui:
+  image: swissmakers/fail2ban-ui
+  tag: v1.5.3
+  digest: >-
+    sha256:a9bcc7db6a59d5497f693cbba3983b016981b97c0df1b248a64cfb0fe85ddb09
+  compose_dir: /etc/fail2ban-ui
+  config_dir: /opt/fail2ban-ui
+  port: 8090
+  subdomain: f2b

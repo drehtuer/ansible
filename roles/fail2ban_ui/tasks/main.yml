@@ -1,0 +1,90 @@
+# Needs roles/docker (the engine and Compose v2), roles/fail2ban (the
+# socket this is a front end for) and roles/http (nginx and the
+# certificate covering fail2ban_ui.subdomain). None of that is asserted
+# here - the repo has no umbrella playbook yet, so the ordering is
+# recorded in doc/TODO.adoc with the other constraints.
+- name: Create fail2ban-ui directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ fail2ban_ui.compose_dir }}", mode: "0755"}
+    # The container writes its database here and runs as root, so this
+    # is not world-readable: it holds session state for an interface
+    # that can change the firewall.
+    - {path: "{{ fail2ban_ui.config_dir }}", mode: "0700"}
+  loop_control:
+    label: "{{ item.path }}"
+- name: Configure fail2ban-ui compose stack
+  ansible.builtin.template:
+    src: templates/compose.yml.j2
+    dest: "{{ fail2ban_ui.compose_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+- name: Start fail2ban-ui
+  # docker_compose_v2 rather than docker_container: it drives the
+  # `docker compose` CLI the docker role already installs, so nothing
+  # needs the Python docker SDK on the target, and the compose file
+  # stays the readable description of what runs.
+  community.docker.docker_compose_v2:
+    project_src: "{{ fail2ban_ui.compose_dir }}"
+    state: present
+    # Pull only what the pin asks for. `missing` and not `always`, so a
+    # converged host does not reach out to Docker Hub on every run -
+    # the digest already decides which image this is.
+    pull: missing
+  register: fail2ban_ui_compose
+- name: Deploy the WebSocket upgrade map for nginx
+  ansible.builtin.copy:
+    src: files/nginx/websocket_upgrade_map.conf
+    dest: /etc/nginx/conf.d/websocket_upgrade_map.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Add htaccess for fail2ban web ui
+  # Vault-encrypted and decrypted at deploy time, the same pattern as
+  # the spam role's htpasswd. `copy` compares content, so replacing the
+  # credential is picked up without a separate checksum.
+  ansible.builtin.copy:
+    src: files/nginx/fail2ban_ui.htpasswd.aes256
+    dest: /etc/nginx/sites-available/fail2ban_ui.htpasswd
+    decrypt: true
+    owner: root
+    group: root
+    mode: "0644"
+- name: Enable fail2ban-ui htpasswd in nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/fail2ban_ui.htpasswd
+    dest: /etc/nginx/sites-enabled/fail2ban_ui.htpasswd
+    state: link
+  notify:
+    - Reload nginx
+- name: Add fail2ban-ui rproxy in nginx
+  ansible.builtin.template:
+    src: templates/nginx/fail2ban_ui.conf.j2
+    dest: /etc/nginx/sites-available/fail2ban_ui.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload nginx
+- name: Enable fail2ban-ui site in nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/fail2ban_ui.conf
+    dest: /etc/nginx/sites-enabled/fail2ban_ui.conf
+    state: link
+  notify:
+    - Reload nginx
+- name: Validate nginx configuration
+  # Same stance as the http and cloud roles: a reload of a broken
+  # config leaves the old one serving, so the run would go green with
+  # the vhost not actually loaded.
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
