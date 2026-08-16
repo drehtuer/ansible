@@ -1,0 +1,13 @@
+# The role's own defaults are complete, so only the two host facts
+# they interpolate are supplied here - `domain`, which the alert
+# sender and recipient are built from, and `hostname`, which becomes
+# the external label on every series. Facts are gathered (the
+# default) because the traffic rules are scoped to the default
+# route's interface.
+- name: Converge
+  hosts: all
+  vars:
+    domain: test.invalid
+    hostname: ansible-test-monitoring
+  roles:
+    - monitoring

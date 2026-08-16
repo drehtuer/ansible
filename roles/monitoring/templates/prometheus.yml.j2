@@ -1,0 +1,52 @@
+{{ ansible_managed | comment }}
+# Replaces the file shipped by the prometheus package, which is a
+# dpkg conffile. Safe to take over here in a way that replacing
+# Redis's packaged config was not: the packaged version only scrapes
+# Prometheus itself, so nothing set by the distribution is lost by
+# owning the whole file. Ansible re-asserts it on every run, and
+# `invoke check-drift` reports it if anything edits it by hand.
+{% set p = monitoring.prometheus %}
+{% set a = monitoring.alertmanager %}
+{% set n = monitoring.node_exporter %}
+global:
+  scrape_interval: {{ p.scrape_interval }}
+  evaluation_interval: {{ p.evaluation_interval }}
+  # Attached to every series leaving this server. Pointless with one
+  # host and free to add; the alternative is discovering later that
+  # every metric from every host is labelled identically.
+  external_labels:
+    host: {{ hostname }}
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - {{ a.listen_address }}:{{ a.port }}
+
+# A glob rather than a list, so adding a rule file is one file rather
+# than two edits. Note that this makes a rule file left behind by an
+# earlier version of this role keep being evaluated - the role writes
+# the directory's whole contents for that reason.
+rule_files:
+  - {{ p.rules_dir }}/*.rules.yml
+
+# Everything scraped here is on loopback. Prometheus and Alertmanager
+# are scraped as well as node_exporter, because the rules in
+# monitoring.rules.yml watch the monitoring pipeline itself - an
+# alerting system that cannot report its own failure is the failure
+# mode to design against.
+scrape_configs:
+  - job_name: node
+    static_configs:
+      - targets:
+          - {{ n.listen_address }}:{{ n.port }}
+
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - {{ p.listen_address }}:{{ p.port }}
+
+  - job_name: alertmanager
+    static_configs:
+      - targets:
+          - {{ a.listen_address }}:{{ a.port }}

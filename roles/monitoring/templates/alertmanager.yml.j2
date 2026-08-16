@@ -1,0 +1,60 @@
+{{ ansible_managed | comment }}
+# Replaces the packaged alertmanager.yml, a dpkg conffile - the
+# shipped version routes to a nonexistent webhook, so nothing is lost
+# by owning it outright.
+{% set a = monitoring.alertmanager %}
+global:
+  resolve_timeout: {{ a.resolve_timeout }}
+  # The local Postfix. No credential and no TLS: the connection never
+  # leaves the host. What this does mean is that Postfix being down
+  # takes the alert path down with it - which no configuration here
+  # can fix, and which the Watchdog route below exists to expose.
+  smtp_smarthost: {{ a.mail.smarthost }}
+  smtp_from: {{ a.mail.from }}
+  smtp_require_tls: {{ a.mail.require_tls | ternary('true', 'false') }}
+
+route:
+  receiver: mail
+  # Grouped by alert name only. On a single host the alternative -
+  # grouping by instance as well - splits nothing, since every alert
+  # carries the same instance.
+  group_by:
+    - alertname
+  group_wait: {{ a.group_wait }}
+  group_interval: {{ a.group_interval }}
+  repeat_interval: {{ a.repeat_interval }}
+  routes:
+    # The Watchdog fires permanently and must not be batched with
+    # anything else or held back, so it gets a route of its own on
+    # its own interval. One mail a day, and a day without one is the
+    # only evidence available here that the whole path - scrape, rule
+    # evaluation, routing, SMTP - has stopped.
+    - receiver: watchdog
+      matchers:
+        - alertname = "Watchdog"
+      group_wait: 0s
+      group_interval: {{ a.watchdog_interval }}
+      repeat_interval: {{ a.watchdog_interval }}
+
+receivers:
+  - name: mail
+    email_configs:
+      - to: {{ a.mail.to }}
+        # A "resolved" mail is what closes the loop on an alert that
+        # was mailed while firing; without it a warning that clears
+        # is indistinguishable from one nobody looked at.
+        send_resolved: true
+
+  - name: watchdog
+    email_configs:
+      - to: {{ a.mail.to }}
+        # The Watchdog never resolves, by construction.
+        send_resolved: false
+
+# No inhibit_rules, deliberately. The obvious one - critical
+# suppresses warning - cannot be expressed correctly here: the disk
+# alerts have different names for the two severities, so matching on
+# alertname inhibits nothing, and dropping alertname from the match
+# would let one critical silence every unrelated warning on the only
+# host there is. A duplicate mail is a smaller problem than a
+# silenced one.

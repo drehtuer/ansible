@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# Read by prometheus-node-exporter.service as an EnvironmentFile. See
+# the matching prometheus file for why this is one long line.
+#
+# The packaged default listen address is :9100, i.e. every interface.
+# The textfile directory already defaults to the path below in the
+# Debian build, but is passed anyway so the two cannot drift apart if
+# the packaging changes it.
+{% set n = monitoring.node_exporter %}
+{% set args = [
+     '--web.listen-address=' ~ n.listen_address ~ ':' ~ n.port,
+     '--collector.textfile.directory=' ~ n.textfile_dir,
+   ] + n.collectors | map('regex_replace', '^', '--collector.')
+       | list %}
+ARGS="{{ args | join(' ') }}"

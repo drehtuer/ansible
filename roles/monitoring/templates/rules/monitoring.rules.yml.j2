@@ -1,0 +1,101 @@
+{{ ansible_managed | comment }}
+# Rules that watch the monitoring pipeline itself.
+#
+# These matter more here than they would in a fleet: there is one
+# host, it monitors itself, and it delivers its own alerts through
+# its own Postfix. Every one of those is a single point of failure
+# that fails silently - the symptom of a broken alerting system is
+# no mail, which is indistinguishable from everything being fine.
+#
+# See the note on raw blocks in node.rules.yml.j2.
+groups:
+  - name: monitoring
+    rules:
+      # Fires permanently and is meant to. Routed to its own daily
+      # mail in alertmanager.yml, so a day with no Watchdog mail is
+      # positive evidence that scraping, rule evaluation, routing or
+      # SMTP has stopped - the only such evidence available without
+      # a second machine to watch this one.
+      #
+      # The gap this does not close: a host that is off, or off the
+      # network, sends nothing at all and the silence looks the same.
+      # Closing that needs something off-host. See doc/TODO.adoc.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: watchdog
+        annotations:
+          summary: Monitoring is alive
+          description: >-
+            This alert always fires. It is mailed on a fixed
+            interval so that its absence means something; if this
+            stops arriving, the monitoring pipeline has stopped
+            rather than gone quiet.
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: "{{ $labels.job }} is not being scraped"
+          description: >-
+            Prometheus cannot scrape {{ $labels.instance }} for job
+            {{ $labels.job }}. Every alert that depends on that
+            target is blind until it returns.
+{% endraw %}
+
+      # A reload that fails leaves the previous configuration
+      # running, so the service looks healthy while quietly ignoring
+      # everything deployed since. The role validates with promtool
+      # before installing a file, which makes this unlikely rather
+      # than impossible - a hand edit is not validated by anything.
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus rejected its configuration
+          description: >-
+            The running configuration is the last one that loaded
+            cleanly, not the one on disk.
+
+      - alert: AlertmanagerConfigReloadFailed
+        expr: alertmanager_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Alertmanager rejected its configuration
+          description: >-
+            The running configuration is the last one that loaded
+            cleanly, not the one on disk.
+
+      - alert: PrometheusRuleEvaluationFailing
+        expr: increase(prometheus_rule_evaluation_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Alert rules are failing to evaluate
+          description: >-
+            Rule group {{ $labels.rule_group }} is failing to
+            evaluate, so the alerts in it cannot fire.
+{% endraw %}
+
+      # The one that matters most: this is the alert path reporting
+      # that the alert path is broken. It can only be seen in the
+      # web interface or by the absence of the Watchdog, which is
+      # exactly why the Watchdog exists.
+      - alert: AlertmanagerNotificationsFailing
+        expr: increase(alertmanager_notifications_failed_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Alertmanager cannot deliver notifications
+          description: >-
+            Delivery via {{ $labels.integration }} is failing.
+            Alerts are being generated and not sent - check Postfix.
+{% endraw %}
