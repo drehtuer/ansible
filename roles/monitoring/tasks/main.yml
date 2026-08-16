@@ -158,6 +158,8 @@
     - grafana
   block:
     - name: Create grafana directories
+      vars:
+        monitoring_prov: "{{ monitoring.grafana.compose_dir }}/provisioning"
       ansible.builtin.file:
         path: "{{ item.path }}"
         state: directory
@@ -169,9 +171,22 @@
           mode: "0755"
         - path: "{{ monitoring.grafana.compose_dir }}/provisioning"
           mode: "0755"
-        - path: "{{ monitoring.grafana.compose_dir }}/provisioning/datasources"
+        # All six, not only the two this repo puts files in. The mount
+        # replaces Grafana's whole provisioning tree, and it logs an
+        # error at startup for every directory of its own that is then
+        # missing - which leaves a permanent error in the log of the
+        # one service whose job is to report problems.
+        - path: "{{ monitoring_prov }}/datasources"
           mode: "0755"
-        - path: "{{ monitoring.grafana.compose_dir }}/provisioning/dashboards"
+        - path: "{{ monitoring_prov }}/dashboards"
+          mode: "0755"
+        - path: "{{ monitoring_prov }}/alerting"
+          mode: "0755"
+        - path: "{{ monitoring_prov }}/plugins"
+          mode: "0755"
+        - path: "{{ monitoring_prov }}/notifiers"
+          mode: "0755"
+        - path: "{{ monitoring_prov }}/access-control"
           mode: "0755"
         - path: "{{ monitoring.grafana.compose_dir }}/dashboards"
           mode: "0755"
