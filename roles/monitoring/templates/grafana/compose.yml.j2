@@ -38,7 +38,7 @@ services:
       # primary domain even though the vhost answers for every entry
       # in http.domains; the others still serve, their generated links
       # just point at the primary.
-      GF_SERVER_ROOT_URL: "https://{{ monitoring.grafana.subdomain }}.{{ domain }}/"
+      GF_SERVER_ROOT_URL: "https://{{ monitoring.subdomain }}.{{ domain }}/"
       # The cookie is only ever sent over the TLS vhost in front.
       GF_SECURITY_COOKIE_SECURE: "true"
       GF_SECURITY_COOKIE_SAMESITE: "strict"

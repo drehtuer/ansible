@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# fail2ban.service declares RuntimeDirectory=fail2ban, so systemd
+# deletes and recreates /run/fail2ban on every stop - a new inode each
+# time. Anything holding a bind mount of that directory, which is what
+# roles/fail2ban_ui does to reach the control socket, keeps the old
+# unlinked one and sees it as empty.
+#
+# Preserving it makes the inode stable; the socket is simply recreated
+# inside the directory that is already mounted.
+[Service]
+RuntimeDirectoryPreserve=yes

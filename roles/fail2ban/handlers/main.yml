@@ -1,3 +1,10 @@
+# A drop-in is only read after a daemon-reload. No restart is needed:
+# RuntimeDirectoryPreserve applies to the next stop, and restarting
+# here would itself recreate the directory this exists to keep.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: Restart fail2ban
   ansible.builtin.systemd:
     name: fail2ban

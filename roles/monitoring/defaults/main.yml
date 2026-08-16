@@ -9,7 +9,16 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # inventory rather than in a role default. That file REPLACES this
   # dict rather than merging into it, so anything added here has to be
   # added there too or the role stops seeing it. See doc/STATUS.adoc.
+  # The vhost all three of these are served under. Promoted out of
+  # the grafana block once Prometheus and Alertmanager joined it there:
+  # it names the site, not any one of the apps on it.
+  subdomain: status
   prometheus:
+    # Served at this path under the vhost above. Prometheus derives its
+    # route prefix from the external URL, so this moves *every* one of
+    # its paths - which is why the self-scrape below names
+    # <path>metrics rather than /metrics.
+    path: /prometheus/
     # The packaged binary listens on 0.0.0.0:9090 - read out of the
     # .deb rather than assumed - so this override is the only thing
     # keeping it off the public addresses until nginx is in front of
@@ -35,6 +44,12 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
   alertmanager:
+    # Deliberately not served through the vhost, unlike Prometheus and
+    # Grafana: it stays on loopback with no route prefix. Its web
+    # interface adds little over the alert list Prometheus already
+    # shows, and the one thing it does add - creating silences - is
+    # exactly the thing worth keeping off a page guarded by a single
+    # shared credential. Silences are made with `amtool` on the host.
     listen_address: 127.0.0.1
     port: 9093
     config_file: /etc/prometheus/alertmanager.yml
@@ -115,14 +130,6 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # value, and coupling them would move Grafana if that ever changed.
     listen_address: 127.0.0.1
     port: 3000
-    # Serves <subdomain>.<domain> for every entry in http.domains, and
-    # must also appear in http.letsencrypt.subdomains - the standing
-    # trap roles/spam and roles/fail2ban_ui both carry. `status` is
-    # already listed there; this role takes the name over from the
-    # static placeholder http.sites used to serve, and removes that
-    # vhost itself, because the http role never deletes a site dropped
-    # from its list.
-    subdomain: status
     admin_user: admin
     # Real value in inventories/group_vars/all/monitoring.yml, the
     # same promotion roles/spam does with its controller password.

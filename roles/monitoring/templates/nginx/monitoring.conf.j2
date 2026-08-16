@@ -1,60 +1,69 @@
 {{ ansible_managed | comment }}
 #
-# status.<domain> - the monitoring frontend, modelled on the spam and
-# fail2ban_ui vhosts.
+# {{ monitoring.subdomain }}.<domain> - the monitoring frontend.
+#
+# Two applications on one vhost, behind one basic-auth credential:
+# Grafana at / and Prometheus at {{ monitoring.prometheus.path }}.
+#
+# Alertmanager is deliberately not here. Its interface adds little over
+# the alert list Prometheus already shows, and the one thing it does
+# add - creating silences - is exactly what should not sit behind a
+# single shared credential. It stays on loopback; silences are made
+# with `amtool` on the host.
 #
 # This name previously served a static placeholder through http.sites.
 # That entry is gone and the role deletes the vhost file it left
-# behind, because the http role creates and enables sites from its
-# list but never removes one dropped from it - two vhosts claiming the
-# same server_name pass `nginx -t` and whichever loaded first wins.
+# behind, because the http role creates and enables sites from its list
+# but never removes one dropped from it - two vhosts claiming the same
+# server_name pass `nginx -t` and whichever loaded first wins.
 #
-# WHAT IS AND IS NOT EXPOSED HERE. Grafana only. Prometheus and
-# Alertmanager stay on loopback with no vhost: Grafana's backend
-# proxies to Prometheus, so nothing needs them reachable, and exposing
-# Alertmanager would put silencing - i.e. switching alerts off - behind
-# nothing but this basic-auth credential.
+# conf-server/security.conf is deliberately NOT included here. It sets
+# the same headers at server level, and nginx *accumulates* add_header
+# at one level rather than replacing - two Content-Security-Policy
+# headers are intersected by the browser, which would undo the policy
+# widened below. Its headers are reproduced here instead, and so is its
+# dot-file deny, which is not idle: bots probe this name for /.env.
 server {
   listen {{ http.port_https }} ssl http2;
   listen [::]:{{ http.port_https }} ssl http2;
 
   include conf-server/ssl.conf;
-  # Included for the dot-file deny it also carries. Its headers are
-  # deliberately replaced below.
-  include conf-server/security.conf;
   include conf-server/general.conf;
 
   # One name per served domain, as the cloud, spam and fail2ban_ui
   # vhosts do. The certificate covers each through
-  # http.letsencrypt.subdomains, which must therefore list
-  # monitoring.grafana.subdomain.
-  server_name {{ http.domains | map('regex_replace', '^', monitoring.grafana.subdomain ~ '.') | join(' ') }};
+  # http.letsencrypt.subdomains, which must list monitoring.subdomain.
+  server_name {{ http.domains | map('regex_replace', '^', monitoring.subdomain ~ '.') | join(' ') }};
 
+  # Declared once at server level so every location inherits them.
+  # None of the locations below may declare an add_header of its own:
+  # nginx drops every inherited one the moment a block sets any, which
+  # is the rule roles/cloud has to work around, and it is invisible to
+  # `nginx -t`.
+  #
+  # The policy is security.conf's, widened by 'unsafe-eval' and blob:.
+  # Grafana needs the first for its expression and transformation
+  # engine and the second for rendering; without them the page returns
+  # 200, loads its JavaScript and draws nothing. A status code does not
+  # test this - a browser does.
+  add_header X-Content-Type-Options    "nosniff" always;
+  add_header Referrer-Policy           "no-referrer-when-downgrade" always;
+  add_header Content-Security-Policy   "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+  add_header Permissions-Policy        "interest-cohort=()" always;
+  # Repeated verbatim from conf-server/security.conf. Every HSTS header
+  # in this repo carries this exact value, without the `preload` token
+  # - see doc/STATUS.adoc.
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+  # From conf-server/security.conf, which this vhost cannot include.
+  location ~ /\.(?!well-known) {
+      deny all;
+  }
+
+  # Grafana.
   location / {
     auth_basic "Restricted Access";
     auth_basic_user_file /etc/nginx/sites-enabled/monitoring.htpasswd;
-
-    # nginx drops every inherited add_header the moment a block
-    # declares one of its own, so the whole set from
-    # conf-server/security.conf is repeated here rather than extended -
-    # the same inheritance rule roles/cloud has to work around, and
-    # getting it wrong is invisible to `nginx -t`.
-    #
-    # The one deliberate difference is the policy itself. Grafana will
-    # not run under the shared CSP: it needs 'unsafe-eval' for the
-    # expression and transformation engine, and blob: workers for
-    # rendering. Under the shared policy the page returns 200, loads
-    # its JavaScript and then renders nothing - which is exactly why a
-    # status code is not evidence that this works. Check it in a
-    # browser after changing either policy.
-    add_header X-Content-Type-Options    "nosniff" always;
-    add_header Referrer-Policy           "no-referrer-when-downgrade" always;
-    add_header Content-Security-Policy   "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
-    add_header Permissions-Policy        "interest-cohort=()" always;
-    # Repeated verbatim from conf-server/security.conf. Every HSTS
-    # header in this repo carries this exact value, without the
-    # `preload` token - see doc/STATUS.adoc.
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     proxy_pass http://{{ monitoring.grafana.listen_address }}:{{ monitoring.grafana.port }}/;
 
@@ -79,5 +88,29 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
+  }
+
+  # Prometheus: the query console, and the only place that shows scrape
+  # target health and rule state, neither of which Grafana can render.
+  #
+  # The prefix is NOT stripped. Prometheus is started with
+  # --web.external-url ending in this path, which becomes its route
+  # prefix, so it already serves and self-links under it. Stripping
+  # here would make it redirect / to /graph at the vhost root, landing
+  # on Grafana.
+  location {{ monitoring.prometheus.path }} {
+    auth_basic "Restricted Access";
+    auth_basic_user_file /etc/nginx/sites-enabled/monitoring.htpasswd;
+
+    proxy_pass http://{{ monitoring.prometheus.listen_address }}:{{ monitoring.prometheus.port }};
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Prometheus has no authentication of its own, so the credential
+    # would simply be ignored - cleared anyway, so that the one secret
+    # guarding this vhost is not handed to a second process.
+    proxy_set_header Authorization "";
   }
 }

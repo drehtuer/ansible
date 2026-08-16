@@ -5,6 +5,44 @@
       - fail2ban
   notify:
     - Restart fail2ban
+- name: Create the fail2ban unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/fail2ban.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Preserve the fail2ban runtime directory across restarts
+  # fail2ban.service declares `RuntimeDirectory=fail2ban`, so systemd
+  # *deletes and recreates* /run/fail2ban every time the service
+  # stops. The directory that comes back is a different inode.
+  #
+  # That is invisible on this host until something has it bind-mounted,
+  # and roles/fail2ban_ui does exactly that - it mounts /var/run/fail2ban
+  # to reach the control socket. A container keeps the mount it was
+  # given, so after any fail2ban restart it is holding the old, unlinked
+  # directory: it sees an empty directory rather than an error, and the
+  # UI reports it cannot access the socket until the container is
+  # recreated.
+  #
+  # Found on carcosa on 2026-08-16, where the trigger was the
+  # `Restart fail2ban` handler in roles/firewall firing after a rules
+  # change. A package upgrade would do it just as well, so removing
+  # that one trigger would not have been a fix.
+  #
+  # RuntimeDirectoryPreserve keeps the directory across a stop, so the
+  # inode is stable and the socket is simply recreated inside it. The
+  # setting lives here rather than in roles/fail2ban_ui because this
+  # role owns fail2ban.service - two roles writing the same unit is
+  # how neither ends up authoritative.
+  ansible.builtin.template:
+    src: templates/runtime-dir.conf.j2
+    dest: /etc/systemd/system/fail2ban.service.d/10-runtime-dir.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
 - name: Deploy custom filters
   # Filters the fail2ban package does not ship. Must land before
   # jail.local, or the jail referencing them fails to start.

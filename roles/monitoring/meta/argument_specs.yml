@@ -15,11 +15,28 @@ argument_specs:
         required: true
         description: Monitoring settings.
         options:
+          subdomain:
+            type: str
+            required: true
+            description:
+              - The vhost all of this is served under,
+                <subdomain>.<domain> for every entry in http.domains.
+                Must also appear in http.letsencrypt.subdomains, which
+                nothing enforces - the standing trap roles/spam and
+                roles/fail2ban_ui both carry.
           prometheus:
             type: dict
             required: true
             description: The metrics server itself.
             options:
+              path:
+                type: str
+                required: true
+                description:
+                  - Path under the vhost. Prometheus derives its route
+                    prefix from this, so it moves every one of its own
+                    paths - including /metrics, which is why the
+                    self-scrape names <path>metrics.
               listen_address:
                 type: str
                 required: true
@@ -220,14 +237,6 @@ argument_specs:
                 description:
                   - Loopback port the container binds, reached only
                     through the nginx vhost.
-              subdomain:
-                type: str
-                required: true
-                description:
-                  - Serves <subdomain>.<domain> for every entry in
-                    http.domains. Must also appear in
-                    http.letsencrypt.subdomains, which nothing
-                    enforces.
               admin_user:
                 type: str
                 required: true
