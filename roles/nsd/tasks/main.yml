@@ -162,21 +162,50 @@
     - nsd_zone_files.results[idx].changed
       or not nsd_signed.results[idx].stat.exists
 
-- name: Re-sign zones before their signatures expire
-  # The job that keeps a signed zone from turning bogus. See the
-  # signing script for why that failure is worse than being unsigned.
-  ansible.builtin.cron:
-    name: "nsd re-sign {{ item }}"
-    weekday: "{{ nsd.dnssec.resign.weekday }}"
-    hour: "{{ nsd.dnssec.resign.hour }}"
-    minute: "{{ nsd.dnssec.resign.minute }}"
-    user: root
-    job: "/usr/local/bin/nsd-sign-zone {{ item }}"
-    cron_file: nsd-resign
-  loop: "{{ nsd.zones | map(attribute='name') | list }}"
-  loop_control:
-    label: "{{ item }}"
+- name: Remove the re-signing cron job
+  # Superseded by the timer below. Left behind it would sign a second
+  # time each week - harmless in itself, but it also means the cron
+  # copy keeps working when the timer is broken, hiding exactly the
+  # failure the timer's mail exists to report.
+  ansible.builtin.file:
+    path: /etc/cron.d/nsd-resign
+    state: absent
+
+- name: Re-signing service
+  ansible.builtin.template:
+    src: templates/nsd-resign.service.j2
+    dest: /etc/systemd/system/nsd-resign.service
+    owner: root
+    group: root
+    mode: "0644"
   when: nsd.dnssec.enabled
+  notify:
+    - Reload systemd
+
+- name: Re-signing timer
+  ansible.builtin.template:
+    src: templates/nsd-resign.timer.j2
+    dest: /etc/systemd/system/nsd-resign.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: nsd.dnssec.enabled
+  notify:
+    - Reload systemd
+
+- name: Enable the re-signing timer
+  ansible.builtin.systemd_service:
+    name: nsd-resign.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when:
+    - nsd.dnssec.enabled
+    # Skipped under --check, where the unit file above was not actually
+    # written: systemd would be asked to enable a unit that does not
+    # exist and would fail the run, so every drift check on a host that
+    # has not deployed this yet would report a false failure.
+    - not ansible_check_mode
 
 - name: Configure nsd
   ansible.builtin.template:
@@ -343,3 +372,41 @@
     - nsd.propagation.check
     - nsd_serial_map | default({}) | length > 0
     - nsd_ns_map | default({}) | length > 0
+
+- name: Confirm the signatures being served are not close to expiry
+  # The check that scheduling cannot give you. A timer proves a job was
+  # *started*, not that it worked - a missing key, a full disk or a
+  # broken nsd-control all fail quietly, and the first visible symptom
+  # would be both domains going bogus weeks later. This asks what is
+  # actually in the answer.
+  #
+  # Reads the RRSIG expiry (field 9 of the rdata, YYYYMMDDHHMMSS) from
+  # the SOA's signature and compares it against now.
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      exp=$(dig +dnssec +noall +answer SOA {{ item }} @{{ nsd.listen[0] }} \
+            | awk '/[[:space:]]RRSIG[[:space:]]/ { print $9; exit }')
+      if [ -z "${exp}" ]; then
+        echo "no RRSIG served for {{ item }} - is the zone signed?" >&2
+        exit 1
+      fi
+      when="${exp:0:8} ${exp:8:2}:${exp:10:2}:${exp:12:2}"
+      exp_epoch=$(date -u -d "${when}" +%s)
+      days=$(( (exp_epoch - $(date -u +%s)) / 86400 ))
+      echo "{{ item }}: signatures valid for ${days} more day(s)"
+      [ "${days}" -ge {{ nsd.dnssec.min_signature_days }} ]
+    # Explicitly bash: the shell module defaults to /bin/sh, which is
+    # dash here, and this needs both `pipefail` and ${var:0:8} substring
+    # expansion - neither of which dash has. It fails loudly rather than
+    # silently, but only once it runs.
+    executable: /bin/bash
+  register: nsd_sig_age
+  changed_when: false
+  check_mode: false
+  loop: "{{ nsd.zones | map(attribute='name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - nsd.dnssec.enabled
+    - nsd.listen | length > 0

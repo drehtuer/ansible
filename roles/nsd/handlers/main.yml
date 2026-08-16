@@ -8,3 +8,6 @@
     name: nsd
     state: restarted
     enabled: true
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true

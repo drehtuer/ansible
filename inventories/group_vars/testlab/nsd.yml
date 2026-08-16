@@ -35,9 +35,9 @@ nsd:
     key_dir: /etc/nsd/keys
     signature_validity: 2592000
     resign:
-      weekday: "0"
-      hour: "4"
-      minute: "20"
+      on_calendar: "Sun *-*-* 04:20:00"
+      randomized_delay: 3600
+    min_signature_days: 7
   zones:
     - name: "{{ domain }}"
       ttl: 3600

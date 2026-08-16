@@ -1,0 +1,23 @@
+{{ ansible_managed | comment }}
+#
+# Weekly, against signatures valid for {{ (nsd.dnssec.signature_validity / 86400) | int }} days - so roughly three
+# weeks of margin for a run that does not happen.
+#
+# A systemd timer rather than cron, for one reason that matters here:
+# Persistent=true. Cron silently skips a run whose moment passed while
+# the host was down, and this repo has a role - `upgrade` - whose whole
+# job is to reboot the machine. A skipped re-sign is invisible and eats
+# the margin above; Persistent makes the timer catch up on the next
+# boot instead.
+[Unit]
+Description=Weekly DNSSEC re-signing
+
+[Timer]
+OnCalendar={{ nsd.dnssec.resign.on_calendar }}
+Persistent=true
+# Spreads the load off an exact minute. Irrelevant on one host, but it
+# costs nothing and the job is not time-critical to the second.
+RandomizedDelaySec={{ nsd.dnssec.resign.randomized_delay }}
+
+[Install]
+WantedBy=timers.target
