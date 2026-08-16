@@ -38,6 +38,9 @@
     cloud_php_version: "8.3"
     http_php_version: "8.3"
     cloud_fpm_socket: /run/php/nextcloud-fpm.sock
+    # notify_push ships one prebuilt binary per architecture, so the
+    # unit file names the host's. Detected by `uname -m` at run time.
+    cloud_push_arch: x86_64
     ip_version: 4
     # roles/nsd renders one zone file per entry in nsd.zones, with the
     # entry passed in as `zone`; supply the first one here. The

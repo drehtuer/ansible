@@ -333,6 +333,17 @@
     group: www-data
     mode: "0640"
     validate: php -l %s
+- name: Nextcloud trusted proxies
+  # Client Push needs this; see the template. Deployed before the
+  # self-test below, which fails without it.
+  ansible.builtin.template:
+    src: templates/proxy.config.php.j2
+    dest: "{{ cloud.nextcloud.path }}/config/proxy.config.php"
+    owner: www-data
+    group: www-data
+    mode: "0640"
+    validate: php -l %s
+
 - name: Nextcloud cache configuration
   # A config/*.config.php drop-in rather than config.php, which is
   # written by Nextcloud itself and is not managed here.
@@ -354,6 +365,42 @@
     group: www-data
     mode: "0640"
     validate: php -l %s
+
+- name: Detect the architecture notify_push ships a binary for
+  ansible.builtin.command:
+    cmd: uname -m
+  register: cloud_push_arch_cmd
+  changed_when: false
+  check_mode: false
+
+- name: Note the notify_push architecture
+  ansible.builtin.set_fact:
+    cloud_push_arch: "{{ cloud_push_arch_cmd.stdout | trim }}"
+
+- name: Install the Client Push app
+  # Ships the daemon as a prebuilt binary rather than needing a
+  # toolchain, which is why this is an app install and not a build.
+  ansible.builtin.command:
+    cmd: sudo -u www-data php occ app:install notify_push
+    chdir: "{{ cloud.nextcloud.path }}"
+    creates: "{{ cloud.nextcloud.path }}/apps/notify_push/appinfo/info.xml"
+
+- name: Client Push service
+  ansible.builtin.template:
+    src: templates/notify_push.service.j2
+    dest: /etc/systemd/system/notify_push.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart notify_push
+
+- name: Enable the Client Push service
+  ansible.builtin.systemd_service:
+    name: notify_push
+    state: started
+    enabled: true
+    daemon_reload: true
 
 - name: Nextcloud nginx upstream
   ansible.builtin.template:
@@ -426,4 +473,23 @@
 - name: Validate nginx configuration
   ansible.builtin.command:
     cmd: nginx -t
+  changed_when: false
+
+- name: Apply nginx and service changes before the push self-test
+  # `notify_push:setup` does not just write configuration - it connects
+  # to the URL and verifies the whole path works. Running it before the
+  # vhost reloads tests the old one.
+  ansible.builtin.meta: flush_handlers
+
+- name: Configure and self-test Client Push
+  # Idempotent in effect: re-running re-verifies and rewrites the same
+  # value. `changed_when: false` because it reports success either way
+  # and there is nothing to compare against - the check it performs is
+  # the point, not the write.
+  ansible.builtin.command:
+    cmd: >-
+      sudo -u www-data php occ notify_push:setup
+      https://cloud.{{ domain }}/push
+    chdir: "{{ cloud.nextcloud.path }}"
+  register: cloud_push_setup
   changed_when: false

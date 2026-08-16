@@ -45,6 +45,8 @@ cloud:
         - db:add-missing-columns
         - db:add-missing-primary-keys
     log_rotate_size: 104857600
+  push:
+    port: 7867
   ocr:
     languages:
       - eng
