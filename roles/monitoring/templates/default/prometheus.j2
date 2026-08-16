@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# Read by prometheus.service as an EnvironmentFile, which is the only
+# way the packaged unit takes flags - it runs `/usr/bin/prometheus
+# $ARGS` with nothing else set.
+#
+# Only what differs from the binary's own defaults is passed. Debian
+# already patches the config and storage paths to /etc/prometheus and
+# /var/lib/prometheus/metrics2, but not the listen address, which is
+# 0.0.0.0:9090 out of the box.
+#
+# EnvironmentFile does no variable expansion and line continuations
+# are not worth relying on, so this is deliberately one long line.
+{% set p = monitoring.prometheus %}
+{% set args = [
+     '--web.listen-address=' ~ p.listen_address ~ ':' ~ p.port,
+     '--storage.tsdb.retention.time=' ~ p.retention_time,
+     '--storage.tsdb.retention.size=' ~ p.retention_size,
+   ] %}
+ARGS="{{ args | join(' ') }}"

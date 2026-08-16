@@ -1,0 +1,239 @@
+{{ ansible_managed | comment }}
+# Host alert rules, evaluated against node_exporter alone so that
+# this file stays valid as service exporters are added later.
+#
+# Thresholds come from monitoring.alerts. The `for` durations do not:
+# how long a signal has to hold before it means anything is a
+# property of the signal, not an operator preference.
+#
+# Annotations use Prometheus's own Go templating, which shares
+# Jinja's delimiters - hence the raw blocks. Without them the
+# annotations would be rendered here, at deploy time, where $labels
+# and $value do not exist.
+{% set d = monitoring.alerts.disk %}
+{% set n = monitoring.alerts.network %}
+{#
+  node_exporter already drops pseudo filesystems, /run, /dev and
+  Docker's layer mounts through its own defaults. tmpfs is the one it
+  keeps that is not a disk, so it is the only exclusion needed here.
+#}
+{% set fs = '{fstype!="tmpfs"}' %}
+groups:
+  - name: node
+    rules:
+      - alert: HostDiskSpaceLow
+        expr: >-
+          100 * node_filesystem_avail_bytes{{ fs }}
+          / node_filesystem_size_bytes{{ fs }}
+          < {{ d.warning_percent }}
+        for: 30m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Low disk space on {{ $labels.mountpoint }}
+          description: >-
+            {{ $labels.mountpoint }} has
+            {{ $value | printf "%.1f" }}% free.
+{% endraw %}
+
+      - alert: HostDiskSpaceCritical
+        expr: >-
+          100 * node_filesystem_avail_bytes{{ fs }}
+          / node_filesystem_size_bytes{{ fs }}
+          < {{ d.critical_percent }}
+        for: 10m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Critically low disk space on {{ $labels.mountpoint }}
+          description: >-
+            {{ $labels.mountpoint }} has
+            {{ $value | printf "%.1f" }}% free.
+{% endraw %}
+
+      # The useful disk alert, because it answers "when" rather than
+      # "how much": fit the free space over the last few hours and
+      # ask where the line crosses zero. Held to filesystems that are
+      # already fairly full so that a mostly empty disk having a busy
+      # afternoon does not qualify.
+      - alert: HostDiskWillFill
+        expr: >-
+          predict_linear(
+            node_filesystem_avail_bytes{{ fs }}[{{ d.predict_window }}],
+            {{ d.predict_horizon_days }} * 24 * 3600
+          ) < 0
+          and
+          100 * node_filesystem_avail_bytes{{ fs }}
+          / node_filesystem_size_bytes{{ fs }}
+          < {{ d.predict_below_percent }}
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            {% raw %}{{ $labels.mountpoint }}{% endraw %} is on
+            course to fill within
+            {{ d.predict_horizon_days }} days
+{% raw %}          description: >-
+            Extrapolating the last few hours of usage,
+            {{ $labels.mountpoint }} runs out of space. Free space is
+            still falling; this is a trend, not a threshold.
+{% endraw %}
+
+      # A Maildir is one file per message and Nextcloud's data
+      # directory is millions of small files, so this host can run
+      # out of inodes with space to spare - which presents as "disk
+      # full" while df shows room, and is why this is a separate
+      # alert rather than a variant of the one above.
+      - alert: HostInodesLow
+        expr: >-
+          100 * node_filesystem_files_free{{ fs }}
+          / node_filesystem_files{{ fs }}
+          < {{ monitoring.alerts.inodes.warning_percent }}
+        for: 30m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Few free inodes on {{ $labels.mountpoint }}
+          description: >-
+            {{ $labels.mountpoint }} has
+            {{ $value | printf "%.1f" }}% of its inodes free. Writes
+            fail with ENOSPC once these run out, whatever df reports.
+{% endraw %}
+
+      # Almost always a filesystem that remounted itself read-only
+      # after an I/O error, which is silent from the application's
+      # side until something tries to write.
+      - alert: HostFilesystemReadOnly
+        expr: node_filesystem_readonly{{ fs }} == 1
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          # Quoted: a plain YAML scalar may not begin with `{`, which
+          # is what a Go template expression at the start of a line
+          # looks like to the parser.
+          summary: "{{ $labels.mountpoint }} is mounted read-only"
+          description: >-
+            {{ $labels.mountpoint }} is read-only, which usually
+            follows an I/O error. Check the kernel log.
+{% endraw %}
+
+      - alert: HostMemoryLow
+        expr: >-
+          100 * node_memory_MemAvailable_bytes
+          / node_memory_MemTotal_bytes
+          < {{ monitoring.alerts.memory.available_percent }}
+        for: 15m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Little memory available
+          description: >-
+            {{ $value | printf "%.1f" }}% of memory is available.
+            MemAvailable already accounts for reclaimable cache, so
+            this is real pressure rather than a full page cache.
+{% endraw %}
+
+      # load15 rather than load1, and per CPU rather than absolute,
+      # so this means the same thing if the host is ever resized.
+      - alert: HostLoadHigh
+        expr: >-
+          node_load15
+          / count without (cpu, mode) (node_cpu_seconds_total{mode="idle"})
+          > {{ monitoring.alerts.load.per_cpu }}
+        for: 30m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Sustained high load
+          description: >-
+            15-minute load average is
+            {{ $value | printf "%.2f" }} per CPU.
+{% endraw %}
+
+      # roles/time manages ntpsec, so an unsynchronised clock means
+      # it stopped working rather than that it was never configured.
+      # Worth alerting on for its own sake: TOTP, certificate
+      # validity and DNSSEC signature windows all depend on it.
+      - alert: HostClockNotSynchronising
+        expr: node_timex_sync_status == 0
+        for: 30m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Clock is not synchronised
+          description: >-
+            The kernel reports the clock as unsynchronised. Check
+            ntpsec.
+{% endraw %}
+
+      - alert: HostClockOffsetHigh
+        expr: >-
+          abs(node_timex_offset_seconds)
+          > {{ monitoring.alerts.clock.max_offset_seconds }}
+        for: 15m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Clock offset is high
+          description: >-
+            The clock is {{ $value | printf "%.3f" }}s from
+            reference time.
+{% endraw %}
+
+      # The thresholds below are placeholders until this host has a
+      # baseline to set them from, so treat them as warn-only and
+      # tune rather than trusting the first firing. Egress is the
+      # direction that matters: an abused relay, a compromised
+      # account or a bulk copy of the data directory all look like
+      # sustained outbound traffic.
+      - alert: HostEgressHigh
+        expr: >-
+          rate(
+            node_network_transmit_bytes_total{device="{{ n.interface }}"}
+            [{{ n.window }}]
+          ) * 8 / 1e6 > {{ n.egress_mbit }}
+        for: 5m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Sustained outbound traffic
+          description: >-
+            {{ $labels.device }} is sending
+            {{ $value | printf "%.0f" }} Mbit/s averaged over the
+            rate window.
+{% endraw %}
+
+      - alert: HostIngressHigh
+        expr: >-
+          rate(
+            node_network_receive_bytes_total{device="{{ n.interface }}"}
+            [{{ n.window }}]
+          ) * 8 / 1e6 > {{ n.ingress_mbit }}
+        for: 5m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Sustained inbound traffic
+          description: >-
+            {{ $labels.device }} is receiving
+            {{ $value | printf "%.0f" }} Mbit/s averaged over the
+            rate window.
+{% endraw %}
+
+      # Makes `systemctl list-units --state=failed` a continuously
+      # checked invariant rather than something someone remembers to
+      # run. The unbound-resolvconf failure in doc/STATUS.adoc sat
+      # there long enough to make that command useless as a health
+      # check, which is the failure this prevents.
+      - alert: SystemdUnitFailed
+        expr: node_systemd_unit_state{state="failed"} == 1
+        for: 15m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: "{{ $labels.name }} has failed"
+          description: >-
+            systemd reports {{ $labels.name }} in the failed state.
+{% endraw %}

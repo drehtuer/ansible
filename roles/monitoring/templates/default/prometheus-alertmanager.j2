@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# Read by prometheus-alertmanager.service as an EnvironmentFile. See
+# the matching prometheus file for why this is one long line.
+#
+# --cluster.listen-address is emptied deliberately, and it is the
+# reason this file would be needed even if the web listener were
+# already correct: Alertmanager opens a second listener for HA gossip
+# on 0.0.0.0:9094 unless the flag is set to an empty string. That is
+# a port on every interface, including both public addresses, for a
+# cluster of one. Emptying it disables HA mode outright.
+{% set a = monitoring.alertmanager %}
+{% set args = [
+     '--web.listen-address=' ~ a.listen_address ~ ':' ~ a.port,
+     '--cluster.listen-address=',
+   ] %}
+ARGS="{{ args | join(' ') }}"

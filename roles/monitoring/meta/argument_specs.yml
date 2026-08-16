@@ -1,0 +1,274 @@
+argument_specs:
+  main:
+    short_description: Metrics collection and mail alerting
+    description:
+      - Installs Prometheus, Alertmanager and node_exporter from the
+        Ubuntu archive, binds all three to loopback, deploys the
+        alert rules, and routes firing alerts to mail through the
+        Postfix this repo already configures.
+      - Phase 1 of the monitoring work. Nothing is served to the
+        outside; the status.<domain> vhost and Grafana come later.
+    options:
+      monitoring:
+        type: dict
+        required: true
+        description: Monitoring settings.
+        options:
+          prometheus:
+            type: dict
+            required: true
+            description: The metrics server itself.
+            options:
+              listen_address:
+                type: str
+                required: true
+                description:
+                  - Address to bind to. The packaged default is
+                    0.0.0.0; keep this on loopback while no reverse
+                    proxy is in front of it.
+              port:
+                type: int
+                required: true
+                description: Port to bind to.
+              scrape_interval:
+                type: str
+                required: true
+                description: How often targets are scraped.
+              evaluation_interval:
+                type: str
+                required: true
+                description: How often alert rules are evaluated.
+              retention_time:
+                type: str
+                required: true
+                description:
+                  - How long samples are kept. Prometheus keeps 15d
+                    if neither retention setting is given.
+              retention_size:
+                type: str
+                required: true
+                description:
+                  - Ceiling on the size of the series database,
+                    whichever limit is reached first.
+              config_file:
+                type: str
+                required: true
+                description: Generated Prometheus configuration.
+              rules_dir:
+                type: str
+                required: true
+                description:
+                  - Directory holding the generated *.rules.yml, read
+                    by Prometheus as a glob.
+          alertmanager:
+            type: dict
+            required: true
+            description: Alert routing and delivery.
+            options:
+              listen_address:
+                type: str
+                required: true
+                description:
+                  - Address to bind to. As with Prometheus, the
+                    packaged default is every interface.
+              port:
+                type: int
+                required: true
+                description: Port to bind to.
+              config_file:
+                type: str
+                required: true
+                description: Generated Alertmanager configuration.
+              mail:
+                type: dict
+                required: true
+                description: Where alerts are delivered.
+                options:
+                  smarthost:
+                    type: str
+                    required: true
+                    description:
+                      - host:port of the SMTP server. The local
+                        Postfix, over loopback.
+                  from:
+                    type: str
+                    required: true
+                    description: Envelope and header sender.
+                  to:
+                    type: str
+                    required: true
+                    description:
+                      - Recipient. An address mail.aliases already
+                        resolves, so alerts follow the same forward
+                        as everything else sent to root.
+                  require_tls:
+                    type: bool
+                    required: true
+                    description:
+                      - Whether STARTTLS is mandatory. False over
+                        loopback, where the traffic never leaves the
+                        host.
+              group_wait:
+                type: str
+                required: true
+                description:
+                  - How long a new alert group is held before its
+                    first mail, so related alerts arrive together.
+              group_interval:
+                type: str
+                required: true
+                description:
+                  - How long before an alert added to an existing
+                    group produces another mail.
+              repeat_interval:
+                type: str
+                required: true
+                description:
+                  - How long before an alert that is still firing is
+                    mailed again.
+              resolve_timeout:
+                type: str
+                required: true
+                description:
+                  - How long an alert with no end time is considered
+                    firing after its last evaluation.
+              watchdog_interval:
+                type: str
+                required: true
+                description:
+                  - How often the always-firing Watchdog alert is
+                    mailed. Its absence is the signal that the
+                    monitoring pipeline has stopped.
+          node_exporter:
+            type: dict
+            required: true
+            description: Host metrics.
+            options:
+              listen_address:
+                type: str
+                required: true
+                description: Address to bind to.
+              port:
+                type: int
+                required: true
+                description: Port to bind to.
+              collectors:
+                type: list
+                elements: str
+                required: true
+                description:
+                  - Collectors enabled on top of the defaults.
+                    Passing one already enabled is harmless, which is
+                    what makes this safe across the 1.7 and 1.10
+                    packages.
+              textfile_dir:
+                type: str
+                required: true
+                description:
+                  - Directory scanned for *.prom files, for metrics
+                    that have no exporter of their own.
+          alerts:
+            type: dict
+            required: true
+            description: Thresholds the rules are rendered from.
+            options:
+              disk:
+                type: dict
+                required: true
+                description: Filesystem space.
+                options:
+                  warning_percent:
+                    type: int
+                    required: true
+                    description: Free space below which to warn.
+                  critical_percent:
+                    type: int
+                    required: true
+                    description: Free space treated as critical.
+                  predict_window:
+                    type: str
+                    required: true
+                    description:
+                      - Range the fill trend is fitted over.
+                  predict_horizon_days:
+                    type: int
+                    required: true
+                    description:
+                      - How far ahead the trend is extrapolated when
+                        asking whether the filesystem will fill.
+                  predict_below_percent:
+                    type: int
+                    required: true
+                    description:
+                      - Only filesystems with less than this much
+                        free are judged on the trend, so a mostly
+                        empty disk is not alerted on for one busy
+                        afternoon.
+              inodes:
+                type: dict
+                required: true
+                description: Inode exhaustion.
+                options:
+                  warning_percent:
+                    type: int
+                    required: true
+                    description: Free inodes below which to warn.
+              memory:
+                type: dict
+                required: true
+                description: Memory pressure.
+                options:
+                  available_percent:
+                    type: int
+                    required: true
+                    description:
+                      - Available memory below which to warn.
+              load:
+                type: dict
+                required: true
+                description: Run queue.
+                options:
+                  per_cpu:
+                    type: float
+                    required: true
+                    description:
+                      - node_load15 per CPU above which to warn.
+              clock:
+                type: dict
+                required: true
+                description: Time synchronisation.
+                options:
+                  max_offset_seconds:
+                    type: float
+                    required: true
+                    description:
+                      - Absolute NTP offset above which to warn.
+              network:
+                type: dict
+                required: true
+                description: Throughput on the internet-facing NIC.
+                options:
+                  interface:
+                    type: str
+                    required: true
+                    description:
+                      - Interface the traffic rules are scoped to. A
+                        wrong name makes them match nothing, so this
+                        deliberately has no fallback.
+                  egress_mbit:
+                    type: int
+                    required: true
+                    description:
+                      - Sustained outbound megabits per second above
+                        which to warn.
+                  ingress_mbit:
+                    type: int
+                    required: true
+                    description:
+                      - Sustained inbound megabits per second above
+                        which to warn.
+                  window:
+                    type: str
+                    required: true
+                    description:
+                      - Range the throughput rate is averaged over.

@@ -1,0 +1,143 @@
+- name: Install monitoring
+  # All four are in the Ubuntu archive on both 24.04 and 26.04, which
+  # is why this role installs rather than containerises: node_exporter
+  # in particular would need the host's PID and network namespaces and
+  # bind mounts of /proc, /sys and /, giving away every bit of
+  # isolation a container exists for.
+  #
+  # amtool comes with prometheus-alertmanager on both releases;
+  # promtool is the awkward one, handled by the two tasks below.
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - prometheus
+      - prometheus-alertmanager
+      - prometheus-node-exporter
+
+- name: Check whether promtool came with the prometheus package
+  # promtool is packaged differently on either side of the release
+  # upgrade this host is waiting for, and the role needs it on both:
+  # it is what the `validate` steps below call, the same stance the
+  # rest of this repo takes with nginx -t, sshd -t and nsd-checkzone.
+  #
+  #   24.04  /usr/bin/promtool ships inside the `prometheus` package
+  #          and there is no `promtool` package at all
+  #   26.04  `prometheus` ships only the server; promtool is split
+  #          out into a package of its own
+  #
+  # Testing for the binary rather than the release covers both
+  # without a version comparison, and carries the host across the
+  # upgrade on its own: the split package's arrival removes the
+  # bundled binary, this reports it missing, and the next task
+  # installs the replacement.
+  ansible.builtin.stat:
+    path: /usr/bin/promtool
+  register: monitoring_promtool
+
+- name: Install promtool where it is packaged separately
+  ansible.builtin.apt:
+    install_recommends: false
+    name:
+      - promtool
+  when: not monitoring_promtool.stat.exists
+
+- name: Create the rules directory
+  ansible.builtin.file:
+    path: "{{ monitoring.prometheus.rules_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the textfile collector directory
+  # Nothing writes here in phase 1. It exists so the collector does
+  # not log a missing-directory error on every scrape.
+  ansible.builtin.file:
+    path: "{{ monitoring.node_exporter.textfile_dir }}"
+    state: directory
+    owner: root
+    group: prometheus
+    mode: "0755"
+
+- name: Deploy the alert rules
+  # Before the Prometheus configuration below, and that order is
+  # load-bearing: `promtool check config` resolves the rule_files
+  # glob, so validating the configuration first would check it
+  # against rules that are not on disk yet.
+  ansible.builtin.template:
+    src: "templates/rules/{{ item }}.rules.yml.j2"
+    dest: "{{ monitoring.prometheus.rules_dir }}/{{ item }}.rules.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: promtool check rules %s
+  loop:
+    - node
+    - monitoring
+  notify:
+    - Reload prometheus
+
+- name: Configure prometheus
+  ansible.builtin.template:
+    src: templates/prometheus.yml.j2
+    dest: "{{ monitoring.prometheus.config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: promtool check config %s
+  notify:
+    - Reload prometheus
+
+- name: Configure alertmanager
+  ansible.builtin.template:
+    src: templates/alertmanager.yml.j2
+    dest: "{{ monitoring.alertmanager.config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: amtool check-config %s
+  notify:
+    - Reload alertmanager
+
+# The three files below are what the packaged units read their
+# command line from, so a change to any of them needs a restart
+# rather than a reload - the flags are only read at startup.
+- name: Configure the prometheus service arguments
+  ansible.builtin.template:
+    src: templates/default/prometheus.j2
+    dest: /etc/default/prometheus
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart prometheus
+
+- name: Configure the alertmanager service arguments
+  ansible.builtin.template:
+    src: templates/default/prometheus-alertmanager.j2
+    dest: /etc/default/prometheus-alertmanager
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart alertmanager
+
+- name: Configure the node exporter service arguments
+  ansible.builtin.template:
+    src: templates/default/prometheus-node-exporter.j2
+    dest: /etc/default/prometheus-node-exporter
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart node exporter
+
+- name: Enable the monitoring services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - prometheus
+    - prometheus-alertmanager
+    - prometheus-node-exporter
