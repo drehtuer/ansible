@@ -1,0 +1,24 @@
+{{ ansible_managed | comment }}
+# Provisioned datasource. Grafana re-reads this at every start, so the
+# datasource cannot be edited into a different target through the UI
+# and stay that way - which is the point: this repo decides what the
+# dashboards are pointed at.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Grafana's browser code never talks to Prometheus directly; the
+    # backend proxies, which is what lets Prometheus stay on loopback
+    # with no vhost of its own.
+    url: http://{{ monitoring.prometheus.listen_address }}:{{ monitoring.prometheus.port }}
+    # Fixed rather than generated, because the provisioned dashboards
+    # reference it by uid. A generated uid would change between hosts
+    # and leave every panel pointed at a datasource that does not
+    # exist - which renders as an empty panel rather than an error.
+    uid: {{ monitoring.grafana.datasource_uid }}
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: {{ monitoring.prometheus.scrape_interval }}

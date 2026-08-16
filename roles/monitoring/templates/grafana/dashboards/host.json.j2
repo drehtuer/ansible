@@ -1,0 +1,231 @@
+{#
+  Host overview dashboard.
+
+  Written out rather than imported from grafana.com: the community
+  node_exporter dashboards are thousands of lines, carry panels for
+  hardware this host does not have, and pin a datasource uid of their
+  own. This covers what phase 1 actually collects, and every panel
+  here corresponds to something an alert rule also watches - so the
+  dashboard is where you look after a mail, not a separate view of the
+  world.
+
+  Grafana's legendFormat uses {{label}}, which is Jinja's syntax too,
+  hence the raw blocks. The datasource uid is the one value that is
+  templated, so it cannot drift from the provisioned datasource.
+#}
+{% set ds = '{"type": "prometheus", "uid": "' ~ monitoring.grafana.datasource_uid ~ '"}' %}
+{% set iface = monitoring.alerts.network.interface %}
+{
+  "uid": "host-overview",
+  "title": "Host overview",
+  "tags": ["ansible"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU usage",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {"unit": "percent", "min": 0, "max": 100},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "busy"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Load average per CPU",
+      "description": "HostLoadHigh alerts on the 15m line.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "node_load1 / count without (cpu, mode) (node_cpu_seconds_total{mode=\"idle\"})",
+          "legendFormat": "1m"
+        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "node_load15 / count without (cpu, mode) (node_cpu_seconds_total{mode=\"idle\"})",
+          "legendFormat": "15m"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory",
+      "description": "MemAvailable already accounts for reclaimable cache, so it is the number HostMemoryLow watches rather than 'free'.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "used"
+        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "node_memory_MemAvailable_bytes",
+          "legendFormat": "available"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Filesystem used",
+      "description": "HostDiskSpaceLow and HostDiskWillFill both read these series.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {
+        "defaults": {"unit": "percent", "min": 0, "max": 100},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "100 - 100 * node_filesystem_avail_bytes{fstype!=\"tmpfs\"} / node_filesystem_size_bytes{fstype!=\"tmpfs\"}",
+          "legendFormat": "{% raw %}{{mountpoint}}{% endraw %}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Network throughput ({{ iface }})",
+      "description": "HostEgressHigh and HostIngressHigh alert on these, with thresholds that are placeholders until this host has a baseline.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "Bps", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "rate(node_network_receive_bytes_total{device=\"{{ iface }}\"}[5m])",
+          "legendFormat": "in"
+        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "rate(node_network_transmit_bytes_total{device=\"{{ iface }}\"}[5m])",
+          "legendFormat": "out"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Disk I/O",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "Bps", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "rate(node_disk_read_bytes_total[5m]) > 0",
+          "legendFormat": "{% raw %}{{device}}{% endraw %} read"
+        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "rate(node_disk_written_bytes_total[5m]) > 0",
+          "legendFormat": "{% raw %}{{device}}{% endraw %} written"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Failed units",
+      "description": "SystemdUnitFailed alerts on this. Anything but zero is worth reading.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 24},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "count(node_systemd_unit_state{state=\"failed\"} == 1) or vector(0)",
+          "legendFormat": "failed"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Scrape targets up",
+      "description": "TargetDown alerts when one of these stops answering.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 24},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      },
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "sum(up)",
+          "legendFormat": "up"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Uptime",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 24},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      },
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "time() - node_boot_time_seconds",
+          "legendFormat": "uptime"
+        }
+      ]
+    }
+  ]
+}

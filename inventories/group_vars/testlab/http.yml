@@ -32,11 +32,8 @@ http:
         - www
       root: /var/www/html
       include_locations: true
-    - name: status
-      subdomains:
-        - status
-      root: /var/www/html
-      include_locations: false
+    # `status` is deliberately absent: roles/monitoring serves that
+    # name now. See the matching comment in the production host_vars.
     - name: mail
       subdomains:
         - mail

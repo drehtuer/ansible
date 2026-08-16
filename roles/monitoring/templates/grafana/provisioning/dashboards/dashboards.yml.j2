@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# Where Grafana looks for dashboards this repo owns. The directory is
+# mounted read-only, so a dashboard edited in the browser can be saved
+# to Grafana's database but never back over the file - the file is
+# re-read at startup and wins.
+apiVersion: 1
+
+providers:
+  - name: ansible
+    type: file
+    # Deleting the JSON removes the dashboard, rather than leaving an
+    # orphan behind that nothing in this repo describes any more.
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      # Without this every dashboard lands in the General folder and
+      # any sub-directory structure is lost.
+      foldersFromFilesStructure: false
