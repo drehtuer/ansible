@@ -273,6 +273,14 @@
     - nsd_serial_before.results is defined
     - item.changed
     - previous != ''
+    # Meaningless once the zone is signed, and actively wrong: the
+    # signing script owns the served serial from that point, so the
+    # value being served (2026081605, say) is far ahead of the
+    # inventory's (2026081504) and this comparison fails on every zone
+    # change. The script guarantees the increase instead - it derives
+    # the next serial from the one in effect - so the check this
+    # replaces is not lost, only moved.
+    - not nsd.dnssec.enabled
 
 - name: Systemd enable nsd
   ansible.builtin.systemd_service:
