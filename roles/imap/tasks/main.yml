@@ -7,8 +7,29 @@
       - dovecot-lmtpd
       - dovecot-sieve
       - curl
+      # Required by the maildir-import tool below. Present on the
+      # current host anyway, but nothing declared it, so a from-scratch
+      # provision would only find out at migration time.
+      - rsync
   notify:
     - Restart dovecot
+- name: Maildir import script
+  # Companion to rspamd-train-bulk (roles/spam): that one seeds the
+  # classifier from a corpus already on disk, this one is what gets the
+  # corpus - and the rest of the account's mail - off another server.
+  # Not run by the role; a tool the administrator invokes when
+  # migrating an account onto this host.
+  #
+  # Holds no secret, unlike the sieve-pipe scripts below, so it is
+  # readable and runnable by the mail user - which is who has to run
+  # it, since the imported files must end up owned by them.
+  ansible.builtin.template:
+    src: templates/maildir-import.sh.j2
+    dest: /usr/local/bin/maildir-import
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Create sieve-pipe directory
   ansible.builtin.file:
     path: /etc/dovecot/sieve-pipe
