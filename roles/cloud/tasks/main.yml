@@ -458,18 +458,35 @@
     job: "/usr/bin/php -f {{ cloud.nextcloud.path }}/cron.php"
     state: present
     cron_file: nextcloud_cron
-- name: Cron job to remove iCCP profiles
+- name: Remove the iCCP PNG rewriting cron job
+  # Deleted rather than narrowed, because the cure was worse than the
+  # disease. It ran weekly as www-data:
+  #
+  #   find /var/www/nextcloud -type f -name '*.png' -exec mogrify -strip {} +
+  #
+  # over the *whole* installation, to silence libpng's "known incorrect
+  # sRGB profile" warning - which is cosmetic log noise.
+  #
+  # What it actually did, on 2026-08-16:
+  #
+  #   * Broke Nextcloud's code integrity check. `mogrify -strip`
+  #     re-encodes the file, so every signed PNG in an app no longer
+  #     matched its hash. The three INVALID_HASH entries reported all
+  #     carried an mtime of 03:00:0x - exactly this job's schedule.
+  #   * Rewrote user uploads. The data directory lives *inside* the
+  #     installation directory on this host, so 2163 of the 2480 PNGs
+  #     it touched each week were under data/, 425 of them files a user
+  #     had uploaded. Verified on a copy that mogrify does change them:
+  #     this was re-encoding people's images to tidy a log message.
+  #
+  # If the warning ever needs addressing again, it belongs at preview
+  # generation and nowhere near either app code or user data.
   ansible.builtin.cron:
     name: "Remove iCCP profiles from PNG files"
     user: www-data
-    minute: "0"
-    hour: "3"
-    weekday: "0"
-    job: >-
-      /usr/bin/find {{ cloud.nextcloud.path }} -type f -name '*.png'
-      -exec mogrify -strip {} +
-    state: present
     cron_file: nextcloud_iccp_cleanup
+    state: absent
+
 - name: Validate nginx configuration
   ansible.builtin.command:
     cmd: nginx -t
