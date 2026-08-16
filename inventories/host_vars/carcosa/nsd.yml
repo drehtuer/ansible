@@ -60,7 +60,7 @@ nsd:
   zones:
     - name: "{{ domain }}"
       ttl: 3600
-      serial: 2026081503
+      serial: 2026081504
       # Shared secret authenticating the AXFR of this zone to Hetzner's
       # secondaries, so they can verify it came from here unaltered.
       # Each zone has its own key; see `drehtuer.de` below.
@@ -122,6 +122,7 @@ nsd:
         # Everything else the http role serves points at the apex.
         - {name: www, type: CNAME, value: "{{ domain }}."}
         - {name: cloud, type: CNAME, value: "{{ domain }}."}
+        - {name: f2b, type: CNAME, value: "{{ domain }}."}
         - {name: spam, type: CNAME, value: "{{ domain }}."}
         - {name: status, type: CNAME, value: "{{ domain }}."}
         # DMARC is p=reject with strict alignment, so a message that
@@ -183,7 +184,7 @@ nsd:
     # while silently changing meaning if the alias list is reordered.
     - name: drehtuer.de
       ttl: 3600
-      serial: 2026081603
+      serial: 2026081604
       # A different secret from the zone above, and necessarily a
       # different name - Hetzner derives it from the zone, so the two
       # could not collide even if they shared a secret. Keeping the
@@ -241,6 +242,7 @@ nsd:
         - {name: mail, type: AAAA, value: "{{ ip_v6 }}"}
         - {name: www, type: CNAME, value: drehtuer.de.}
         - {name: cloud, type: CNAME, value: drehtuer.de.}
+        - {name: f2b, type: CNAME, value: drehtuer.de.}
         - {name: spam, type: CNAME, value: drehtuer.de.}
         - {name: status, type: CNAME, value: drehtuer.de.}
         - name: _dmarc

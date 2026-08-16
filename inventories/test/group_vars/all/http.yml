@@ -12,6 +12,10 @@ http:
     cert_name: "{{ hostname_fqdn }}"
     subdomains:
       - cloud
+      # The fail2ban web UI vhost, see roles/fail2ban_ui. The role
+      # builds server_name from its own `subdomain`, so the two must
+      # agree or the vhost is served with a mismatched certificate.
+      - f2b
       - mail
       # The spam role renders a spam.<domain> vhost, so the fixture
       # has to cover it too or it describes a host whose certificate

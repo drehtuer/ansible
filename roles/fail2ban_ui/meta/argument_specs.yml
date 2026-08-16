@@ -1,0 +1,71 @@
+argument_specs:
+  main:
+    short_description: Web UI for fail2ban, in a container behind nginx
+    description:
+      - Runs swissmakers/fail2ban-ui as a Compose stack and reverse
+        proxies it at <subdomain>.<domain> for every served domain,
+        behind TLS and HTTP basic auth.
+      - The container mounts fail2ban's control socket and its
+        configuration directory read-write, so it can ban and unban
+        arbitrary addresses. It has no authentication of its own -
+        upstream supports OIDC only - so the basic-auth credential in
+        front of it is the whole access control.
+      - The UI also writes its Global Settings into the same
+        jail.local that roles/fail2ban templates, so changes made
+        there are reverted by the next run of that role. See
+        doc/STATUS.adoc.
+    options:
+      http:
+        type: dict
+        required: true
+        description:
+          - Shared with the http role. Only http.port_https and
+            http.domains are read here, to build the vhost.
+            Deliberately declared without suboptions - listing them
+            would make validation reject every other key the http role
+            itself requires.
+      fail2ban_ui:
+        type: dict
+        required: true
+        description: Web UI settings.
+        options:
+          image:
+            type: str
+            required: true
+            description: Container image repository.
+          tag:
+            type: str
+            required: true
+            description:
+              - Image tag. Human-readable half of the pin; the digest
+                below is what actually decides which image runs.
+          digest:
+            type: str
+            required: true
+            description:
+              - Image digest, as sha256:... A tag can be moved, a
+                digest cannot. Use the multi-arch index digest so the
+                pin survives a host of another architecture.
+          compose_dir:
+            type: str
+            required: true
+            description: Directory holding the generated compose file.
+          config_dir:
+            type: str
+            required: true
+            description:
+              - Persistent state written by the container. Kept apart
+                from compose_dir, which this repo owns and rewrites.
+          port:
+            type: int
+            required: true
+            description:
+              - Loopback port the UI listens on, and the one nginx
+                proxies to. Never published to a network.
+          subdomain:
+            type: str
+            required: true
+            description:
+              - Subdomain the vhost answers for, per served domain.
+                Must also appear in http.letsencrypt.subdomains, or
+                the certificate will not cover it.
