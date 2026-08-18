@@ -4,9 +4,9 @@
 # Import a Maildir from another server into this host's mail store,
 # for migrating an account off an existing server.
 #
-#   maildir-import drehtuer@78.46.107.174
-#   maildir-import drehtuer@old.example:.maildir --stage-spam /srv/import
-#   maildir-import drehtuer@old.example --dry-run
+#   maildir-import <user>@old.example
+#   maildir-import <user>@old.example:.maildir --stage-spam /srv/import
+#   maildir-import <user>@old.example --dry-run
 #
 # Copies the message files themselves rather than fetching over IMAP.
 # That is the right shape whenever both ends are Maildir, and it is

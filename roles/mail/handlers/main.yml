@@ -1,13 +1,20 @@
-- name: Restart postfix
-  ansible.builtin.systemd:
-    name: postfix
-    state: restarted
-    enabled: true
-- name: Reload postfix
-  ansible.builtin.systemd:
-    name: postfix
-    state: reloaded
-    enabled: true
+# Order matters here, and not for cosmetic reasons: Ansible runs
+# handlers in the order they are *defined*, not the order they were
+# notified. The three map compilers therefore come first, so that the
+# .db files Postfix reads exist before anything starts or reloads it.
+#
+# With the restart/reload pair first - as this file had them until
+# 2026-08-17 - a fresh deploy starts Postfix against a main.cf naming
+# maps that have not been built yet. That was survivable while the maps
+# were only alias tables, because an unavailable alias table means no
+# rewriting. It stopped being survivable with virtual_mailbox_maps:
+# Postfix answers `451 4.3.0` to every recipient when the table it must
+# consult to validate them is missing, so the whole deploy window
+# defers mail rather than accepting it.
+#
+# Each compiler still notifies Reload postfix, for the case where only
+# a map changed and main.cf did not. That notification points *forward*
+# in this file, which is the direction that reliably runs.
 - name: Compile mail aliases
   ansible.builtin.command: newaliases
   changed_when: true
@@ -18,3 +25,18 @@
   changed_when: true
   notify:
     - Reload postfix
+- name: Compile virtual mailbox recipients
+  ansible.builtin.command: postmap /etc/vmailbox
+  changed_when: true
+  notify:
+    - Reload postfix
+- name: Restart postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: restarted
+    enabled: true
+- name: Reload postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: reloaded
+    enabled: true

@@ -116,6 +116,36 @@ virtual_mailbox_domains = {{ mailbox_domains | join(' ') }}
 # alias map purely a rewriting table.
 virtual_alias_domains =
 
+# Which addresses inside those domains actually exist. Empty until
+# 2026-08-17, and that was not a small gap: with no map to check,
+# Postfix answered `250 2.1.5 Ok` to every recipient in either domain,
+# handed it to Dovecot over LMTP, was refused there, and generated a
+# bounce afterwards. On spam the envelope sender is forged, so those
+# bounces went to third parties - backscatter this host emitted rather
+# than received.
+#
+# It is also what produced the two DMARC `reject` records that arrived
+# on 2026-08-17. A Postfix-generated bounce carries a null return path,
+# so the receiver falls back to the HELO name for SPF and gets
+# mail.<domain>, which is neither published nor aligned under aspf=s;
+# and until internal_mail_filter_classes below it never reached the
+# milter, so it carried no DKIM signature either.
+#
+# Note which way the risk runs. This map does not improve delivery, it
+# *restricts* it: together with smtpd_reject_unlisted_recipient below it
+# turns "accept everything" into "accept exactly this list", so an
+# address missing from it is refused at the door rather than
+# mis-delivered. roles/mail asserts that postmaster survives before
+# rendering it.
+virtual_mailbox_maps = hash:/etc/vmailbox
+
+# The default, spelled out because virtual_mailbox_maps only does
+# anything through it: this is what makes Postfix consult the map
+# during the SMTP transaction and answer `550 5.1.1` to an address that
+# is not in it. Setting it to `no` restores the old behaviour of
+# accepting everything and bouncing later.
+smtpd_reject_unlisted_recipient = yes
+
 # Mail aliases
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
@@ -126,3 +156,27 @@ smtpd_milters = inet:127.0.0.1:{{ spam.milter_port }}
 non_smtpd_milters = inet:127.0.0.1:{{ spam.milter_port }}
 milter_default_action = accept
 milter_protocol = 6
+
+# Put Postfix's own bounces through the milter as well. The default is
+# empty, i.e. mail the bounce daemon generates bypasses RSpamd entirely
+# and goes out unsigned - which under this domain's `p=reject; adkim=s`
+# means every DSN is discarded by any receiver that enforces DMARC, so
+# a genuine delivery failure never reaches the sender who caused it.
+# Signed, the From: is MAILER-DAEMON@$myorigin - the primary domain,
+# which aligns strictly - so the bounce passes on DKIM alone, and
+# unlike SPF that survives being forwarded.
+#
+# Postfix warns that inspecting its own notifications is unsafe with a
+# filter that can reject, because the rejected bounce is then lost.
+# That does not apply here: `reject = null` in RSpamd's actions.conf
+# means it never rejects, and milter_default_action above fails open.
+#
+# Ordering note for anyone reading this as a fix for backscatter: it is
+# not one, and on its own it makes things worse. Signing bounces makes
+# them *deliverable*, so it belongs after virtual_mailbox_maps above
+# stops them being generated for forged senders in the first place.
+#
+# `notify` is deliberately not listed. Those are postmaster
+# notifications, delivered locally, and they never face a
+# DMARC-enforcing receiver.
+internal_mail_filter_classes = bounce

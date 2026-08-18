@@ -24,13 +24,25 @@
     mode: "0644"
   notify:
     - Reload postfix
+# 0640 root:postfix, not the 0644 these had until 2026-08-18. Every
+# address this host answers for is listed in them, and world-readable
+# is the wrong default for that on a host with more than one login.
+#
+# The group has to be `postfix` rather than root-only because these are
+# consulted by chrooted, unprivileged daemons: `cleanup` reads
+# virtual_alias_maps and `smtpd` reads virtual_mailbox_maps, both
+# running as the postfix user per master.cf. In practice Postfix opens
+# its tables in pre-jail initialisation while still root, which is also
+# how they work at all from /etc while those daemons are chrooted - but
+# relying on that to justify locking the group out would be betting the
+# mail flow on an implementation detail.
 - name: Configure mail aliases
   ansible.builtin.template:
     src: templates/postfix/aliases.j2
     dest: /etc/aliases
     owner: root
-    group: root
-    mode: "0644"
+    group: postfix
+    mode: "0640"
   notify:
     - Compile mail aliases
 - name: Configure virtual mail aliases
@@ -38,7 +50,60 @@
     src: templates/postfix/valiases.j2
     dest: /etc/valiases
     owner: root
-    group: root
-    mode: "0644"
+    group: postfix
+    mode: "0640"
   notify:
     - Compile virtual mail aliases
+# /etc/vmailbox is the list of addresses Postfix accepts, so an
+# incomplete one does not degrade delivery - it refuses mail at the
+# door. postmaster is the address that must never be lost that way:
+# RFC 5321 requires it to be reachable, and it is where this domain's
+# DMARC aggregate reports are delivered (rua=mailto:postmaster@<domain>
+# in roles/nsd's zone data), so refusing it would also destroy the
+# evidence that anything else was wrong.
+- name: Check the recipient map will accept postmaster
+  ansible.builtin.assert:
+    that:
+      - users.users | length > 0
+      - >-
+        'postmaster' in (mail.aliases | map(attribute='alias') | list)
+        + (users.users | map(attribute='name') | list)
+    fail_msg: >-
+      /etc/vmailbox would not list postmaster@, and Postfix rejects
+      every address the map does not contain. Add a postmaster entry to
+      mail.aliases before running this role.
+- name: Configure virtual mailbox recipients
+  ansible.builtin.template:
+    src: templates/postfix/vmailbox.j2
+    dest: /etc/vmailbox
+    owner: root
+    group: postfix
+    mode: "0640"
+  notify:
+    - Compile virtual mailbox recipients
+# Handlers normally flush at the end of the play, but the two tasks
+# below have to see the .db files the compilers produce, so they are
+# forced to run here instead.
+- name: Compile any pending map changes now
+  ansible.builtin.meta: flush_handlers
+# `newaliases` and `postmap` do not inherit the source file's mode -
+# they create the .db as 0644 root:root whatever the input was, which
+# was found by setting the three sources to 0640 and watching the
+# compiled copies stay world-readable. Not a cosmetic gap: a Berkeley
+# DB hash file stores its keys as plain bytes, so `grep -a` over
+# /etc/vmailbox.db recovered all 12 addresses as an unprivileged user.
+#
+# A task rather than a handler on purpose. A handler would only correct
+# the mode on a run where the map happened to change, so anything that
+# reset it - a package, a hand-run `postmap` - would stay wrong until
+# the next content edit. This enforces it on every run.
+- name: Restrict the compiled maps
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: root
+    group: postfix
+    mode: "0640"
+  loop:
+    - /etc/aliases.db
+    - /etc/valiases.db
+    - /etc/vmailbox.db
