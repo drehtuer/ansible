@@ -70,3 +70,16 @@ argument_specs:
             here. Deliberately declared without suboptions - listing
             them would make validation reject every other key the
             spam role itself requires.
+      users:
+        type: dict
+        required: true
+        description:
+          - Shared with the users role, only the `name` of each entry
+            in users.users is read here. Every account is crossed with
+            every served domain to build /etc/vmailbox, the list of
+            recipients Postfix accepts at SMTP time - so an account
+            missing from it has its mail refused rather than bounced
+            after the fact.
+          - Declared without suboptions for the same reason as spam
+            above - listing them would make validation reject every
+            other key the users role itself requires.

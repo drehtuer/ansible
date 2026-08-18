@@ -1,0 +1,58 @@
+{#
+  The addresses this host accepts mail for, and the only thing that
+  lets Postfix answer "does this recipient exist" during the SMTP
+  transaction.
+
+  It was empty until 2026-08-17 while virtual_mailbox_domains named
+  both domains, so Postfix answered `250 2.1.5 Ok` to every address in
+  either one, handed it to Dovecot over LMTP, was refused there, and
+  generated a bounce afterwards. On spam the envelope sender is
+  forged, so the bounce went to a third party - backscatter this host
+  emitted rather than received, and the source of both DMARC `reject`
+  records that arrived on 2026-08-17.
+
+  Two sources, unioned:
+
+    - every account roles/users manages, crossed with every domain
+      this host serves. Delivery is by LMTP to Dovecot, whose
+      `auth_username_format = %n` strips the domain before the userdb
+      lookup, so <user>@<any served domain> resolves to the same
+      system account and the same Maildir. That is why this is a cross
+      product and not a per-domain list.
+
+    - every alias in mail.aliases, on every domain, matching exactly
+      what valiases.j2 generates.
+
+  The aliases are redundant as far as Postfix is concerned: it
+  consults virtual_alias_maps before this map when deciding whether a
+  recipient exists, so an aliased address is accepted either way. They
+  are listed anyway so that this one file answers "which addresses
+  does this host accept" - the same reasoning that makes
+  virtual_alias_domains explicitly empty in main.cf. Listing them
+  changes nothing about where the mail goes: alias expansion still
+  runs first, in cleanup, so an address with an alias entry is
+  rewritten and never delivered to a mailbox of its own.
+
+  The right-hand side is ignored. virtual_transport is LMTP, so
+  Postfix only ever asks whether the key exists; `OK` is the
+  convention for saying so.
+
+  What is deliberately NOT here: $myhostname and localhost. Those are
+  in mydestination, a different address class, validated against
+  local_recipient_maps instead - which is left at its default of the
+  system passwd file plus /etc/aliases. Mail to root@mail.<domain> is
+  unaffected by this file.
+#}
+# Valid recipients for Postfix's virtual mailbox domains
+{% set addresses = [] %}
+{% for d in [domain] + domain_aliases %}
+{%   for account in users.users %}
+{%     set _ = addresses.append(account.name ~ '@' ~ d) %}
+{%   endfor %}
+{%   for entry in mail.aliases %}
+{%     set _ = addresses.append(entry.alias ~ '@' ~ d) %}
+{%   endfor %}
+{% endfor %}
+{% for address in addresses | unique %}
+{{ address }} OK
+{% endfor %}
