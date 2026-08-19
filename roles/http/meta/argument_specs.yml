@@ -40,6 +40,30 @@ argument_specs:
             type: int
             required: true
             description: HTTPS port.
+          stub_status:
+            type: dict
+            required: true
+            description:
+              - nginx's own status page, read by
+                prometheus-nginx-exporter. Bound to loopback on a port
+                of its own rather than exposed inside a served vhost.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether to serve it at all.
+              listen_address:
+                type: str
+                required: true
+                description: Address to bind. Loopback.
+              port:
+                type: int
+                required: true
+                description: Port to bind.
+              path:
+                type: str
+                required: true
+                description: Path the exporter scrapes.
           domains:
             type: list
             elements: str

@@ -110,6 +110,148 @@ argument_specs:
                 description:
                   - Directory holding the generated *.rules.yml, read
                     by Prometheus as a glob.
+          exporters:
+            type: dict
+            required: true
+            description:
+              - Per-service exporters, all bound to loopback and scraped over
+                it. Each is switched on per host, since an exporter for a
+                service the host does not run is a unit that fails at every
+                boot.
+            options:
+              listen_address:
+                type: str
+                required: true
+                description: Address every exporter binds. Loopback.
+              nginx:
+                type: dict
+                required: true
+                description: nginx, via its stub_status page.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether this host runs it.
+                  port:
+                    type: int
+                    required: true
+                    description: Port the exporter binds.
+                  status_url:
+                    type: str
+                    required: true
+                    description:
+                      - Where nginx serves stub_status, which
+                        http.stub_status has to agree with.
+              mysqld:
+                type: dict
+                required: true
+                description:
+                  - MariaDB. The exporter authenticates through the unix
+                    socket as the prometheus system user, so there is no
+                    password; creating the account needs root, which the
+                    inventory wires from the database role.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether this host runs it.
+                  port:
+                    type: int
+                    required: true
+                    description: Port the exporter binds.
+                  user:
+                    type: str
+                    required: true
+                    description: Account the exporter connects as.
+                  socket:
+                    type: str
+                    required: true
+                    description: MariaDB's unix socket.
+                  my_cnf:
+                    type: str
+                    required: true
+                    description: Credentials file the exporter reads.
+                  root_user:
+                    type: str
+                    required: true
+                    description: Account used to create the above.
+                  root_password:
+                    type: str
+                    required: true
+                    description: Its password.
+              redis:
+                type: dict
+                required: true
+                description: Redis.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether this host runs it.
+                  port:
+                    type: int
+                    required: true
+                    description: Port the exporter binds.
+                  addr:
+                    type: str
+                    required: true
+                    description: Redis URL, on loopback.
+              postfix:
+                type: dict
+                required: true
+                description: Postfix, from its log and its showq socket.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether this host runs it.
+                  port:
+                    type: int
+                    required: true
+                    description: Port the exporter binds.
+                  logfile:
+                    type: str
+                    required: true
+                    description: Mail log the exporter tails.
+                  showq:
+                    type: str
+                    required: true
+                    description: Postfix's showq socket.
+              dovecot:
+                type: dict
+                required: true
+                description:
+                  - Dovecot, which exports Prometheus metrics itself. Nothing
+                    is installed for it; the port must match
+                    imap.metrics.port.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether to scrape it.
+                  port:
+                    type: int
+                    required: true
+                    description: Port Dovecot's stats listener binds.
+              rspamd:
+                type: dict
+                required: true
+                description:
+                  - RSpamd, whose controller serves /metrics behind a Password
+                    header rather than basic auth.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether to scrape it.
+                  port:
+                    type: int
+                    required: true
+                    description: Controller port.
+                  password:
+                    type: str
+                    required: true
+                    description: Controller password.
           alertmanager:
             type: dict
             required: true
@@ -355,6 +497,23 @@ argument_specs:
                     required: true
                     description:
                       - node_load15 per CPU above which to warn.
+              services:
+                type: dict
+                required: true
+                description: Per-service thresholds.
+                options:
+                  deferred_queue:
+                    type: int
+                    required: true
+                    description:
+                      - Messages in Postfix's deferred queue before it
+                        counts as a backlog.
+                  auth_failures_per_minute:
+                    type: int
+                    required: true
+                    description:
+                      - Failed Dovecot authentications per minute,
+                        averaged over fifteen minutes.
               clock:
                 type: dict
                 required: true

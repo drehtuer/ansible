@@ -30,6 +30,48 @@ monitoring:
     install_dir: /opt
     data_dir: /var/lib/prometheus/metrics2
     rules_dir: /etc/prometheus/rules
+  # Per-service exporters, all on loopback. Ports are the exporters'
+  # own defaults; what is wired here is which ones this host runs and
+  # the two secrets that come from elsewhere rather than being
+  # duplicated.
+  exporters:
+    listen_address: 127.0.0.1
+    nginx:
+      enabled: true
+      port: 9113
+      # Must match http.stub_status.
+      status_url: http://127.0.0.1:8080/stub_status
+    mysqld:
+      enabled: true
+      port: 9104
+      user: prometheus
+      socket: /var/run/mysqld/mysqld.sock
+      my_cnf: /etc/prometheus/mysqld-exporter.my.cnf
+      # Creating the account needs root; the credentials come from the
+      # database role's own variables rather than a second copy here.
+      root_user: "{{ database.mysql.root.user }}"
+      root_password: "{{ database.mysql.root.password }}"
+    redis:
+      enabled: true
+      port: 9121
+      addr: redis://127.0.0.1:6379
+    postfix:
+      enabled: true
+      port: 9154
+      logfile: /var/log/mail.log
+      showq: /var/spool/postfix/public/showq
+    # Dovecot exports its own metrics; this port must match
+    # imap.metrics.port, which is a role default rather than an
+    # inventory value and so cannot be referenced from here.
+    dovecot:
+      enabled: true
+      port: 9166
+    # As does RSpamd, on its controller port and behind its controller
+    # password - both taken from the spam role rather than copied.
+    rspamd:
+      enabled: true
+      port: "{{ spam.http_port }}"
+      password: "{{ spam.controller_password }}"
   alertmanager:
     listen_address: 127.0.0.1
     port: 9093
@@ -77,6 +119,11 @@ monitoring:
             61383863653766623232383137636433333733666136373964366339343635636661
     datasource_uid: prometheus
   alerts:
+    # Per-service thresholds, generous on purpose: they exist to catch
+    # a state that persists rather than to report a busy hour.
+    services:
+      deferred_queue: 50
+      auth_failures_per_minute: 30
     disk:
       warning_percent: 10
       critical_percent: 5

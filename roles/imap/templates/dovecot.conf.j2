@@ -81,6 +81,48 @@ protocol imap {
   mail_plugins = $mail_plugins imap_sieve
 }
 
+{% if imap.metrics.enabled %}
+# Dovecot exports its own statistics in Prometheus format - there is no
+# Dovecot exporter to install, and nothing here parses a log. The
+# listener is loopback only, like every other part of the monitoring
+# stack, and carries no authentication because nothing off-host can
+# reach it.
+#
+# The `metric` blocks below are what makes the export worth scraping:
+# without them the endpoint answers with process-level counters only.
+# Each one names an event Dovecot already emits, so this is a
+# subscription rather than new bookkeeping.
+service stats {
+  inet_listener http {
+    address = {{ imap.metrics.listen_address }}
+    port = {{ imap.metrics.port }}
+  }
+}
+
+# Logins that succeeded and logins that failed, by protocol. The pair
+# is what makes a brute-force campaign visible as a ratio rather than
+# as a count that could equally be a busy morning.
+metric auth_success {
+  filter = event=auth_request_finished AND success=yes
+}
+
+metric auth_failure {
+  filter = event=auth_request_finished AND success=no
+}
+
+# Deliveries handed over by Postfix over LMTP, and how long they took.
+metric mail_delivery {
+  filter = event=mail_delivery_finished
+}
+
+# IMAP commands, so a client stuck in a loop is visible as something
+# other than load.
+metric imap_command {
+  filter = event=imap_command_finished
+  group_by = cmd_name
+}
+
+{% endif %}
 service auth {
   unix_listener /var/spool/postfix/private/auth {
     mode = 0660

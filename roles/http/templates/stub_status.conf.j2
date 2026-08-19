@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+#
+# nginx's own status page, for prometheus-nginx-exporter to read. It
+# is the only way nginx reports anything about itself: connection
+# counts, requests handled, and the reading/writing/waiting split.
+#
+# Loopback only and on a port of its own rather than a location inside
+# a served vhost. A location would have to be excluded from every
+# other vhost's matching rules and would be one `allow`/`deny` typo
+# away from being public; a server that binds 127.0.0.1 cannot be
+# reached from off-host at all, whatever it contains.
+{% set s = http.stub_status %}
+server {
+  listen {{ s.listen_address }}:{{ s.port }};
+  server_name localhost;
+
+  # No access log: one line per scrape, every scrape interval, saying
+  # nothing that the metrics themselves do not.
+  access_log off;
+
+  location {{ s.path }} {
+    stub_status;
+  }
+
+  location / {
+    return 404;
+  }
+}

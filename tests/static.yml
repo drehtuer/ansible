@@ -42,6 +42,14 @@
     # unit file names the host's. Detected by `uname -m` at run time.
     cloud_push_arch: x86_64
     ip_version: 4
+    # roles/monitoring renders one EnvironmentFile per enabled
+    # exporter, with the entry passed in as `exporter`; supply the
+    # first one from the role's own table.
+    exporter:
+      name: nginx
+      args:
+        - --web.listen-address=127.0.0.1:9113
+        - --nginx.scrape-uri=http://127.0.0.1:8080/stub_status
     # roles/nsd renders one zone file per entry in nsd.zones, with the
     # entry passed in as `zone`; supply the first one here. The
     # per-zone render below covers the rest.

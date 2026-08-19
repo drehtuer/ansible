@@ -56,6 +56,55 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     config_file: /etc/prometheus/prometheus.yml
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
+  # Per-service exporters. Everything here binds loopback, is scraped
+  # over loopback, and is opened in no firewall - the same stance as
+  # the servers above.
+  #
+  # All off by default. An exporter for a service the host does not
+  # run is a unit that fails at every boot, and this role is deployed
+  # to hosts that run different subsets; the inventory turns on what
+  # is actually there.
+  exporters:
+    listen_address: 127.0.0.1
+    nginx:
+      enabled: false
+      port: 9113
+      # Served by roles/http as http.stub_status - the two have to
+      # agree, and nothing enforces it.
+      status_url: http://127.0.0.1:8080/stub_status
+    mysqld:
+      enabled: false
+      port: 9104
+      # Authenticates through the unix socket as the prometheus system
+      # user, so no password exists to store or rotate. Creating the
+      # account needs MariaDB's root credentials, which the inventory
+      # wires from the database role rather than duplicating.
+      user: prometheus
+      socket: /var/run/mysqld/mysqld.sock
+      my_cnf: /etc/prometheus/mysqld-exporter.my.cnf
+      root_user: root
+      root_password: ""
+    redis:
+      enabled: false
+      port: 9121
+      addr: redis://127.0.0.1:6379
+    postfix:
+      enabled: false
+      port: 9154
+      logfile: /var/log/mail.log
+      showq: /var/spool/postfix/public/showq
+    # No exporter to install: Dovecot exports Prometheus metrics
+    # itself, from imap.metrics. That port and this one have to agree.
+    dovecot:
+      enabled: false
+      port: 9166
+    # Likewise RSpamd, whose controller serves /metrics. It answers
+    # only to a Password header - not basic auth, which it rejects -
+    # so the scrape config sends one.
+    rspamd:
+      enabled: false
+      port: 11334
+      password: ""
   alertmanager:
     # Deliberately not served through the vhost, unlike Prometheus and
     # Grafana: it stays on loopback with no route prefix. Its web
@@ -151,6 +200,15 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # rather than a literal in two files that could drift apart.
     datasource_uid: prometheus
   alerts:
+    # Per-service thresholds. Both are deliberately generous: these
+    # exist to catch a state that persists, not to report a busy
+    # hour.
+    services:
+      # Messages in the deferred queue before it counts as a backlog.
+      deferred_queue: 50
+      # Failed Dovecot authentications per minute, averaged over a
+      # quarter of an hour.
+      auth_failures_per_minute: 30
     disk:
       # Percentage of a filesystem still free.
       warning_percent: 10

@@ -35,6 +35,12 @@ http:
       # cover it.
       - talk
       - www
+  # nginx's status page for prometheus-nginx-exporter, loopback only.
+  stub_status:
+    enabled: true
+    listen_address: 127.0.0.1
+    port: 8080
+    path: /stub_status
   sites:
     - name: default
       subdomains:

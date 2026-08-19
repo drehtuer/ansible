@@ -72,6 +72,26 @@ argument_specs:
                     type: str
                     required: true
                     description: CA chain path.
+          metrics:
+            type: dict
+            required: true
+            description:
+              - Dovecot's own openmetrics endpoint, scraped by
+                Prometheus. Dovecot exports these itself; there is no
+                exporter to install.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether to open the listener at all.
+              listen_address:
+                type: str
+                required: true
+                description: Address to bind. Loopback.
+              port:
+                type: int
+                required: true
+                description: Port to bind.
           logrotate:
             type: dict
             required: true

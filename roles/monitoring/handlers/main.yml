@@ -32,6 +32,24 @@
     state: restarted
     enabled: true
 
+# Flags are read at startup, so a change to /etc/default is a restart
+# rather than a reload - and the loop covers only what is enabled,
+# which is what the notifying task iterates over too.
+- name: Restart the service exporters
+  ansible.builtin.systemd_service:
+    name: "prometheus-{{ item.name }}-exporter"
+    state: restarted
+    enabled: true
+  loop: "{{ monitoring_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Restart mysqld exporter
+  ansible.builtin.systemd_service:
+    name: prometheus-mysqld-exporter
+    state: restarted
+    enabled: true
+
 - name: Restart node exporter
   ansible.builtin.systemd_service:
     name: prometheus-node-exporter
