@@ -20,7 +20,7 @@ Two disposable test hosts, both in the inventory's `testlab` group. Nothing on e
 
 `devcontainer.json` passes `/dev/kvm` through and the Dockerfile installs `qemu-system-x86`, `qemu-utils`, `cloud-image-utils` and `socat`. **Both only take effect after a rebuild** (*Dev Containers: Rebuild Container*). Until then `vm.sh` stops with an explanation.
 
-**The VM path has never been executed** — it was written in a container that could not reach `/dev/kvm`, since the device cgroup denies access even to a hand-made node. After the rebuild, verify in this order:
+**The VM path works** — it has run real deployments, and `doc/TESTING.adoc` records their results. (It was originally written blind, in a container that could not reach `/dev/kvm`, since the device cgroup denies access even to a hand-made node; that caveat is now history.) After a rebuild, verify in this order:
 
 ```bash
 ls -l /dev/kvm                                   # exists and is read/write
