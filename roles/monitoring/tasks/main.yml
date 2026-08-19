@@ -247,6 +247,61 @@
     group: prometheus
     mode: "0755"
 
+- name: Note which textfile collectors this host wants
+  ansible.builtin.set_fact:
+    monitoring_collectors_wanted: >-
+      {{ monitoring_collectors | selectattr('enabled') | list }}
+
+- name: Deploy the textfile collectors
+  ansible.builtin.template:
+    src: templates/textfile/{{ item.name }}.sh.j2
+    dest: /usr/local/bin/prometheus-textfile-{{ item.name }}
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ monitoring_collectors_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Deploy the textfile collector units
+  ansible.builtin.template:
+    src: templates/textfile/collector.{{ item.1 }}.j2
+    dest: /etc/systemd/system/prometheus-textfile-{{ item.0.name }}.{{ item.1 }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ monitoring_collectors_wanted | product(['service', 'timer']) }}"
+  loop_control:
+    label: "{{ item.0.name }}.{{ item.1 }}"
+  vars:
+    collector: "{{ item.0.name }}"
+  notify:
+    - Reload systemd
+
+- name: Enable the textfile collector timers
+  # Flush first: a timer cannot be started from a unit file systemd
+  # has not read yet, and the handler above is what makes it read it.
+  ansible.builtin.systemd_service:
+    name: prometheus-textfile-{{ item.name }}.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop: "{{ monitoring_collectors_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Run the collectors once, so the first scrape has something to read
+  # Without this the metrics appear only after the timer's first
+  # interval, which reads as "the collector does not work" to anyone
+  # checking straight after a deploy.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/prometheus-textfile-{{ item.name }}
+    creates: >-
+      {{ monitoring.node_exporter.textfile_dir }}/{{ item.name }}.prom
+  loop: "{{ monitoring_collectors_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Deploy the alert rules
   # Before the Prometheus configuration below, and that order is
   # load-bearing: `promtool check config` resolves the rule_files
@@ -429,6 +484,7 @@
         validate: python3 -m json.tool %s /dev/null
       loop:
         - host
+        - security
       notify:
         - Restart grafana
 

@@ -46,3 +46,11 @@ monitoring_exporters:
         }}:{{ monitoring.exporters.postfix.port }}
       - --postfix.logfile_path={{ monitoring.exporters.postfix.logfile }}
       - --postfix.showq_path={{ monitoring.exporters.postfix.showq }}
+
+# The textfile collectors, in one table for the same reason as the
+# exporters above.
+monitoring_collectors:
+  - name: fail2ban
+    enabled: "{{ monitoring.textfile.fail2ban.enabled }}"
+  - name: packetfilter
+    enabled: "{{ monitoring.textfile.packetfilter.enabled }}"

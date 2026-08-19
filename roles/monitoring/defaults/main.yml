@@ -56,6 +56,17 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     config_file: /etc/prometheus/prometheus.yml
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
+  # Collectors that write into node_exporter's textfile directory,
+  # for things nothing exports: fail2ban's jail counters, and the
+  # packet filter's own per-rule counters. Both read something an
+  # unprivileged process cannot, so both run from a timer as root
+  # rather than being scraped directly.
+  textfile:
+    interval: 1min
+    fail2ban:
+      enabled: false
+    packetfilter:
+      enabled: false
   # Per-service exporters. Everything here binds loopback, is scraped
   # over loopback, and is opened in no firewall - the same stance as
   # the servers above.

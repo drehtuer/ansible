@@ -110,6 +110,40 @@ argument_specs:
                 description:
                   - Directory holding the generated *.rules.yml, read
                     by Prometheus as a glob.
+          textfile:
+            type: dict
+            required: true
+            description:
+              - Collectors writing into node_exporter's textfile directory,
+                for what nothing exports. Both run as root from a timer,
+                since both read something an unprivileged process cannot.
+            options:
+              interval:
+                type: str
+                required: true
+                description: How often each collector runs.
+              fail2ban:
+                type: dict
+                required: true
+                description:
+                  - fail2ban's jail counters, including the failed SSH
+                    logins nothing else on this host measures.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether to run it.
+              packetfilter:
+                type: dict
+                required: true
+                description:
+                  - Per-rule packet and byte counters from iptables and
+                    ip6tables.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether to run it.
           exporters:
             type: dict
             required: true
