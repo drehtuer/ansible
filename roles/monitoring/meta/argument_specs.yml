@@ -72,6 +72,38 @@ argument_specs:
                 type: str
                 required: true
                 description: Generated Prometheus configuration.
+              version:
+                type: str
+                required: true
+                description:
+                  - Upstream release to install. The archive's package
+                    ships no modern web UI, so the server comes from
+                    the release tarball instead.
+              checksums:
+                type: dict
+                required: true
+                description:
+                  - sha256 of the release tarball, keyed by Go
+                    architecture, from upstream's sha256sums.txt.
+                options:
+                  amd64:
+                    type: str
+                    required: true
+                    description: Checksum of the amd64 build.
+                  arm64:
+                    type: str
+                    required: true
+                    description: Checksum of the arm64 build.
+              install_dir:
+                type: str
+                required: true
+                description:
+                  - Where the release is unpacked; a versioned
+                    directory with a stable symlink beside it.
+              data_dir:
+                type: str
+                required: true
+                description: TSDB path.
               rules_dir:
                 type: str
                 required: true

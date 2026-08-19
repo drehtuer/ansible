@@ -12,7 +12,20 @@ datasources:
     # Grafana's browser code never talks to Prometheus directly; the
     # backend proxies, which is what lets Prometheus stay on loopback
     # with no vhost of its own.
-    url: http://{{ monitoring.prometheus.listen_address }}:{{ monitoring.prometheus.port }}
+    #
+    # The path matters and is easy to leave off. Prometheus is started
+    # with --web.external-url ending in monitoring.prometheus.path, so
+    # that becomes its route prefix and it serves *every* path under
+    # it, the API included - a datasource pointed at the bare port
+    # gets 404 for every query, and Grafana draws that as an empty
+    # panel rather than an error. It happened: the prefix was added
+    # after this datasource was written, and the dashboards queried a
+    # 404 until it was noticed here. The trailing slash is stripped
+    # because Grafana appends /api/v1/... itself.
+    url: >-
+      http://{{ monitoring.prometheus.listen_address }}:{{
+      monitoring.prometheus.port }}{{
+      monitoring.prometheus.path | regex_replace('/$', '') }}
     # Fixed rather than generated, because the provisioned dashboards
     # reference it by uid. A generated uid would change between hosts
     # and leave every panel pointed at a datasource that does not
