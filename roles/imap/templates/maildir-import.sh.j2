@@ -414,10 +414,14 @@ if [[ -n "${STAGED[*]}" ]]; then
     echo "    sudo rspamd-train-bulk spam ${d}"
   done
   echo
-  echo "    # rspamd-train-bulk prints the classifier stats itself when"
-  echo "    # it finishes - read them there. A bare 'rspamc stat' will"
-  echo "    # NOT work: the controller requires a password, and this"
-  echo "    # script is world-readable so it cannot hold one. Use"
+  echo "    # rspamd-train-bulk prints the classifier's learn count"
+  echo "    # before and after, and writes a per-message report under"
+  echo "    # /var/tmp - read them there. It exits 3 if it cannot"
+  echo "    # account for every message; do NOT answer that by running"
+  echo "    # the corpus again, which is how a message gets learned"
+  echo "    # twice. A bare 'rspamc stat' will NOT work either: the"
+  echo "    # controller requires a password, and this script is"
+  echo "    # world-readable so it cannot hold one. Use"
   echo "    # rspamc -P <spam.controller_password> stat to re-check later."
   echo
   echo "    # once the counts look right, the corpus has served its"

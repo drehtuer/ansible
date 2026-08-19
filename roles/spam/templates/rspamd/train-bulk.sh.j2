@@ -14,9 +14,23 @@
 #   - an mbox file, split into its individual messages first
 #   - a single message file
 #
-# Learning is not idempotent in the useful sense: teaching the same
-# message twice is refused by RSpamd rather than counted twice, so a
-# re-run over the same corpus is safe but reports those as skipped.
+# READ THIS BEFORE RE-RUNNING IT OVER A CORPUS IT HAS SEEN BEFORE.
+# What normally makes a re-run harmless is RSpamd's learn cache: a
+# message it has already learned is refused rather than counted a
+# second time. That cache entry is written *after* the tokens and
+# only when a backend reports that it learned, so a message whose
+# tokens were written while the cache entry was not comes back as
+# new and is learned again, its tokens weighted twice. Seeding
+# 18237 spam messages on 2026-08-16 ended with BAYES_SPAM reporting
+# 20144 learns for exactly that reason - and the re-run that caused
+# it was prompted by this script's own reporting, which is why the
+# reporting is what changed.
+#
+# So: every input message is accounted for individually, a run that
+# cannot account for one exits non-zero and names it, and the class
+# counter RSpamd itself keeps is read before and after and compared
+# against what this script thinks it did. Read the report; do not
+# re-run the corpus to chase a shortfall.
 
 set -euo pipefail
 
@@ -29,9 +43,15 @@ PASSWORD="{{ spam.controller_password }}"
 # notification mails are common in an export and would otherwise fill
 # the output with noise.
 MIN_BYTES=256
-# rspamc takes many files per invocation; batching keeps it to a few
-# controller round trips instead of one per message.
-BATCH=50
+# Files per rspamc invocation, and how long rspamc waits for the
+# controller to answer one. These were 50 files against rspamc's own
+# default of 10 seconds, which is what made the reports untrustworthy
+# on a Redis under load: the answers arrived too late to be read, and
+# the messages in that batch were counted as nothing at all. Twenty
+# files and a minute is slower per invocation and far less likely to
+# leave anything unaccounted for. Both can be raised for a quiet host.
+BATCH="${TRAIN_BULK_BATCH:-20}"
+TIMEOUT="${TRAIN_BULK_TIMEOUT:-60}"
 
 usage() {
   cat <<'USAGE'
@@ -42,16 +62,30 @@ rspamd-train-bulk <spam|ham> <path>... [--dry-run]
              or mbox file
   --dry-run  count what would be learned, contact nothing
 
-Exit status is non-zero if nothing at all could be learned, which is
-almost always a broken controller or a Redis that is refusing writes -
-check `rspamc stat` and `redis-cli set probe ok` before the corpus.
+Environment:
+  TRAIN_BULK_BATCH    files per rspamc invocation (default 20)
+  TRAIN_BULK_TIMEOUT  seconds rspamc waits for a reply (default 60)
+  TRAIN_BULK_REPORT   where to write the per-message report
+                      (default /var/tmp/rspamd-train-bulk-<class>-<stamp>.txt)
+
+Exit status:
+  0  every message was accounted for, and none failed
+  1  nothing reached the classifier at all - almost always a broken
+     controller or a Redis refusing writes; check `rspamc stat` and
+     `redis-cli set probe ok` before blaming the corpus
+  2  usage
+  3  some messages failed, or could not be accounted for. Both are
+     listed in the report. A message that could not be accounted for
+     may or may not have been learned, so re-sending it is a
+     deliberate decision and not a repair - see the header of this
+     script.
 USAGE
 }
 
 CLASS_NAME="${1:-}"
 case "$CLASS_NAME" in
-  spam) CLASS=learn_spam ;;
-  ham)  CLASS=learn_ham ;;
+  spam) CLASS=learn_spam; STATFILE=BAYES_SPAM ;;
+  ham)  CLASS=learn_ham;  STATFILE=BAYES_HAM ;;
   -h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -67,6 +101,8 @@ done
 # followed by a hash that bash uses for it also opens a Jinja comment,
 # which breaks the template rather than the script.
 [[ -n "${PATHS[*]}" ]] || { usage >&2; exit 2; }
+
+REPORT="${TRAIN_BULK_REPORT:-/var/tmp/rspamd-train-bulk-${CLASS_NAME}-$(date +%Y%m%d-%H%M%S).txt}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -86,6 +122,72 @@ split_mbox() {
 
 is_mbox() { [[ "$(head -c 5 "$1" 2>/dev/null)" == "From " ]]; }
 
+# rspamc prints one block per file:
+#
+#   Results for file: /srv/import/spam/1234.eml (0.031 seconds)
+#   success = true;
+#
+# with the second line replaced by the server's message when the file
+# was not learned - "has been already learned as spam, ignore it",
+# "contains less tokens than required for bayes classifier", or
+# whatever went wrong. Classifying each block is the whole point:
+# grepping a batch's combined output for a handful of known phrases
+# is what silently dropped 3897 messages out of the arithmetic, since
+# anything worded differently (an I/O timeout, say) matched none of
+# them and was counted nowhere.
+classify() {
+  awk '
+    function flush() {
+      if (file != "") { printf "%s\t%s\t%s\n", status, file, detail }
+      file = ""; status = ""; detail = ""
+    }
+    {
+      # Only when stdout is a terminal does rspamc emphasise the file
+      # name, and this reads a pipe - stripped anyway so that a future
+      # change of that rule cannot corrupt a path.
+      gsub(/\033\[[0-9;]*m/, "")
+    }
+    /^Results for file: / {
+      flush()
+      file = substr($0, length("Results for file: ") + 1)
+      sub(/ \([0-9.]+ seconds\)$/, "", file)
+      status = "unknown"
+      next
+    }
+    file != "" {
+      if ($0 ~ /success = true/) { status = "learned"; next }
+      if (status == "learned") { next }
+      low = tolower($0)
+      if (low ~ /already .*learned/ || low ~ /less tokens/) {
+        status = "skipped"
+        if (detail == "") { detail = $0 }
+        next
+      }
+      if ($0 ~ /[^[:space:]]/) {
+        if (status == "unknown") { status = "failed" }
+        if (detail == "") { detail = $0 }
+      }
+    }
+    END { flush() }
+  '
+}
+
+rspamc_stat() { rspamc -h "$CONTROLLER" -P "$PASSWORD" -t "$TIMEOUT" stat 2>&1; }
+
+# The revision of the statfile for the class being taught is its
+# number of learns. Reading it before and after is what turns "the
+# corpus had 18237 messages and the classifier says 20144" from
+# something noticed weeks later into part of the run.
+learns_from() {
+  awk -v want="$STATFILE" '
+    $1 == "Statfile:" && $2 == want {
+      for (i = 1; i < NF; i++) {
+        if ($i == "learned:") { gsub(/;/, "", $(i + 1)); print $(i + 1); exit }
+      }
+    }
+  '
+}
+
 LIST="${WORK}/messages.txt"
 : > "$LIST"
 for p in "${PATHS[@]}"; do
@@ -102,6 +204,22 @@ for p in "${PATHS[@]}"; do
     echo "skipping ${p}: not a file or directory" >&2
   fi
 done
+
+# Sorted and deduplicated, which is both what the reconciliation at
+# the end compares against and a guard in its own right: two paths
+# naming the same file would otherwise be sent twice in one run, and
+# the only thing that would stop the second one counting is the learn
+# cache this script deliberately does not rely on.
+sort -u "$LIST" -o "$LIST"
+
+# The report is one tab-separated line per message, and `cut` reads
+# the path out of it again - so a path containing a tab would be
+# counted as something other than itself. Refuse rather than
+# miscount; a Maildir never produces one.
+if grep -q "$(printf '\t')" "$LIST"; then
+  echo "a message path contains a tab, which this script cannot account for" >&2
+  exit 2
+fi
 
 # The size floor is applied here rather than in the directory search
 # above, so that it holds for every input shape - a message split out
@@ -123,25 +241,91 @@ echo "found ${TOTAL} message(s) to learn as ${CLASS_NAME} (${TOO_SMALL} below ${
 [[ "$TOTAL" -gt 0 ]] || { echo "nothing to do" >&2; exit 1; }
 if [[ "$DRY_RUN" -eq 1 ]]; then echo "dry run, stopping here"; exit 0; fi
 
-LEARNED=0 SKIPPED=0 FAILED=0
+# Ask the controller something harmless before sending it a corpus.
+# A wrong password or a stopped controller otherwise shows up only as
+# every message failing, one batch at a time, for as long as the
+# corpus lasts.
+if ! STAT_BEFORE="$(rspamc_stat)"; then
+  echo "cannot reach the controller at ${CONTROLLER}:" >&2
+  printf '%s\n' "$STAT_BEFORE" >&2
+  exit 1
+fi
+LEARNS_BEFORE="$(printf '%s\n' "$STAT_BEFORE" | learns_from)"
+
+RESULTS="${WORK}/results.tsv"
+: > "$RESULTS"
+SENT=0
+NEXT_REPORT=500
 # Read N paths at a time so rspamc makes a few controller round trips
 # instead of one per message.
 while mapfile -t -n "$BATCH" batch && [[ -n "${batch[*]}" ]]; do
-  out="$(rspamc -h "$CONTROLLER" -P "$PASSWORD" "$CLASS" "${batch[@]}" 2>&1 || true)"
-  # Classify each result once and in this order. RSpamd reports an
-  # already-learned message as an error, so counting "error" first
-  # would report a harmless re-run over the same corpus as a failure
-  # - and then exit non-zero on it.
-  learned=$(grep -c "success = true" <<<"$out" || true)
-  benign=$(grep -ci "already learned\|less tokens" <<<"$out" || true)
-  errors=$(grep -ci "^error\|cannot\|HTTP error" <<<"$out" || true)
-  LEARNED=$((LEARNED + learned))
-  SKIPPED=$((SKIPPED + benign))
-  FAILED=$((FAILED + errors - benign > 0 ? errors - benign : 0))
+  rc=0
+  out="$(rspamc -h "$CONTROLLER" -P "$PASSWORD" -t "$TIMEOUT" \
+    "$CLASS" "${batch[@]}" 2>&1)" || rc=$?
+  # rspamc exits non-zero when *any* file in the batch reported an
+  # error, and an already-learned message is an error - so its status
+  # says nothing useful about a batch. It is worth reporting only
+  # when rspamc printed nothing at all, which means it died before
+  # answering and every file in the batch is about to come out of the
+  # reconciliation below as unaccounted for.
+  if [[ -z "$out" ]]; then
+    echo "rspamc exited ${rc} without output for a batch of ${BATCH}" >&2
+  fi
+  printf '%s\n' "$out" | classify >> "$RESULTS"
+  SENT=$((SENT + $(printf '%s\n' "${batch[@]}" | wc -l)))
+  if [[ "$SENT" -ge "$NEXT_REPORT" ]]; then
+    echo "  ${SENT}/${TOTAL} sent"
+    NEXT_REPORT=$((NEXT_REPORT + 500))
+  fi
 done < "$LIST"
 
-echo "learned ${LEARNED}, skipped ${SKIPPED}, failed ${FAILED}"
-rspamc -h "$CONTROLLER" -P "$PASSWORD" stat 2>/dev/null | grep -E "Messages learned|BAYES_(SPAM|HAM)" || true
+# Reconciliation. Every input path must appear exactly once in the
+# results; anything missing is a message RSpamd never answered for,
+# which is not the same as a message it did not learn.
+SEEN="${WORK}/seen.txt"
+cut -f2 "$RESULTS" | sort -u > "$SEEN"
+UNACCOUNTED_LIST="${WORK}/unaccounted.txt"
+comm -23 "$LIST" "$SEEN" > "$UNACCOUNTED_LIST"
+
+count_status() { awk -F'\t' -v s="$1" '$1 == s' "$RESULTS" | wc -l; }
+LEARNED=$(count_status learned)
+SKIPPED=$(count_status skipped)
+FAILED=$(count_status failed)
+UNKNOWN=$(count_status unknown)
+UNACCOUNTED=$(wc -l < "$UNACCOUNTED_LIST")
+# A block whose outcome could not be read is no better understood
+# than one that never arrived, so it is reported the same way.
+UNACCOUNTED=$((UNACCOUNTED + UNKNOWN))
+
+{
+  echo "# rspamd-train-bulk ${CLASS_NAME}, $(date -Is)"
+  echo "# status<TAB>path<TAB>message"
+  cat "$RESULTS"
+  awk '{ printf "unaccounted\t%s\tno reply from rspamd\n", $0 }' "$UNACCOUNTED_LIST"
+} > "$REPORT"
+
+echo "learned ${LEARNED}, skipped ${SKIPPED}, failed ${FAILED}, unaccounted ${UNACCOUNTED} of ${TOTAL}"
+echo "report: ${REPORT}"
+
+LEARNS_AFTER="$(rspamc_stat | learns_from || true)"
+if [[ -n "$LEARNS_BEFORE" && -n "$LEARNS_AFTER" ]]; then
+  DELTA=$((LEARNS_AFTER - LEARNS_BEFORE))
+  echo "${STATFILE} learns: ${LEARNS_BEFORE} -> ${LEARNS_AFTER} (${DELTA})"
+  if [[ "$DELTA" -gt "$LEARNED" ]]; then
+    echo "WARNING: the classifier recorded ${DELTA} learns where this run counted" >&2
+    echo "         ${LEARNED}. Either something else was training at the same time - a" >&2
+    echo "         user moving mail into TrainSpam will do it - or messages were" >&2
+    echo "         learned whose reply never arrived, which is what leaves a corpus" >&2
+    echo "         able to be learned twice. Compare the classifier's total against" >&2
+    echo "         the size of the corpus before doing anything, and do not re-send" >&2
+    echo "         the corpus to correct it." >&2
+  elif [[ "$DELTA" -lt "$LEARNED" ]]; then
+    echo "WARNING: the classifier recorded only ${DELTA} learns where this run counted" >&2
+    echo "         ${LEARNED} successes. The tokens may not have been written: check" >&2
+    echo "         that Redis is accepting writes ('redis-cli set probe ok') and read" >&2
+    echo "         rspamd's log for the period of the run." >&2
+  fi
+fi
 
 # Nothing learned *and* nothing recognised as already known means the
 # corpus never reached the classifier at all - almost always a broken
@@ -150,4 +334,11 @@ rspamc -h "$CONTROLLER" -P "$PASSWORD" stat 2>/dev/null | grep -E "Messages lear
 if [[ "$LEARNED" -eq 0 && "$SKIPPED" -eq 0 ]]; then
   echo "nothing reached the classifier - check 'rspamc stat' and that Redis accepts writes" >&2
   exit 1
+fi
+
+if [[ "$FAILED" -gt 0 || "$UNACCOUNTED" -gt 0 ]]; then
+  echo "not every message is accounted for; see ${REPORT}" >&2
+  echo "an unaccounted message may or may not have been learned - re-sending it is a" >&2
+  echo "decision, not a repair" >&2
+  exit 3
 fi
