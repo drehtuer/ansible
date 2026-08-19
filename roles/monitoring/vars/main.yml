@@ -1,0 +1,8 @@
+---
+# Upstream names its release archives by Go's architecture, which is
+# not what uname reports. Only the two this repo could run on are
+# mapped; anything else fails loudly at the download rather than
+# silently fetching an amd64 build.
+monitoring_arch_map:
+  x86_64: amd64
+  aarch64: arm64

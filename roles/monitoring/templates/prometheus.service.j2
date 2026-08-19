@@ -1,0 +1,67 @@
+{{ ansible_managed | comment }}
+#
+# This unit exists because the Prometheus server is installed from the
+# upstream release rather than from the archive - see the tasks for
+# why - so there is no packaged unit to drop into.
+#
+# Modelled on Debian's, hardening included, with two differences that
+# matter. The packaged binary is patched to default its config and
+# storage paths to /etc/prometheus and /var/lib/prometheus/metrics2;
+# the upstream one defaults to the working directory, so both are
+# named explicitly. And WorkingDirectory points at the release, whose
+# consoles/ and console_libraries/ are where the console templates
+# live.
+{% set p = monitoring.prometheus %}
+{% set home = p.install_dir ~ '/prometheus' %}
+{% set url = 'https://' ~ monitoring.subdomain ~ '.' ~ domain ~ p.path %}
+[Unit]
+Description=Prometheus
+Documentation=https://prometheus.io/docs/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+WorkingDirectory={{ home }}
+ExecStart={{ home }}/prometheus \
+  --config.file={{ p.config_file }} \
+  --storage.tsdb.path={{ p.data_dir }} \
+  --storage.tsdb.retention.time={{ p.retention_time }} \
+  --storage.tsdb.retention.size={{ p.retention_size }} \
+  --web.listen-address={{ p.listen_address }}:{{ p.port }} \
+  --web.external-url={{ url }}
+# SIGHUP re-reads the configuration; flags are read once at startup,
+# which is why a flag change is a restart in this role's handlers.
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+TimeoutStopSec=20s
+SendSIGKILL=no
+
+# It answers on loopback and writes one directory. Nothing else here
+# is needed, so nothing else is permitted.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths={{ p.data_dir }}
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

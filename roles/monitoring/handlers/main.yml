@@ -1,6 +1,13 @@
 # Configuration changes reload (both units define ExecReload as a
 # SIGHUP); command-line changes restart, since flags are read once at
 # startup.
+# The prometheus unit is this role's own file rather than a package's,
+# so systemd has to be told to re-read it before a restart means
+# anything.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: Reload prometheus
   ansible.builtin.systemd_service:
     name: prometheus

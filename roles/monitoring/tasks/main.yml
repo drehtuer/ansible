@@ -1,45 +1,161 @@
 - name: Install monitoring
-  # All four are in the Ubuntu archive on both 24.04 and 26.04, which
-  # is why this role installs rather than containerises: node_exporter
-  # in particular would need the host's PID and network namespaces and
-  # bind mounts of /proc, /sys and /, giving away every bit of
-  # isolation a container exists for.
+  # Alertmanager and node_exporter come from the archive on both 24.04
+  # and 26.04. node_exporter in particular is a poor container citizen:
+  # it would need the host's PID and network namespaces and bind mounts
+  # of /proc, /sys and /, giving away every bit of isolation a
+  # container exists for. amtool comes with the alertmanager package.
   #
-  # amtool comes with prometheus-alertmanager on both releases;
-  # promtool is the awkward one, handled by the two tasks below.
+  # The server itself does not - see below.
   ansible.builtin.apt:
     install_recommends: false
     name:
-      - prometheus
       - prometheus-alertmanager
       - prometheus-node-exporter
 
-- name: Check whether promtool came with the prometheus package
-  # promtool is packaged differently on either side of the release
-  # upgrade this host is waiting for, and the role needs it on both:
-  # it is what the `validate` steps below call, the same stance the
-  # rest of this repo takes with nginx -t, sshd -t and nsd-checkzone.
+- name: Remove the packaged prometheus server
+  # The archive's Prometheus cannot serve the modern web UI, and says
+  # so in as many words. 26.04's package ships a stub at
+  # /usr/share/prometheus/web/no-ui/index.html reading "This Debian
+  # package of Prometheus does not include the modern React web UI,
+  # due to the complexity of packaging it without violating Debian
+  # policy", plus an install-ui.sh that downloads the assets from
+  # GitHub after the fact. 24.04's package - 2.45.3, what carcosa ran
+  # until 2026-08-20 - ships neither: only the classic UI, which
+  # upstream removed in v2.34.0 and Debian carries "for a limited
+  # time" and warns will be dropped.
   #
-  #   24.04  /usr/bin/promtool ships inside the `prometheus` package
-  #          and there is no `promtool` package at all
-  #   26.04  `prometheus` ships only the server; promtool is split
-  #          out into a package of its own
+  # So the choice was never package-or-tarball in the abstract: it was
+  # a 2.45 server with an unmaintained UI, or the current release with
+  # the interface upstream actually ships. The tarball is pinned and
+  # checksummed, the same stance roles/cloud takes with Nextcloud, and
+  # it carries a promtool of exactly the server's version - which is
+  # what the removed 24.04/26.04 promtool-package dance was about.
   #
-  # Testing for the binary rather than the release covers both
-  # without a version comparison, and carries the host across the
-  # upgrade on its own: the split package's arrival removes the
-  # bundled binary, this reports it missing, and the next task
-  # installs the replacement.
-  ansible.builtin.stat:
-    path: /usr/bin/promtool
-  register: monitoring_promtool
-
-- name: Install promtool where it is packaged separately
+  # The trade is real and worth stating: no distro security updates
+  # for this one binary. Bumping monitoring.prometheus.version is the
+  # whole upgrade, and the release feed is the thing to watch.
   ansible.builtin.apt:
-    install_recommends: false
-    name:
-      - promtool
-  when: not monitoring_promtool.stat.exists
+    name: prometheus
+    state: absent
+    # Deliberately not purged. /etc/prometheus is this role's to own,
+    # and its conffiles survive a remove; a purge would take the
+    # directory with them.
+    purge: false
+
+- name: Ensure the prometheus account exists
+  # Created by the alertmanager and node_exporter packages as well, so
+  # on this host it already exists - but the server must not depend on
+  # a side effect of a package it no longer installs.
+  ansible.builtin.group:
+    name: prometheus
+    system: true
+
+- name: Ensure the prometheus user exists
+  ansible.builtin.user:
+    name: prometheus
+    group: prometheus
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/prometheus
+    create_home: false
+
+- name: Note the architecture prometheus ships a build for
+  ansible.builtin.set_fact:
+    monitoring_arch: >-
+      {{ monitoring_arch_map[ansible_facts['architecture']] }}
+
+- name: Note where this release unpacks to
+  ansible.builtin.set_fact:
+    monitoring_release_dir: >-
+      {{ monitoring.prometheus.install_dir }}/prometheus-{{
+      monitoring.prometheus.version }}.linux-{{ monitoring_arch }}
+
+- name: Check whether this release is already unpacked
+  # Without this the tarball is fetched and deleted again on every
+  # run, which reports two changes for a converged host - and an
+  # upgrade is then indistinguishable from a no-op in the output.
+  ansible.builtin.stat:
+    path: "{{ monitoring_release_dir }}/prometheus"
+  register: monitoring_prometheus_release
+
+- name: Download the prometheus release
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/prometheus/prometheus/releases/download/v{{
+      monitoring.prometheus.version }}/prometheus-{{
+      monitoring.prometheus.version }}.linux-{{ monitoring_arch }}.tar.gz
+    dest: /tmp/prometheus-{{ monitoring.prometheus.version }}.tar.gz
+    checksum: >-
+      sha256:{{ monitoring.prometheus.checksums[monitoring_arch] }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: not monitoring_prometheus_release.stat.exists
+
+- name: Unpack the prometheus release
+  ansible.builtin.unarchive:
+    src: /tmp/prometheus-{{ monitoring.prometheus.version }}.tar.gz
+    dest: "{{ monitoring.prometheus.install_dir }}"
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ monitoring_release_dir }}/prometheus"
+  when: not monitoring_prometheus_release.stat.exists
+
+- name: Remove the downloaded archive
+  ansible.builtin.file:
+    path: /tmp/prometheus-{{ monitoring.prometheus.version }}.tar.gz
+    state: absent
+  when: not monitoring_prometheus_release.stat.exists
+
+- name: Point the stable path at this release
+  # The unit and the promtool symlink below name this path rather than
+  # the versioned directory, so an upgrade is a relink and a restart -
+  # and the previous release stays on disk to go back to.
+  ansible.builtin.file:
+    src: "{{ monitoring_release_dir }}"
+    path: "{{ monitoring.prometheus.install_dir }}/prometheus"
+    state: link
+  notify:
+    - Restart prometheus
+
+- name: Put promtool on PATH
+  # So that the `validate` steps below can call it by name, as they
+  # did when it was packaged, and so that it is there for anyone
+  # checking a rule file by hand.
+  ansible.builtin.file:
+    src: "{{ monitoring.prometheus.install_dir }}/prometheus/promtool"
+    path: /usr/local/bin/promtool
+    state: link
+
+- name: Create the prometheus data directory
+  # Debian patched the packaged binary to default to this path; the
+  # upstream one has to be told, and is, in the unit. Same path, so
+  # the history collected under the package is kept.
+  ansible.builtin.file:
+    path: "{{ monitoring.prometheus.data_dir }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0750"
+
+- name: Configure the prometheus service
+  ansible.builtin.template:
+    src: templates/prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart prometheus
+
+- name: Remove the EnvironmentFile the packaged unit used
+  # Flags live in the unit now. Left behind it would read like the
+  # place to change them, which is worse than its absence.
+  ansible.builtin.file:
+    path: /etc/default/prometheus
+    state: absent
 
 - name: Create the rules directory
   ansible.builtin.file:
@@ -102,16 +218,6 @@
 # The three files below are what the packaged units read their
 # command line from, so a change to any of them needs a restart
 # rather than a reload - the flags are only read at startup.
-- name: Configure the prometheus service arguments
-  ansible.builtin.template:
-    src: templates/default/prometheus.j2
-    dest: /etc/default/prometheus
-    owner: root
-    group: root
-    mode: "0644"
-  notify:
-    - Restart prometheus
-
 - name: Configure the alertmanager service arguments
   ansible.builtin.template:
     src: templates/default/prometheus-alertmanager.j2

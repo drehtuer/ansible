@@ -40,6 +40,19 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # lost by replacing it - the packaged file only scrapes
     # Prometheus itself - which is what makes this safe where
     # replacing Redis's config file was not.
+    # Installed from the upstream release rather than the archive:
+    # the packaged server carries no modern web UI at all - see
+    # tasks/main.yml - and 24.04 is four minor releases behind.
+    # Checksums are the sha256 from upstream's own
+    # sha256sums.txt, one per build.
+    version: "3.14.0"
+    checksums:
+      amd64: f665c6da19eb7ba399c915d30c7d9793c9b417bf8a749b504bc470678631478d
+      arm64: 077f3781ab7245dc04c9a3c9b78ba120fc8e41aa0dc97489b0af67247e50ba83
+    install_dir: /opt
+    # The path the packaged binary defaulted to, kept so that the
+    # history collected under the package carries over.
+    data_dir: /var/lib/prometheus/metrics2
     config_file: /etc/prometheus/prometheus.yml
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
