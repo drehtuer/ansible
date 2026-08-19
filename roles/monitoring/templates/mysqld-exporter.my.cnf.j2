@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+#
+# There is no password here on purpose. The account authenticates
+# through the unix socket - `IDENTIFIED VIA unix_socket` - so MariaDB
+# takes the *system* user connecting as proof of identity, and the
+# exporter runs as prometheus. A password in a file readable by the
+# exporter proves nothing this does not, and would be one more secret
+# to rotate.
+#
+# This is also why the socket path matters: authentication is the
+# connection, so a TCP connection to the same server would be refused.
+[client]
+user = {{ monitoring.exporters.mysqld.user }}
+socket = {{ monitoring.exporters.mysqld.socket }}

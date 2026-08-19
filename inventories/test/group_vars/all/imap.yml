@@ -6,6 +6,10 @@ imap:
       cert: /etc/letsencrypt/live/{{ hostname_fqdn }}/fullchain.pem
       key: /etc/letsencrypt/live/{{ hostname_fqdn }}/privkey.pem
       ca: /etc/letsencrypt/live/{{ hostname_fqdn }}/chain.pem
+  metrics:
+    enabled: true
+    listen_address: 127.0.0.1
+    port: 9166
   logrotate:
     frequency: weekly
     rotate: 26

@@ -6,3 +6,43 @@
 monitoring_arch_map:
   x86_64: amd64
   aarch64: arm64
+
+# The packaged exporters this role manages, in one table so that
+# installing, configuring and enabling them cannot drift apart. Note
+# the flag styles differ between them - redis-exporter takes single
+# dashes, the rest double - which is the sort of thing that is
+# obvious in one place and invisible spread across four.
+#
+# Dovecot and RSpamd are deliberately absent: both export Prometheus
+# metrics themselves, so there is nothing to install for them. They
+# appear in prometheus.yml as scrape jobs and nowhere else.
+monitoring_exporters:
+  - name: nginx
+    enabled: "{{ monitoring.exporters.nginx.enabled }}"
+    args:
+      - >-
+        --web.listen-address={{ monitoring.exporters.listen_address
+        }}:{{ monitoring.exporters.nginx.port }}
+      - --nginx.scrape-uri={{ monitoring.exporters.nginx.status_url }}
+  - name: mysqld
+    enabled: "{{ monitoring.exporters.mysqld.enabled }}"
+    args:
+      - >-
+        --web.listen-address={{ monitoring.exporters.listen_address
+        }}:{{ monitoring.exporters.mysqld.port }}
+      - --config.my-cnf={{ monitoring.exporters.mysqld.my_cnf }}
+  - name: redis
+    enabled: "{{ monitoring.exporters.redis.enabled }}"
+    args:
+      - >-
+        -web.listen-address={{ monitoring.exporters.listen_address
+        }}:{{ monitoring.exporters.redis.port }}
+      - -redis.addr={{ monitoring.exporters.redis.addr }}
+  - name: postfix
+    enabled: "{{ monitoring.exporters.postfix.enabled }}"
+    args:
+      - >-
+        --web.listen-address={{ monitoring.exporters.listen_address
+        }}:{{ monitoring.exporters.postfix.port }}
+      - --postfix.logfile_path={{ monitoring.exporters.postfix.logfile }}
+      - --postfix.showq_path={{ monitoring.exporters.postfix.showq }}

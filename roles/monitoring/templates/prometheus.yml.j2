@@ -56,3 +56,74 @@ scrape_configs:
     static_configs:
       - targets:
           - {{ a.listen_address }}:{{ a.port }}
+{% set e = monitoring.exporters %}
+{% if e.nginx.enabled %}
+
+  # Connections, requests and the reading/writing/waiting split, out
+  # of nginx's stub_status page. `nginx_up` says whether the exporter
+  # could read that page, which is a stronger statement than the unit
+  # being active.
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.nginx.port }}
+{% endif %}
+{% if e.mysqld.enabled %}
+
+  # `mysql_up` plus connection, query and InnoDB counters. The
+  # exporter authenticates over the unix socket, so this scrape is the
+  # only network hop involved and it is loopback.
+  - job_name: mysql
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.mysqld.port }}
+{% endif %}
+{% if e.redis.enabled %}
+
+  # `redis_up`, memory, keyspace and eviction counters. Worth having
+  # for a reason this host has already met: Redis lost its `dir`
+  # setting once and refused every write, which PING could not see and
+  # which broke RSpamd's Bayes learning and Nextcloud's file locking
+  # silently.
+  - job_name: redis
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.redis.port }}
+{% endif %}
+{% if e.postfix.enabled %}
+
+  # Queue sizes by queue, delivery delays, and SMTP status counts,
+  # read from the mail log and the showq socket. The deferred queue is
+  # the one worth watching: it grows quietly and is the first sign of
+  # mail this host accepted and cannot deliver.
+  - job_name: postfix
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.postfix.port }}
+{% endif %}
+{% if e.dovecot.enabled %}
+
+  # Dovecot exports these itself - no exporter package - from the
+  # `metric` blocks in roles/imap's dovecot.conf. Authentication
+  # successes and failures are the interesting pair, since the ratio
+  # is what tells a brute-force campaign from a busy morning.
+  - job_name: dovecot
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.dovecot.port }}
+{% endif %}
+{% if e.rspamd.enabled %}
+
+  # RSpamd's controller serves /metrics itself. It authenticates with
+  # a `Password` header and rejects HTTP basic auth outright, which is
+  # why this uses http_headers rather than basic_auth - and why the
+  # scrape would answer 401 with the obvious configuration.
+  - job_name: rspamd
+    http_headers:
+      Password:
+        values:
+          - {{ e.rspamd.password }}
+    static_configs:
+      - targets:
+          - {{ e.listen_address }}:{{ e.rspamd.port }}
+{% endif %}

@@ -238,6 +238,28 @@
     enabled: true
 # TLS vhosts come last: they reference the certificate, so nginx
 # cannot load them until certbot has produced it.
+- name: Status page for prometheus-nginx-exporter
+  # /etc/nginx/conf.d rather than sites-available: this is not a vhost
+  # for a domain this host serves, it is a loopback listener for the
+  # exporter, and http.sites builds server_name from the domain list.
+  ansible.builtin.template:
+    src: templates/stub_status.conf.j2
+    dest: /etc/nginx/conf.d/stub_status.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: http.stub_status.enabled
+  notify:
+    - Reload nginx
+
+- name: Remove the status page where it is not wanted
+  ansible.builtin.file:
+    path: /etc/nginx/conf.d/stub_status.conf
+    state: absent
+  when: not http.stub_status.enabled
+  notify:
+    - Reload nginx
+
 - name: Sites for nginx
   ansible.builtin.template:
     src: templates/site.conf.j2

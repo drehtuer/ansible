@@ -19,6 +19,14 @@ http:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # the secondary domains, and the mail role reads the same fact for
   # its virtual aliases. One list, so web and mail cannot disagree
   # about which domains the host answers for.
+  # nginx's status page, read by prometheus-nginx-exporter. Off by
+  # default: it is only useful where roles/monitoring runs, and a
+  # listener nothing scrapes is a listener for nothing.
+  stub_status:
+    enabled: false
+    listen_address: 127.0.0.1
+    port: 8080
+    path: /stub_status
   domains: "{{ [domain] + domain_aliases }}"
   # Static vhosts, all rendered from templates/site.conf.j2. Roles
   # that bring their own application (cloud, spam) add their own vhost

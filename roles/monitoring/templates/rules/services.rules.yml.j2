@@ -1,0 +1,144 @@
+{{ ansible_managed | comment }}
+# Per-service alert rules, evaluated against the exporters this host
+# runs. Every selector here was queried on a live host before being
+# written, because promtool proves an expression parses and cannot
+# prove the metric exists - a rule naming a metric that never appears
+# is silently unable to fire, which is the `postfix` fail2ban jail's
+# failure repeated in a place nobody looks.
+#
+# The `for` durations are properties of the signal rather than
+# preferences: a scrape that fails once is a restart, one that fails
+# for ten minutes is an outage.
+#
+# Annotations use Prometheus's own Go templating, which shares Jinja's
+# delimiters - hence the raw blocks. Note also that no annotation may
+# *begin* with one of those expressions: a YAML value starting with a
+# brace is read as a flow mapping, and promtool rejects the file with a
+# parse error a dozen lines further down.
+{% set s = monitoring.alerts.services %}
+groups:
+  - name: services
+    rules:
+      # The scrape itself. This fires for an exporter that has died,
+      # and for a service whose exporter cannot be reached - it does
+      # not distinguish them, which is what the per-service rules
+      # below are for.
+      - alert: ServiceExporterDown
+        expr: >-
+          up{job=~"nginx|mysql|redis|postfix|dovecot|rspamd"} == 0
+        for: 10m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: No metrics from {{ $labels.job }}
+          description: >-
+            Prometheus has not scraped {{ $labels.job }} at
+            {{ $labels.instance }} for ten minutes. Either the
+            exporter is down or it cannot reach what it exports.
+{% endraw %}
+
+      # Each of these is the exporter reporting that it reached its
+      # service and got nothing back, which is a stronger statement
+      # than the scrape failing.
+      - alert: NginxDown
+        expr: nginx_up == 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: nginx is not answering
+          description: >-
+            The exporter cannot read nginx's status page. Every vhost
+            on this host is affected, mail and DNS are not.
+{% endraw %}
+
+      - alert: MysqlDown
+        expr: mysql_up == 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: MariaDB is not answering
+          description: >-
+            The exporter cannot query MariaDB. Nextcloud returns
+            errors rather than degrading when this happens.
+{% endraw %}
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Redis is not answering
+          description: >-
+            The exporter cannot reach Redis. RSpamd's Bayes learning
+            and Nextcloud's file locking both depend on it.
+{% endraw %}
+
+      - alert: PostfixDown
+        expr: postfix_up == 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Postfix metrics are unavailable
+          description: >-
+            The exporter cannot read the mail log or the showq socket.
+            Mail may still be flowing; this says the measurement is
+            gone, which on this host is also how a stopped Postfix
+            first shows.
+{% endraw %}
+
+      # Redis refusing to save is worth its own rule because this host
+      # has met it: the packaged config lost its `dir` setting, every
+      # write was answered MISCONF, and PING kept saying PONG. Bayes
+      # learning and Nextcloud's locking broke silently for weeks.
+      - alert: RedisPersistenceFailing
+        expr: redis_rdb_last_bgsave_status == 0
+        for: 15m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Redis cannot write its snapshot
+          description: >-
+            The last background save failed. Redis answers writes with
+            MISCONF in this state while still answering PING, so
+            nothing else reports it.
+{% endraw %}
+
+      # The deferred queue is mail this host accepted and has not been
+      # able to deliver. A handful is ordinary; a persistent pile is
+      # either a broken relay or a backscatter source.
+      - alert: PostfixDeferredQueueHigh
+        expr: >-
+          postfix_showq_message_age_seconds_count{queue="deferred"}
+          > {{ s.deferred_queue }}
+        for: 30m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Deferred queue holds {{ $value | printf "%.0f" }} messages
+          description: >-
+            Mail accepted here is not being delivered onwards. Check
+            `mailq` and the log before it ages out.
+{% endraw %}
+
+      # Failed IMAP/SMTP authentications. fail2ban bans the sources,
+      # so this is not the first line of defence - it is what says a
+      # campaign is under way at all, since a ban is invisible from
+      # here.
+      - alert: DovecotAuthFailuresHigh
+        expr: >-
+          rate(dovecot_auth_failure_total[15m]) * 60
+          > {{ s.auth_failures_per_minute }}
+        for: 15m
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Failed logins running at {{ $value | printf "%.0f" }}/min
+          description: >-
+            Sustained authentication failures against Dovecot. Compare
+            with dovecot_auth_success_total before reading it as an
+            attack: a broken client retries just as fast.
+{% endraw %}

@@ -18,6 +18,15 @@ imap:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # because out of the box it logs to syslog and has nothing of its own
   # to rotate - diverting it is this role's decision, so rotating it is
   # this role's job.
+  # Dovecot's built-in Prometheus export, on by default. Nothing else
+  # in the inventory overrides this role, so the default *is* the
+  # production value - and the listener is loopback-only and costs a
+  # few counters, so a host that nothing scrapes loses nothing by
+  # having it. Whether it is scraped is roles/monitoring's decision.
+  metrics:
+    enabled: true
+    listen_address: 127.0.0.1
+    port: 9166
   logrotate:
     # Weekly rather than daily, and kept for half a year: this log is
     # low-volume (roughly 1 MB a week on the production host) and its

@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# Read by prometheus-{{ exporter.name }}-exporter.service as an
+# EnvironmentFile, which is how every one of these Debian units takes
+# its flags: they run the binary with $ARGS and nothing else.
+#
+# Only what differs from the binary's own defaults is passed - except
+# the listen address, which every one of them binds on all interfaces
+# out of the box and none of them should.
+ARGS="{{ exporter.args | join(' ') }}"

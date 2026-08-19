@@ -157,6 +157,78 @@
     path: /etc/default/prometheus
     state: absent
 
+- name: Note which service exporters this host wants
+  ansible.builtin.set_fact:
+    monitoring_wanted: >-
+      {{ monitoring_exporters | selectattr('enabled') | list }}
+
+- name: Install the service exporters
+  # Only the ones the inventory turned on. An exporter for a service
+  # this host does not run would be a unit that fails at every boot,
+  # and roles/monitoring's own node.rules alerts on exactly that.
+  ansible.builtin.apt:
+    install_recommends: false
+    name: "prometheus-{{ item.name }}-exporter"
+  loop: "{{ monitoring_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create the mysqld exporter account
+  # Authenticates through the unix socket as the prometheus system
+  # user, so nothing here is a password and nothing has to be
+  # rotated. PROCESS and REPLICATION CLIENT are what the exporter
+  # reads server-wide status with; SELECT on performance_schema is
+  # what it reads the per-query numbers with. No access to any
+  # application database is granted, and none is needed.
+  community.mysql.mysql_user:
+    name: "{{ monitoring.exporters.mysqld.user }}"
+    host: localhost
+    plugin: unix_socket
+    priv:
+      "*.*": "PROCESS,REPLICATION CLIENT"
+      "performance_schema.*": "SELECT"
+    column_case_sensitive: false
+    state: present
+    login_user: "{{ monitoring.exporters.mysqld.root_user }}"
+    login_password: "{{ monitoring.exporters.mysqld.root_password }}"
+  when: monitoring.exporters.mysqld.enabled
+  no_log: true
+
+- name: Configure the mysqld exporter credentials
+  ansible.builtin.template:
+    src: templates/mysqld-exporter.my.cnf.j2
+    dest: "{{ monitoring.exporters.mysqld.my_cnf }}"
+    owner: root
+    group: prometheus
+    mode: "0640"
+  when: monitoring.exporters.mysqld.enabled
+  notify:
+    - Restart mysqld exporter
+
+- name: Configure the service exporters
+  ansible.builtin.template:
+    src: templates/default/exporter.j2
+    dest: /etc/default/prometheus-{{ item.name }}-exporter
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ monitoring_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    exporter: "{{ item }}"
+  notify:
+    - Restart the service exporters
+
+- name: Enable the service exporters
+  ansible.builtin.systemd_service:
+    name: "prometheus-{{ item.name }}-exporter"
+    state: started
+    enabled: true
+  loop: "{{ monitoring_wanted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 - name: Create the rules directory
   ansible.builtin.file:
     path: "{{ monitoring.prometheus.rules_dir }}"
@@ -190,6 +262,7 @@
   loop:
     - node
     - monitoring
+    - services
   notify:
     - Reload prometheus
 
