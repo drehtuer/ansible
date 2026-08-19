@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Writes the packet filter's own counters into node_exporter's
+# textfile directory. Nothing in the archive exports them, and they
+# are the only measure of what the firewall is actually doing: every
+# rule carries a packet and byte counter, and on this host they are
+# not small - tens of thousands of packets dropped as invalid, more
+# rejected outright.
+#
+# Both families are read, because they are separate rulesets with
+# separate counters and a rule present in one and missing from the
+# other is exactly the bug the static tests exist to catch.
+#
+# Only terminal targets are counted - ACCEPT, DROP, REJECT - so a
+# packet that jumps from INPUT into a user chain is counted once,
+# where it is finally disposed of, rather than twice.
+#
+# Note what is *not* here: fail2ban's bans. It uses the nftables
+# action, whose rules in `inet f2b-table` carry no `counter` clause,
+# so nftables is not counting them and there is nothing to read. Its
+# jail counters are in the fail2ban collector beside this one.
+set -euo pipefail
+
+OUT="{{ monitoring.node_exporter.textfile_dir }}/packetfilter.prom"
+TMP="$(mktemp "${OUT}.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+
+{
+  echo "# HELP firewall_rule_packets_total Packets matched by terminal rules."
+  echo "# TYPE firewall_rule_packets_total counter"
+  echo "# HELP firewall_rule_bytes_total Bytes matched by terminal rules."
+  echo "# TYPE firewall_rule_bytes_total counter"
+  echo "# HELP firewall_policy_packets_total Packets disposed of by a chain's policy."
+  echo "# TYPE firewall_policy_packets_total counter"
+  echo "# HELP firewall_policy_bytes_total Bytes disposed of by a chain's policy."
+  echo "# TYPE firewall_policy_bytes_total counter"
+} > "$TMP"
+
+collect() {
+  local family="$1" cmd="$2"
+  "$cmd" --numeric --verbose --exact --list 2>/dev/null | awk -v family="$family" '
+    # Chain INPUT (policy DROP 33290 packets, 1848037 bytes)
+    /^Chain / {
+      chain = $2
+      if ($3 == "(policy") {
+        printf "firewall_policy_packets_total{family=\"%s\",chain=\"%s\",policy=\"%s\"} %s\n",
+               family, chain, $4, $5
+        printf "firewall_policy_bytes_total{family=\"%s\",chain=\"%s\",policy=\"%s\"} %s\n",
+               family, chain, $4, $7
+      }
+      next
+    }
+    # pkts bytes target prot opt in out source destination ...
+    $1 ~ /^[0-9]+$/ && ($3 == "ACCEPT" || $3 == "DROP" || $3 == "REJECT") {
+      packets[chain, $3] += $1
+      bytes[chain, $3] += $2
+    }
+    END {
+      for (key in packets) {
+        split(key, part, SUBSEP)
+        printf "firewall_rule_packets_total{family=\"%s\",chain=\"%s\",target=\"%s\"} %d\n",
+               family, part[1], part[2], packets[key]
+        printf "firewall_rule_bytes_total{family=\"%s\",chain=\"%s\",target=\"%s\"} %d\n",
+               family, part[1], part[2], bytes[key]
+      }
+    }
+  ' >> "$TMP"
+}
+
+collect ipv4 iptables
+collect ipv6 ip6tables
+
+chmod 0644 "$TMP"
+mv "$TMP" "$OUT"
+trap - EXIT

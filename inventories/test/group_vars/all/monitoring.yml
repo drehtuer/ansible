@@ -22,6 +22,14 @@ monitoring:
     install_dir: /opt
     data_dir: /var/lib/prometheus/metrics2
     rules_dir: /etc/prometheus/rules
+  # Textfile collectors: fail2ban's jail counters (failed SSH logins
+  # among them) and the packet filter's own per-rule counters.
+  textfile:
+    interval: 1min
+    fail2ban:
+      enabled: true
+    packetfilter:
+      enabled: true
   # Per-service exporters, all on loopback. Ports are the exporters'
   # own defaults; what is wired here is which ones this host runs and
   # the two secrets that come from elsewhere rather than being

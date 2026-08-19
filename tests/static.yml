@@ -42,6 +42,9 @@
     # unit file names the host's. Detected by `uname -m` at run time.
     cloud_push_arch: x86_64
     ip_version: 4
+    # roles/monitoring renders a service and a timer per textfile
+    # collector, with the name passed in as `collector`.
+    collector: fail2ban
     # roles/monitoring renders one EnvironmentFile per enabled
     # exporter, with the entry passed in as `exporter`; supply the
     # first one from the role's own table.

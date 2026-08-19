@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+#
+# One-shot, run by the timer beside it. Root, because both collectors
+# read something an unprivileged user cannot - fail2ban's control
+# socket and the packet filter's counters.
+[Unit]
+Description=Prometheus textfile collector: {{ collector }}
+Documentation=file://{{ monitoring.node_exporter.textfile_dir }}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/prometheus-textfile-{{ collector }}

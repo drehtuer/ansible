@@ -1,0 +1,120 @@
+{#
+  Security and mail-rejection dashboard.
+
+  Three questions this host could not answer before phase 3 and its
+  textfile collectors: who is failing to log in, what the packet
+  filter is throwing away, and how much mail is being refused at the
+  door.
+
+  Each panel graphs a *rate* rather than the raw counter. All of these
+  are counters that reset when their service restarts, so the counter
+  itself draws a cliff on every restart and says nothing about the
+  period in between.
+
+  Grafana's legendFormat uses {{label}}, which is Jinja's syntax too,
+  hence the raw blocks. The datasource uid is templated so it cannot
+  drift from the provisioned datasource.
+#}
+{% set ds = '{"type": "prometheus", "uid": "' ~ monitoring.grafana.datasource_uid ~ '"}' %}
+{
+  "uid": "security-overview",
+  "title": "Logins, firewall and mail rejections",
+  "tags": ["ansible"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Failed logins per minute",
+      "description": "From fail2ban's own filters - sshd counts failed SSH logins, the rest are shown for comparison. A jail that never moves is worth as much as one that does: it is how a filter watching the wrong log shows itself.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "min": 0},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "rate(fail2ban_jail_failed_total[15m]) * 60",
+{% raw %}          "legendFormat": "{{jail}}"
+{% endraw %}        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Addresses currently banned",
+      "description": "The standing ban list, by jail. recidive escalating is the signal that one source is being caught repeatedly rather than many sources once.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "fail2ban_jail_banned_current",
+{% raw %}          "legendFormat": "{{jail}}"
+{% endraw %}        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Packets dropped and rejected per second",
+      "description": "Terminal rules only, so a packet is counted once where it is disposed of. DROP is silent, REJECT answers - both are traffic this host refused. fail2ban's bans are not in here: its nftables rules carry no counter.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "pps", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "sum by (family, chain, target) (rate(firewall_rule_packets_total{target=~\"DROP|REJECT\"}[15m]))",
+{% raw %}          "legendFormat": "{{family}} {{chain}} {{target}}"
+{% endraw %}        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "sum by (family, chain) (rate(firewall_policy_packets_total[15m]))",
+{% raw %}          "legendFormat": "{{family}} {{chain}} policy"
+{% endraw %}        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Mail rejected per minute",
+      "description": "Two different refusals. Postfix rejects during the SMTP transaction - an unknown recipient, a failed policy check - and the code is the reason. RSpamd's reject is a scan verdict on a message Postfix had already accepted the recipient for.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 9},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "sum by (code) (rate(postfix_smtpd_messages_rejected_total[15m])) * 60",
+{% raw %}          "legendFormat": "postfix {{code}}"
+{% endraw %}        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "rate(rspamd_actions_total{type=\"reject\"}[15m]) * 60",
+          "legendFormat": "rspamd reject"
+        },
+        {
+          "refId": "C",
+          "datasource": {{ ds }},
+          "expr": "rate(postfix_smtpd_sasl_authentication_failures_total[15m]) * 60",
+          "legendFormat": "smtp auth failures"
+        }
+      ]
+    }
+  ]
+}
