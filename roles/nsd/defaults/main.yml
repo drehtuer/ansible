@@ -3,6 +3,20 @@ nsd:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # loopback. Empty by default so the role cannot accidentally bind
   # every interface on a host that has not declared its addresses.
   listen: []
+  # Boot ordering and restart tolerance for nsd.service, rendered into
+  # a drop-in. The packaged unit orders itself after network.target -
+  # reached before any address exists - and retries five times inside
+  # one second before giving up, which is how a reboot left this host
+  # without its authoritative server for 21 hours. See the template.
+  systemd:
+    # Seconds between restart attempts, against systemd's 100ms.
+    restart_sec: 5
+    # Attempts allowed inside start_limit_interval_sec before systemd
+    # stops trying. 12 x 5s is a minute of tolerance for an address
+    # that is late; after that the failure is real and should be
+    # reported rather than retried forever.
+    start_limit_burst: 12
+    start_limit_interval_sec: 300
   # Addresses permitted to pull the zones by AXFR: Hetzner's three
   # secondary nameservers, both families, since a transfer may reach
   # this host over either. The same three serve every zone, so this is

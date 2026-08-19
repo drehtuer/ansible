@@ -57,6 +57,14 @@ nsd:
   listen:
     - "{{ ip_v4 }}"
     - "{{ ip_v6 }}"
+  # Boot ordering and restart tolerance for nsd.service, rendered into
+  # a drop-in. The packaged unit starts before any address is
+  # configured and gives up in under a second; see
+  # roles/nsd/templates/boot-order.conf.j2.
+  systemd:
+    restart_sec: 5
+    start_limit_burst: 12
+    start_limit_interval_sec: 300
   propagation:
     check: true
     retries: 10

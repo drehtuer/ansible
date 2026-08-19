@@ -1,0 +1,48 @@
+{{ ansible_managed | comment }}
+#
+# nsd.service, as packaged, cannot survive a reboot on a host that
+# names its addresses.
+#
+# Two settings in the packaged unit combine to do it. It is ordered
+# `After=network.target`, which is reached when the network *stack* is
+# up rather than when any address has been configured; and it inherits
+# systemd's defaults of RestartSec=100ms with StartLimitBurst=5 in
+# StartLimitIntervalSec=10s. So a start that is a second early fails,
+# is retried five times inside one second, hits "start request repeated
+# too quickly", and is abandoned - while the address it wanted appears
+# moments later.
+#
+# That is not hypothetical. On carcosa, 2026-08-17:
+#
+#   04:01:46.9  Starting systemd-networkd-wait-online.service
+#   04:01:48.5  Starting nsd.service            <- 3.5s before the network
+#   04:01:49.2  error: can't bind udp socket 88.198.12.17@53:
+#               Cannot assign requested address
+#   04:01:49.2  ... four more attempts, all within one second
+#   04:01:52    network-online.target reached
+#
+# and the hidden primary stayed dead for 21 hours. Nothing served the
+# world less DNS for it - the secondaries answer from their own copies -
+# but nothing propagated either, so every zone edit silently reached
+# nobody.
+#
+# Hence both halves below. Ordering after network-online.target is the
+# fix for the case above; the restart tolerance covers an address that
+# is late even relative to that target, which is not the same thing -
+# IPv6 duplicate address detection, for instance, finishes after the
+# link is "configured".
+#
+# Deliberately NOT done: binding the wildcard, or NSD's own
+# `ip-transparent`. Both would start successfully whatever addresses
+# the host has, which means an address that never arrives leaves a
+# server that looks healthy and answers nobody. Failing loudly is worth
+# more here, because roles/monitoring alerts on a failed unit and has
+# no way to alert on a silent one.
+[Unit]
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec={{ nsd.systemd.start_limit_interval_sec }}
+StartLimitBurst={{ nsd.systemd.start_limit_burst }}
+
+[Service]
+RestartSec={{ nsd.systemd.restart_sec }}

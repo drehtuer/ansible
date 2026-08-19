@@ -22,6 +22,30 @@ argument_specs:
               - Addresses NSD answers on. Public only; loopback belongs
                 to the unbound resolver. Must not be empty, or NSD
                 binds every interface.
+          systemd:
+            type: dict
+            required: true
+            description:
+              - Boot ordering and restart tolerance for nsd.service,
+                rendered into a drop-in. The packaged unit starts
+                before any address is configured and gives up in under
+                a second, which is how a reboot leaves a host with no
+                authoritative server.
+            options:
+              restart_sec:
+                type: int
+                required: true
+                description: Seconds between restart attempts.
+              start_limit_burst:
+                type: int
+                required: true
+                description:
+                  - Attempts allowed inside start_limit_interval_sec
+                    before systemd stops trying.
+              start_limit_interval_sec:
+                type: int
+                required: true
+                description: Window the burst count applies to.
           secondaries:
             type: list
             elements: str
