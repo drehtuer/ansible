@@ -84,8 +84,8 @@ USAGE
 
 CLASS_NAME="${1:-}"
 case "$CLASS_NAME" in
-  spam) CLASS=learn_spam; STATFILE=BAYES_SPAM ;;
-  ham)  CLASS=learn_ham;  STATFILE=BAYES_HAM ;;
+  spam) CLASS=learn_spam; STATFILE=BAYES_SPAM; REDIS_FIELD=learns_spam ;;
+  ham)  CLASS=learn_ham;  STATFILE=BAYES_HAM;  REDIS_FIELD=learns_ham ;;
   -h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -175,9 +175,16 @@ classify() {
 rspamc_stat() { rspamc -h "$CONTROLLER" -P "$PASSWORD" -t "$TIMEOUT" stat 2>&1; }
 
 # The revision of the statfile for the class being taught is its
-# number of learns. Reading it before and after is what turns "the
-# corpus had 18237 messages and the classifier says 20144" from
-# something noticed weeks later into part of the run.
+# number of learns. It is reported rather than checked, because the
+# figure lags: the controller serves a cached reading and refreshes
+# it on its own schedule, so a lab run that learned 200 messages had
+# it answer 0 throughout and only reported 212 - which is exactly
+# right - some minutes later. Redis holds the live value in the
+# classifier's own hash (`redis-cli hget RS learns_spam`). Comparing
+# a lagging counter against this run's count produced a confident
+# warning that Redis was refusing writes while it was doing nothing
+# of the sort, so the counter is printed and the reader is told what
+# to look for instead.
 learns_from() {
   awk -v want="$STATFILE" '
     $1 == "Statfile:" && $2 == want {
@@ -309,23 +316,14 @@ echo "report: ${REPORT}"
 
 LEARNS_AFTER="$(rspamc_stat | learns_from || true)"
 if [[ -n "$LEARNS_BEFORE" && -n "$LEARNS_AFTER" ]]; then
-  DELTA=$((LEARNS_AFTER - LEARNS_BEFORE))
-  echo "${STATFILE} learns: ${LEARNS_BEFORE} -> ${LEARNS_AFTER} (${DELTA})"
-  if [[ "$DELTA" -gt "$LEARNED" ]]; then
-    echo "WARNING: the classifier recorded ${DELTA} learns where this run counted" >&2
-    echo "         ${LEARNED}. Either something else was training at the same time - a" >&2
-    echo "         user moving mail into TrainSpam will do it - or messages were" >&2
-    echo "         learned whose reply never arrived, which is what leaves a corpus" >&2
-    echo "         able to be learned twice. Compare the classifier's total against" >&2
-    echo "         the size of the corpus before doing anything, and do not re-send" >&2
-    echo "         the corpus to correct it." >&2
-  elif [[ "$DELTA" -lt "$LEARNED" ]]; then
-    echo "WARNING: the classifier recorded only ${DELTA} learns where this run counted" >&2
-    echo "         ${LEARNED} successes. The tokens may not have been written: check" >&2
-    echo "         that Redis is accepting writes ('redis-cli set probe ok') and read" >&2
-    echo "         rspamd's log for the period of the run." >&2
-  fi
+  echo "${STATFILE} learns as rspamd reports them: ${LEARNS_BEFORE} -> ${LEARNS_AFTER}"
+  echo "  (that figure lags - it is a cached reading. 'redis-cli hget RS ${REDIS_FIELD}'"
+  echo "   is the live one, and 'rspamc stat' catches up on its own.)"
 fi
+echo "The number to check, whenever it has caught up: ${STATFILE} must not hold more"
+echo "learns than the corpus has messages. More means something was learned twice, and"
+echo "re-sending the corpus is what causes that rather than what corrects it."
+
 
 # Nothing learned *and* nothing recognised as already known means the
 # corpus never reached the classifier at all - almost always a broken
