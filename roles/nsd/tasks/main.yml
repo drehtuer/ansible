@@ -14,6 +14,28 @@
       - bind9-utils
   notify:
     - Restart nsd
+- name: Create the nsd.service drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/nsd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+- name: Start nsd only once an address exists, and keep trying if one is late
+  # The packaged unit is ordered after network.target, which is reached
+  # before any address is configured, and gives up after five attempts
+  # inside one second. On carcosa that left the hidden primary dead for
+  # 21 hours after an unattended-upgrades reboot. The template carries
+  # the journal timestamps and the reasoning for not binding the
+  # wildcard instead.
+  ansible.builtin.template:
+    src: templates/boot-order.conf.j2
+    dest: /etc/systemd/system/nsd.service.d/10-boot-order.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
 - name: Create zone directory
   ansible.builtin.file:
     path: /etc/nsd/zones
