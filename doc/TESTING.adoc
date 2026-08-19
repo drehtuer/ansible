@@ -107,7 +107,7 @@ The Dev Container needs access to a Docker daemon for this — the host's own, r
 
 * `molecule.yml` — the container definition. Note the `ANSIBLE_ROLES_PATH` it sets: molecule does not put the repository's `roles/` directory on the roles path, so without it the role cannot be resolved by name and the run fails at the `syntax` stage.
 * `converge.yml` — the play that applies the role, with any variables it needs inline.
-* `prepare.yml` — refreshes the apt cache. The images ship with an empty one, and only the `apt` role refreshes it itself, so a role installing a package it does not already have cannot resolve it. See `doc/TODO.adoc`.
+* `prepare.yml` — refreshes the apt cache. The images ship with an empty one, and of the roles with a scenario only `apt` refreshes it itself, so a role installing a package it does not already have cannot resolve it. (Five roles do pass `update_cache` — `apt`, `dns`, `database`, `mail`, `spam` — and the inconsistency is itself an open item. See `doc/TODO.adoc`.)
 
 `invoke test-molecule` discovers scenarios rather than keeping a list. The CI matrix in `.github/workflows/test.yml` does keep a list, so add the role there too.
 
