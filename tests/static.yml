@@ -13,6 +13,10 @@
 #      errors and undefined variables without needing a host. It has
 #      already caught a comparison against the wrong type that
 #      silently rendered an IPv4 ruleset into the IPv6 file.
+#      Templates whose output branches are rendered once per branch,
+#      and the Grafana dashboards are parsed as JSON afterwards:
+#      Grafana logs a malformed dashboard and carries on without it,
+#      so that failure is a missing page rather than a failed run.
 #
 # Variables come from the test inventory only, not from role
 # defaults - so a template referencing something the inventory does
@@ -194,6 +198,69 @@
         fail_msg: >-
           tsig.conf renders {{ key_names | length }} distinct key
           name(s) for {{ nsd.zones | length }} zone(s): {{ key_names }}
+
+    - name: Note what roles/monitoring looks like with every option off
+      # A fact rather than a play var, deliberately: a var defined in
+      # terms of `monitoring` and then used *as* `monitoring` is a
+      # recursive lookup. set_fact resolves it once, here, against the
+      # inventory value.
+      ansible.builtin.set_fact:
+        monitoring_off: >-
+          {{ monitoring | combine({'blackbox': {'enabled': false},
+                                   'exporters': monitoring_exporters_off},
+                                  recursive=true) }}
+      vars:
+        # Every exporter the inventory names, switched off without
+        # listing them here - a hand-written list would go stale the
+        # moment one is added, and would do so silently.
+        # `listen_address` is filtered out by taking only the entries
+        # that are dicts.
+        monitoring_exporters_off: >-
+          {{ monitoring.exporters | dict2items
+             | selectattr('value', 'mapping')
+             | map('combine', {'value': {'enabled': false}})
+             | items2dict }}
+
+    - name: Render the uptime dashboard with every option off
+      # The panels for the blackbox probes and for the self-reporting
+      # exporters are rendered conditionally, so the inventory above -
+      # which has all of them on - only ever exercises one branch. The
+      # other branch is where a missing comma would sit, and a
+      # dashboard Grafana cannot parse is a missing page rather than a
+      # failed run. Same reasoning as the IPv6 firewall render.
+      vars:
+        monitoring: "{{ monitoring_off }}"
+        dashboards: "{{ repo }}/roles/monitoring/templates/grafana/dashboards"
+      ansible.builtin.template:
+        src: "{{ dashboards }}/uptime.json.j2"
+        dest: "{{ rendered }}/monitoring_uptime_minimal.json"
+        mode: "0600"
+
+    - name: Find the rendered grafana dashboards
+      ansible.builtin.find:
+        paths: "{{ rendered }}"
+        patterns: "*_dashboards_*.json.j2"
+      register: grafana_dashboards
+
+    - name: Fail if no dashboards were found
+      ansible.builtin.assert:
+        that:
+          - grafana_dashboards.files | length > 0
+        fail_msg: "No rendered dashboards found in {{ rendered }}"
+
+    - name: Every rendered dashboard is valid JSON
+      # The same check the role makes with `validate:` before
+      # installing one, moved to where it costs nothing and needs no
+      # host. Grafana logs a malformed dashboard and carries on
+      # without it, so the failure it catches is silent by nature.
+      ansible.builtin.command:
+        cmd: python3 -m json.tool {{ item }} /dev/null
+      loop: >-
+        {{ (grafana_dashboards.files | map(attribute='path') | list)
+           + [rendered ~ '/monitoring_uptime_minimal.json'] }}
+      loop_control:
+        label: "{{ item | basename }}"
+      changed_when: false
 
     - name: Report
       ansible.builtin.debug:

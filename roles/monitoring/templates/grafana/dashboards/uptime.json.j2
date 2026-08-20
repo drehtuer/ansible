@@ -1,0 +1,320 @@
+{#
+  Service uptime dashboard.
+
+  The alert rules already say when a service stops answering; this is
+  the page that says how often it has, and for how long. Three
+  different claims are drawn separately rather than merged, because
+  they fail apart from one another:
+
+    * the scrape - Prometheus reached the exporter (`up`),
+    * the service's own report - the exporter reached what it exports
+      (`nginx_up`, `mysql_up`, `redis_up`, `postfix_up`),
+    * the probe - the name answers correctly from a client's side of
+      the socket (`probe_success`).
+
+  A service can be running with its exporter dead, and an exporter can
+  be perfectly healthy while the name in front of it answers nothing.
+  Dovecot and RSpamd have no `_up` metric of their own because they
+  export their metrics themselves - for those two the scrape *is* the
+  service answering, which is why they appear only in the first pair
+  of panels.
+
+  "Uptime" here means availability over the dashboard's time range -
+  the fraction of scrapes that found the service up - and not how long
+  a process has been running. That is a deliberate limit rather than
+  an oversight: per-unit start times would need node_exporter's
+  `--collector.systemd.enable-start-time-metrics`, which is off by
+  default and unverified on this host. See doc/TODO.adoc.
+
+  Read the percentages with one caveat: they average the samples
+  Prometheus actually recorded, so a window in which Prometheus itself
+  was down is a gap rather than downtime, and reads as 100%. The
+  Watchdog mail is what covers that case, not this page.
+
+  The probe jobs are excluded from the scrape panels by name -
+  `job!~"probe.*"` - because their `up` measures the blackbox exporter
+  rather than any of the probed targets, so leaving them in would draw
+  twenty series all reporting the same one process.
+
+  Grafana's legendFormat uses {{label}}, which is Jinja's syntax too,
+  hence the raw blocks. The datasource uid is templated so it cannot
+  drift from the provisioned datasource.
+#}
+{% set ds = '{"type": "prometheus", "uid": "' ~ monitoring.grafana.datasource_uid ~ '"}' %}
+{#
+  The services that report on themselves, and only the ones this host
+  actually runs. Rendered from the same inventory flags that decide
+  which exporters are installed, so a panel here cannot promise a
+  series that no exporter produces - the empty-panel failure this
+  role's notes keep warning about.
+#}
+{% set self_report = [] %}
+{% if monitoring.exporters.nginx.enabled %}
+{%   set _ = self_report.append(('nginx_up', 'nginx')) %}
+{% endif %}
+{% if monitoring.exporters.mysqld.enabled %}
+{%   set _ = self_report.append(('mysql_up', 'MariaDB')) %}
+{% endif %}
+{% if monitoring.exporters.redis.enabled %}
+{%   set _ = self_report.append(('redis_up', 'Redis')) %}
+{% endif %}
+{% if monitoring.exporters.postfix.enabled %}
+{%   set _ = self_report.append(('postfix_up', 'Postfix')) %}
+{% endif %}
+{#
+  Up/down is the same field configuration wherever it is drawn: a
+  colour from the value itself, and the value rendered as a word. Kept
+  in one macro so the three state panels cannot disagree about which
+  colour means what.
+#}
+{% macro state_field_config() %}
+        "color": {"mode": "thresholds"},
+        "mappings": [
+          {
+            "type": "value",
+            "options": {
+              "0": {"text": "Down", "color": "red", "index": 0},
+              "1": {"text": "Up", "color": "green", "index": 1}
+            }
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "red", "value": null},
+            {"color": "green", "value": 1}
+          ]
+        }
+{%- endmacro %}
+{#
+  Availability is a percentage of a range that is almost always close
+  to 100, so the thresholds are near the top and three decimals are
+  kept: 99.9% and 99.999% are four hours and thirty seconds a year
+  apart, and rounding to a whole number would draw them identically.
+#}
+{% macro availability_field_config() %}
+        "unit": "percent",
+        "min": 0,
+        "max": 100,
+        "decimals": 3,
+        "color": {"mode": "thresholds"},
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"color": "red", "value": null},
+            {"color": "orange", "value": 99},
+            {"color": "green", "value": 99.9}
+          ]
+        }
+{%- endmacro %}
+{
+  "uid": "service-uptime",
+  "title": "Service uptime",
+  "tags": ["ansible"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Scrape state now",
+      "description": "One tile per scrape target. This says Prometheus reached the exporter, which is not the same as the service behind it being healthy - the next panel down is that question. ServiceExporterDown alerts on the same series after ten minutes.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 5, "w": 12, "x": 0, "y": 0},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+{{ state_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "up{job!~\"probe.*\"}",
+          "legendFormat": "{% raw %}{{job}}{% endraw %}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Scrape availability, this time range",
+      "description": "The share of scrapes in the selected range that found the target up. Averaged over the samples Prometheus recorded, so a window in which Prometheus itself was down is a gap rather than downtime and reads as 100%.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 5, "w": 12, "x": 12, "y": 0},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+{{ availability_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "avg_over_time(up{job!~\"probe.*\"}[$__range]) * 100",
+          "legendFormat": "{% raw %}{{job}}{% endraw %}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "state-timeline",
+      "title": "Scrape state over time",
+      "description": "Where the gaps were, rather than how many there were. A row that is briefly red at the same moment as every other row is a restart of Prometheus or of the host; one row alone is that service.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 5},
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+{{ state_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "up{job!~\"probe.*\"}",
+          "legendFormat": "{% raw %}{{job}}{% endraw %}"
+        }
+      ]
+    }{% if self_report %},
+    {
+      "id": 4,
+      "type": "state-timeline",
+      "title": "What each service says about itself",
+      "description": "The exporter reached the service and got an answer - a stronger statement than the scrape above, and the series NginxDown, MysqlDown, RedisDown and PostfixDown alert on. Dovecot and RSpamd are absent on purpose: they export their own metrics, so for those two the scrape is already this question.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13},
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+{{ state_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+{% for expr, label in self_report %}
+        {
+          "refId": "{{ 'ABCD'[loop.index0] }}",
+          "datasource": {{ ds }},
+          "expr": "{{ expr }}",
+          "legendFormat": "{{ label }}"
+        }{{ "," if not loop.last }}
+{% endfor %}
+      ]
+    }{% endif %}{% if monitoring.blackbox.enabled %},
+    {
+      "id": 5,
+      "type": "state-timeline",
+      "title": "Probe result, from a client's side",
+      "description": "Every blackbox target: the web names, both mail protocols and both DNS servers. This is the only row set here that can go red while the service itself is running - a name that resolves elsewhere, a certificate the client refuses, a basic-auth gate that has vanished. ProbeFailing alerts on it after five minutes.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 21},
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+{{ state_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "probe_success",
+          "legendFormat": "{% raw %}{{job}} {{instance}}{% endraw %}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "Probe availability, this time range",
+      "description": "The same range as the panel above, per target. The job is part of each label because the two authoritative DNS probes share an instance - they query the same server for different zones - and would otherwise be indistinguishable.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 31},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 8,
+        "minVizHeight": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+{{ availability_field_config() }}
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "avg_over_time(probe_success[$__range]) * 100",
+          "legendFormat": "{% raw %}{{job}} {{instance}}{% endraw %}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Probe duration",
+      "description": "How long each probe took to complete. Worth watching next to the rows above rather than on its own: a target that is climbing towards the blackbox timeout of {{ monitoring.blackbox.timeout }} is about to start failing, and this is the only panel here that says so before it does.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 43},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "probe_duration_seconds",
+          "legendFormat": "{% raw %}{{job}} {{instance}}{% endraw %}"
+        }
+      ]
+    }{% endif %}
+  ]
+}
