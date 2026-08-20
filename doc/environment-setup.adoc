@@ -57,7 +57,7 @@ The socket's group ownership depends on the host machine's `docker` GID, which c
 
 === Tooling not packaged for Ubuntu
 
-Four tools are installed outside `apt` because Ubuntu 26.04 does not package them at a usable version, and all four are pinned in `.devcontainer/Dockerfile`:
+Five tools are installed outside `apt` because Ubuntu 26.04 does not package them at all, or not at a usable version, and all five are pinned in `.devcontainer/Dockerfile`:
 
 [cols="h,m,d", options="autowidth"]
 |===
@@ -65,6 +65,7 @@ Four tools are installed outside `apt` because Ubuntu 26.04 does not package the
 | `yamllint` | `YAMLLINT_VERSION` | Alongside `ansible-lint` in the same virtualenv, which requires a newer release than Ubuntu packages.
 | `ruff` | `RUFF_VERSION` | Release binary, fetched from GitHub.
 | `molecule` | `MOLECULE_VERSION` | Installed into its own — fully isolated — virtualenv at `/opt/molecule`, because pip refuses to install into the system Python (PEP 668). The entry point is linked into `/usr/local/bin`.
+| `claude` | `CLAUDE_CODE_VERSION` | Released binary, fetched from Anthropic's download channel and checked against the SHA256 in that release's `manifest.json`. It is self-contained, so it goes straight into `/usr/local/bin` rather than through Anthropic's `install.sh` — that installer puts everything under `$HOME/.claude`, which `devcontainer.json` bind-mounts from the host, so a build-time install there would be shadowed the moment the container starts. For the same reason `claude update` cannot upgrade it in place: bump the version and rebuild.
 |===
 
-Keep all four in step with the versions installed by the workflows in `.github/workflows/`, so that CI and a local run use the same tools.
+Keep the first four in step with the versions installed by the workflows in `.github/workflows/`, so that CI and a local run use the same tools. `claude` has no CI counterpart — it is a development convenience, so that the CLI is available in a container terminal and not only through the VS Code extension `devcontainer.json` installs.
