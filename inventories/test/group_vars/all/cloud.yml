@@ -26,6 +26,8 @@ cloud:
     log_rotate_size: 104857600
   push:
     port: 7867
+  mail:
+    classify_importance: false
   ocr:
     languages:
       - eng

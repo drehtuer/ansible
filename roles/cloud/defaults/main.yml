@@ -64,6 +64,25 @@ cloud:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
   # the path `occ notify_push:setup` expects.
   push:
     port: 7867
+  # The Nextcloud Mail app. This role does not install it - it is an
+  # app the user adds - but it does own this one setting when it is
+  # present, because the default is surprising and its effect lands
+  # outside Nextcloud entirely.
+  mail:
+    # Mail's importance classifier tags messages it predicts are
+    # important with the IMAP keyword `$label1`. That keyword is not
+    # Nextcloud's private bookkeeping: it is stored on the message in
+    # the Maildir, so every IMAP client sees it, and Thunderbird maps
+    # `$label1` to its own "Important" tag. The result is mail
+    # sprouting tags in a client that was never told to tag anything.
+    #
+    # Off here, because a classifier that writes into shared IMAP
+    # state should be opted into rather than out of. See
+    # doc/STATUS.adoc for what this does *not* cover: the app default
+    # governs accounts created after it is set, while an existing
+    # account carries its own `classification_enabled` column that no
+    # occ command exposes.
+    classify_importance: false
   ocr:
     # Tesseract training data for OCRmyPDF, one package per language.
     languages:

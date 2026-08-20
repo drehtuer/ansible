@@ -158,6 +158,23 @@ argument_specs:
                 description:
                   - Loopback port the daemon listens on; nginx proxies
                     /push/ to it.
+          mail:
+            type: dict
+            required: true
+            description:
+              - The Nextcloud Mail app. Not installed by this role, but
+                configured by it where it is present.
+            options:
+              classify_importance:
+                type: bool
+                required: true
+                description:
+                  - Whether Mail's importance classifier may tag
+                    messages. It writes the IMAP keyword `$label1` onto
+                    the message itself, so the effect is visible in
+                    every other IMAP client - Thunderbird shows it as
+                    "Important". Governs accounts created after it is
+                    set; an existing account keeps its own column.
           ocr:
             type: dict
             required: true

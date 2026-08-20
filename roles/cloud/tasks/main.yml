@@ -510,3 +510,74 @@
     chdir: "{{ cloud.nextcloud.path }}"
   register: cloud_push_setup
   changed_when: false
+
+- name: Note whether the Mail app is installed
+  # This role does not install it, so everything below is conditional
+  # on someone having added it. `config:app:set` would happily write
+  # the key for an app that is not there, which is worse than useless:
+  # it would read as a managed setting doing nothing.
+  ansible.builtin.stat:
+    path: "{{ cloud.nextcloud.path }}/apps/mail/appinfo/info.xml"
+  register: cloud_mail_app
+
+- name: Read the Mail app's importance-classification default
+  # Read before write, so a converged host reports no change and
+  # `invoke check-drift` stays readable. `config:app:get` exits
+  # non-zero for a key that has never been set, which is not a
+  # failure - it is the state this task exists to correct, and an
+  # empty stdout compares unequal to either wanted value.
+  ansible.builtin.command:
+    cmd: >-
+      sudo -u www-data php occ config:app:get mail
+      importance_classification_default
+    chdir: "{{ cloud.nextcloud.path }}"
+  register: cloud_mail_classification
+  changed_when: false
+  failed_when: false
+  # Reads nothing but the current setting, so it is safe under --check
+  # and running it there is the point.
+  check_mode: false
+  when: cloud_mail_app.stat.exists
+
+- name: Set the Mail app's importance-classification default
+  # Mail's classifier tags what it predicts is important with the IMAP
+  # keyword `$label1`. That keyword lives on the message in the
+  # Maildir rather than in Nextcloud, so every IMAP client sees it and
+  # Thunderbird draws it as its own "Important" tag - mail acquiring
+  # tags in a client that was never asked to tag anything.
+  #
+  # The value is a string Mail compares with `=== 'yes'`, not a
+  # boolean, so anything else reads as off.
+  #
+  # NOTE the limit of this, which is why doc/STATUS.adoc carries the
+  # rest: this is the default applied to accounts *created after* it
+  # is set. An account that already exists carries its own
+  # `classification_enabled` column, seeded from this default by the
+  # app's own migration, and no occ command exposes it - it is the
+  # toggle in Mail's account settings. So this keeps the problem from
+  # coming back on a rebuilt host; it cannot fix a host that already
+  # has the account.
+  ansible.builtin.command:
+    cmd: >-
+      sudo -u www-data php occ config:app:set mail
+      importance_classification_default --value={{ cloud_mail_wanted }}
+    chdir: "{{ cloud.nextcloud.path }}"
+  vars:
+    cloud_mail_wanted: >-
+      {{ 'yes' if cloud.mail.classify_importance else 'no' }}
+  # The guard below is the comparison, so reaching this task at all
+  # means the stored value differs from the wanted one.
+  #
+  # Worth knowing when reading `invoke check-drift`: a command task in
+  # check mode reports *skipped* whether its condition was false or it
+  # merely could not run, so drift in this setting does not reach the
+  # recap. The two are distinguishable in `-v` output - a false
+  # condition carries `skip_reason`, a deferred command carries
+  # "Command would have run if not in check mode" - and the read task
+  # above prints the live value either way.
+  changed_when: true
+  when:
+    - cloud_mail_app.stat.exists
+    - >-
+      cloud_mail_classification.stdout | default('') | trim
+      != cloud_mail_wanted

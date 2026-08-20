@@ -62,6 +62,11 @@ cloud:
     log_rotate_size: 104857600
   push:
     port: 7867
+  # Off, after the Mail app's importance classifier was found tagging
+  # inbound mail with the IMAP keyword `$label1` - which Thunderbird
+  # renders as its own "Important" tag. See doc/STATUS.adoc.
+  mail:
+    classify_importance: false
   ocr:
     # Tesseract training data for OCRmyPDF, one package per language.
     languages:
