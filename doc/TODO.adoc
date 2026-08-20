@@ -7,9 +7,7 @@ Items are removed from here when they are *verified* on the host, not when the c
 
 == Active known issues
 
-* *The NSD reboot fix is written and proven on the lab, but `carcosa` has neither had it nor been rebooted with it.* The failure is the packaged unit: ordered after `network.target`, which is reached before any address exists, and retried five times inside one second before systemd gives up. `roles/nsd` now ships a `10-boot-order.conf` drop-in ordering it after `network-online.target` and giving it a minute of restart tolerance (`nsd.systemd`), and the lab reproduced the production failure and then survived it - see `doc/TESTING.adoc` for the three reboots and `doc/STATUS.adoc` for why the wildcard and `ip-transparent` were both rejected.
-+
-What is left is the host. Deploying is a file and a `daemon-reload` — no restart of nsd, so it can go out at any time. Verifying is the part that cannot be hurried: the test is a real reboot, and the honest one is the next unattended-upgrades reboot rather than a deliberate one, since that is the case that failed. Afterwards `systemctl show nsd -p After -p RestartUSec -p StartLimitBurst` should carry the drop-in's values, the boot journal should show `nsd started` on the first attempt after `network-online.target`, and — the point of all of it — nothing should need starting by hand.
+None. This section holds things known to be broken or misbehaving on the host right now; it is empty because the last of them - `nsd` not surviving a reboot - was fixed and then verified by the 04:00 unattended-upgrades reboot on 2026-08-20. Emptiness here is a statement about what is known, not about what is true: the sections below are where the unknowns are.
 
 == Missing functionality
 
