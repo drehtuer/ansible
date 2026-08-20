@@ -10,3 +10,11 @@
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
+
+    - name: Install what verify.yml needs
+      # `ss`, for the listener assertions. A test dependency rather
+      # than a role one - the role itself needs neither, and adding it
+      # to the role would install it on a real host for no reason.
+      ansible.builtin.apt:
+        install_recommends: false
+        name: iproute2

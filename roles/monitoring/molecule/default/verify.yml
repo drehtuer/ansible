@@ -1,0 +1,276 @@
+# What this scenario can check beyond convergence, and why it is the
+# only one that does.
+#
+# The collection half of this role is loopback services with no
+# certificate and no cross-host traffic, so the container can simply
+# be interrogated afterwards - unlike every other role here, whose end
+# state needs real DNS, a real certificate or another machine to talk
+# to. `molecule test` already proves the role converges and is
+# idempotent; this proves the three services came up *as configured*
+# and that the alerting path is real rather than merely syntactically
+# valid.
+#
+# The Grafana half is skipped by tag in this scenario, so nothing here
+# looks for it. Neither the blackbox exporter nor the nsd collector is
+# enabled by the role's defaults either, and the negative assertions
+# at the end are what keep that true: both reach off the container -
+# blackbox to probe real names, the collector to query the delegated
+# nameservers - so a default that quietly turned either on would make
+# this scenario depend on the internet.
+- name: Verify
+  hosts: all
+  gather_facts: false
+  vars:
+    prometheus_api: http://127.0.0.1:9090/prometheus/api/v1
+    alertmanager_api: http://127.0.0.1:9093/api/v2
+    # Every port this role is responsible for, and the address each
+    # must be on. 9094 is the odd one out: Alertmanager opens a
+    # cluster-gossip listener there unless --cluster.listen-address is
+    # set to the empty string, and for a cluster of one that is a port
+    # on every interface for nothing.
+    expected_listeners:
+      - port: 9090
+        what: prometheus
+      - port: 9093
+        what: alertmanager
+      - port: 9100
+        what: node_exporter
+  tasks:
+    - name: Wait for prometheus to answer
+      # Prometheus replays its WAL before it binds, so a check that
+      # runs the instant the unit goes active races it on a slow
+      # container.
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9090
+        timeout: 60
+
+    - name: Read the listening sockets
+      # `ss` rather than the API, deliberately: what a service reports
+      # about itself is not evidence of what it bound. This is the
+      # same reasoning lab.sh uses on the VM.
+      ansible.builtin.command:
+        cmd: ss -ltnH
+      register: monitoring_sockets
+      changed_when: false
+
+    - name: Every listener is on loopback and nowhere else
+      # Both halves matter. The packaged defaults for Prometheus and
+      # Alertmanager are 0.0.0.0, so finding the loopback address is
+      # not enough on its own - a wildcard bind contains the loopback
+      # one, and only the absence of 0.0.0.0 and [::] says the
+      # override took.
+      ansible.builtin.assert:
+        that:
+          - "'127.0.0.1:' ~ item.port in monitoring_sockets.stdout"
+          - "'0.0.0.0:' ~ item.port not in monitoring_sockets.stdout"
+          - "'[::]:' ~ item.port not in monitoring_sockets.stdout"
+        fail_msg: >-
+          {{ item.what }} is not bound to 127.0.0.1:{{ item.port }}
+          alone. Listening sockets were:
+          {{ monitoring_sockets.stdout }}
+      loop: "{{ expected_listeners }}"
+      loop_control:
+        label: "{{ item.what }}:{{ item.port }}"
+
+    - name: Nothing holds alertmanager's cluster port
+      # Emptying --cluster.listen-address disables HA mode outright.
+      # Checked as an absence because that is what the setting does -
+      # there is no "disabled" state to query, only a port that should
+      # not exist.
+      ansible.builtin.assert:
+        that:
+          - "':9094' not in monitoring_sockets.stdout"
+        fail_msg: >-
+          Something is listening on 9094, so alertmanager is still in
+          HA mode. Listening sockets were:
+          {{ monitoring_sockets.stdout }}
+
+    - name: Read the scrape targets
+      # Retried because a target is only `up` once it has actually
+      # been scraped, and the first scrape is up to one interval away.
+      ansible.builtin.uri:
+        url: "{{ prometheus_api }}/targets?state=active"
+        return_content: true
+      register: monitoring_targets
+      until: >-
+        monitoring_targets.json.data.activeTargets | length > 0
+        and monitoring_targets.json.data.activeTargets
+            | rejectattr('health', 'equalto', 'up') | list | length == 0
+      retries: 12
+      delay: 5
+
+    - name: All three targets are up
+      # Three, not "some": the count is what would catch a scrape job
+      # silently dropped from the rendered configuration, which an
+      # all-healthy check on its own would call a pass.
+      ansible.builtin.assert:
+        that:
+          - monitoring_targets.json.data.activeTargets | length == 3
+        fail_msg: >-
+          Expected 3 active targets, found
+          {{ monitoring_targets.json.data.activeTargets | length }}:
+          {{ monitoring_targets.json.data.activeTargets
+             | map(attribute='labels.job') | list }}
+
+    - name: Read the loaded rules
+      ansible.builtin.uri:
+        url: "{{ prometheus_api }}/rules"
+        return_content: true
+      register: monitoring_rules
+
+    - name: The rule groups loaded and every rule evaluates
+      # `health` is the part worth asserting. promtool proved the file
+      # parses before it was installed; this says Prometheus can
+      # actually evaluate each expression against its own data, which
+      # is a different claim and the one that fails when a rule names
+      # a function or a label that does not exist at run time.
+      #
+      # The blackbox and nsd groups are deliberately absent here - the
+      # role only deploys those rule files where the feature is on,
+      # and neither is on in this container.
+      ansible.builtin.assert:
+        that:
+          - monitoring_group_names | sort == ['monitoring', 'node', 'services']
+          - monitoring_rule_healths == ['ok']
+        fail_msg: >-
+          Rule groups were {{ monitoring_group_names | sort }} with
+          health {{ monitoring_rule_healths }}.
+      vars:
+        monitoring_group_names: >-
+          {{ monitoring_rules.json.data.groups | map(attribute='name') | list }}
+        monitoring_rule_healths: >-
+          {{ monitoring_rules.json.data.groups
+             | map(attribute='rules') | flatten
+             | map(attribute='health') | unique | list | sort }}
+
+    - name: Wait for the Watchdog to fire
+      ansible.builtin.uri:
+        url: "{{ prometheus_api }}/alerts"
+        return_content: true
+      register: monitoring_alerts
+      until: >-
+        monitoring_alerts.json.data.alerts
+        | selectattr('labels.alertname', 'equalto', 'Watchdog')
+        | selectattr('state', 'equalto', 'firing') | list | length == 1
+      retries: 12
+      delay: 5
+
+    - name: The Watchdog is the only alert firing
+      # A container with nothing wrong should look exactly like a
+      # healthy host: one always-firing alert and no others. Anything
+      # else here is a rule misfiring on an idle machine, which is
+      # worth catching before it does the same on a real one.
+      ansible.builtin.assert:
+        that:
+          - monitoring_firing == ['Watchdog']
+        fail_msg: "Alerts firing: {{ monitoring_firing }}"
+      vars:
+        monitoring_firing: >-
+          {{ monitoring_alerts.json.data.alerts
+             | selectattr('state', 'equalto', 'firing')
+             | map(attribute='labels.alertname') | unique | list | sort }}
+
+    - name: Wait for alertmanager to receive it
+      # Prometheus pushes to Alertmanager rather than the other way
+      # round, so this arriving proves the `alerting` block in
+      # prometheus.yml points somewhere real - which no amount of
+      # checking either file could show.
+      ansible.builtin.uri:
+        url: "{{ alertmanager_api }}/alerts"
+        return_content: true
+      register: monitoring_am_alerts
+      until: >-
+        monitoring_am_alerts.json
+        | selectattr('labels.alertname', 'equalto', 'Watchdog')
+        | list | length > 0
+      retries: 24
+      delay: 5
+
+    - name: Read alertmanager's own metrics
+      # The routing check, and the reason this scenario is worth more
+      # than its convergence half. Alertmanager tries to deliver the
+      # Watchdog to its mail receiver and cannot, because a container
+      # has no Postfix - and the *attempt* is the evidence. A route
+      # matching nothing would leave every one of these counters at
+      # zero.
+      #
+      # The counter to read is the latency histogram's count, NOT
+      # alertmanager_notifications_failed_total. That one looks like
+      # the obvious choice and is wrong here: Alertmanager retries a
+      # failing notification for the whole of the route's
+      # group_interval and only counts it failed once it gives up, so
+      # on the Watchdog route - group_interval 24h - it stays at zero
+      # for a day while delivery is plainly failing. Measured, not
+      # assumed: 13 attempts recorded against 0 failures. That is the
+      # same class of mistake as a rule selecting a metric that never
+      # appears, and it is why this file exists.
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9093/metrics
+        return_content: true
+      register: monitoring_am_metrics
+      until: monitoring_email_attempts | float > 0
+      retries: 24
+      delay: 5
+      vars:
+        # The counter's own line out of the exposition format: the
+        # value is the last space-separated field, whatever labels
+        # precede it.
+        monitoring_email_attempts: >-
+          {{ monitoring_am_metrics.content.splitlines()
+             | select('search', 'notification_latency_seconds_count')
+             | select('search', 'integration=.email.')
+             | map('split', ' ') | map('last') | map('float')
+             | sum }}
+
+    - name: The alert was routed to the mail receiver and attempted
+      ansible.builtin.assert:
+        that:
+          - monitoring_email_attempts | float > 0
+        fail_msg: >-
+          Alertmanager never attempted an email notification, so the
+          Watchdog route matched nothing.
+        success_msg: >-
+          Alertmanager attempted delivery
+          ({{ monitoring_email_attempts }} times).
+      vars:
+        monitoring_email_attempts: >-
+          {{ monitoring_am_metrics.content.splitlines()
+             | select('search', 'notification_latency_seconds_count')
+             | select('search', 'integration=.email.')
+             | map('split', ' ') | map('last') | map('float')
+             | sum }}
+
+    - name: Read alertmanager's log
+      ansible.builtin.command:
+        cmd: journalctl -u prometheus-alertmanager --no-pager -n 200
+      register: monitoring_am_log
+      changed_when: false
+
+    - name: Delivery failed at the SMTP connection, which is correct here
+      # The other half of the claim. The attempt above proves the
+      # route is real; this proves it got as far as opening a socket
+      # to the smarthost and found nothing there - which is the
+      # correct outcome in a container with no Postfix, and precisely
+      # the seam between this layer and the VM, where the same alert
+      # completes into a Maildir. See doc/TESTING.adoc.
+      ansible.builtin.assert:
+        that:
+          - "'connection refused' in monitoring_am_log.stdout"
+          - "':25' in monitoring_am_log.stdout"
+        fail_msg: >-
+          Alertmanager attempted delivery but the log does not show it
+          failing to connect to the smarthost. Last lines were:
+          {{ monitoring_am_log.stdout_lines[-15:] }}
+
+    - name: Neither off-container feature is enabled by default
+      # Both would make this scenario depend on the internet - the
+      # blackbox exporter probes real names, and the nsd collector
+      # queries the delegated nameservers. They are off in the role's
+      # defaults; this is what would notice if that changed.
+      ansible.builtin.assert:
+        that:
+          - "':9115' not in monitoring_sockets.stdout"
+        fail_msg: >-
+          The blackbox exporter is listening, so it is enabled by
+          default. This scenario cannot probe real names.
