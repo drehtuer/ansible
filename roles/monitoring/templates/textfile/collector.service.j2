@@ -1,8 +1,8 @@
 {{ ansible_managed | comment }}
 #
-# One-shot, run by the timer beside it. Root, because both collectors
-# read something an unprivileged user cannot - fail2ban's control
-# socket and the packet filter's counters.
+# One-shot, run by the timer beside it. Root, because each collector
+# reads something an unprivileged user cannot - fail2ban's control
+# socket, the packet filter's counters, nsd's control socket.
 [Unit]
 Description=Prometheus textfile collector: {{ collector }}
 Documentation=file://{{ monitoring.node_exporter.textfile_dir }}

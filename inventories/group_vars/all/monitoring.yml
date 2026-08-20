@@ -33,11 +33,18 @@ monitoring:
   # Textfile collectors: fail2ban's jail counters (failed SSH logins
   # among them) and the packet filter's own per-rule counters.
   textfile:
-    interval: 1min
     fail2ban:
       enabled: true
+      interval: 1min
     packetfilter:
       enabled: true
+      interval: 1min
+    # Zone serials, what the delegated nameservers are actually
+    # serving, and DNSSEC signature expiry. A coarse interval because
+    # this is the one collector that queries off-host.
+    nsd:
+      enabled: true
+      interval: 15min
   # Per-service exporters, all on loopback. Ports are the exporters'
   # own defaults; what is wired here is which ones this host runs and
   # the two secrets that come from elsewhere rather than being
@@ -80,6 +87,45 @@ monitoring:
       enabled: true
       port: "{{ spam.http_port }}"
       password: "{{ spam.controller_password }}"
+  # End-to-end probes. Everything else here measures a service from
+  # the inside; this asks whether the name answers, with the right
+  # certificate, from a client's side of the socket. Certificate
+  # expiry comes with it, measured where each certificate is *served*.
+  blackbox:
+    enabled: true
+    listen_address: 127.0.0.1
+    port: 9115
+    config_file: /etc/prometheus/blackbox.yml
+    timeout: 5s
+    web:
+      public:
+        - ""
+        - www
+        - mail
+        - cloud
+      guarded:
+        - spam
+        - f2b
+        - status
+    mail:
+      host: "mail.{{ domain }}"
+      starttls_ports:
+        - 25
+        - 587
+      imaps_ports:
+        - 993
+    dns:
+      authoritative:
+        enabled: true
+        # NSD binds the public addresses; unbound has loopback.
+        server: "{{ ip_v4 }}:53"
+        # Taken from the nsd role's own zone list rather than a second
+        # copy, the same wiring the mysqld and rspamd exporters use.
+        zones: "{{ nsd.zones | map(attribute='name') | list }}"
+      recursive:
+        enabled: true
+        server: 127.0.0.1:53
+        query_name: one.one.one.one
   alertmanager:
     listen_address: 127.0.0.1
     port: 9093
@@ -132,6 +178,12 @@ monitoring:
     services:
       deferred_queue: 50
       auth_failures_per_minute: 30
+    zones:
+      propagation_for: 1h
+    probes:
+      cert_expiry_warning_days: 14
+      cert_expiry_critical_days: 5
+      cert_skew_hours: 24
     disk:
       warning_percent: 10
       critical_percent: 5

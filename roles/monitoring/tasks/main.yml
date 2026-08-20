@@ -229,6 +229,50 @@
   loop_control:
     label: "{{ item.name }}"
 
+- name: Install the blackbox exporter
+  # Packaged on both 24.04 and 26.04, so it follows this role's
+  # install-from-the-archive stance rather than Prometheus's tarball
+  # exception - that one exists only because the archive ships no
+  # modern web UI, which does not apply here.
+  ansible.builtin.apt:
+    install_recommends: false
+    name: prometheus-blackbox-exporter
+  when: monitoring.blackbox.enabled
+
+- name: Configure the blackbox exporter modules
+  # Validated before it is installed, the same stance as promtool on
+  # the rules and nginx -t on a vhost: the exporter reloads on SIGHUP
+  # and keeps serving its old configuration if the new one is bad, so
+  # without this the run would go green with the modules not loaded.
+  ansible.builtin.template:
+    src: templates/blackbox.yml.j2
+    dest: "{{ monitoring.blackbox.config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: prometheus-blackbox-exporter --config.check --config.file %s
+  when: monitoring.blackbox.enabled
+  notify:
+    - Reload blackbox exporter
+
+- name: Configure the blackbox exporter service arguments
+  ansible.builtin.template:
+    src: templates/default/prometheus-blackbox-exporter.j2
+    dest: /etc/default/prometheus-blackbox-exporter
+    owner: root
+    group: root
+    mode: "0644"
+  when: monitoring.blackbox.enabled
+  notify:
+    - Restart blackbox exporter
+
+- name: Enable the blackbox exporter
+  ansible.builtin.systemd_service:
+    name: prometheus-blackbox-exporter
+    state: started
+    enabled: true
+  when: monitoring.blackbox.enabled
+
 - name: Create the rules directory
   ansible.builtin.file:
     path: "{{ monitoring.prometheus.rules_dir }}"
@@ -275,6 +319,7 @@
     label: "{{ item.0.name }}.{{ item.1 }}"
   vars:
     collector: "{{ item.0.name }}"
+    collector_interval: "{{ item.0.interval }}"
   notify:
     - Reload systemd
 
@@ -314,10 +359,35 @@
     group: root
     mode: "0644"
     validate: promtool check rules %s
-  loop:
-    - node
-    - monitoring
-    - services
+  loop: >-
+    {{ ['node', 'monitoring', 'services']
+       + (['probes'] if monitoring.blackbox.enabled else [])
+       + (['zones'] if monitoring.textfile.nsd.enabled else []) }}
+  notify:
+    - Reload prometheus
+
+- name: Remove the zone rules on a host with no nsd collector
+  # Same reasoning as the probe rules below: rule_files is a glob, so
+  # a file left behind by a run that had the collector enabled goes on
+  # being evaluated against metrics that no longer arrive.
+  ansible.builtin.file:
+    path: "{{ monitoring.prometheus.rules_dir }}/zones.rules.yml"
+    state: absent
+  when: not monitoring.textfile.nsd.enabled
+  notify:
+    - Reload prometheus
+
+- name: Remove the probe rules on a host with no blackbox exporter
+  # rule_files is a glob, so a file left behind by a run that had the
+  # exporter enabled would go on being evaluated against metrics that
+  # no longer arrive. Harmless in effect - the alerts simply cannot
+  # fire - but a rule that is silently incapable of firing is the one
+  # failure mode this role's own notes keep warning about, so it is
+  # removed rather than left to be misread later.
+  ansible.builtin.file:
+    path: "{{ monitoring.prometheus.rules_dir }}/probes.rules.yml"
+    state: absent
+  when: not monitoring.blackbox.enabled
   notify:
     - Reload prometheus
 

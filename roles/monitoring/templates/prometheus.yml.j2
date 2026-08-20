@@ -127,3 +127,125 @@ scrape_configs:
       - targets:
           - {{ e.listen_address }}:{{ e.rspamd.port }}
 {% endif %}
+{% if monitoring.blackbox.enabled %}
+{% set b = monitoring.blackbox %}
+{#
+  The probed web names are the cross product of the configured
+  subdomains and http.domains, exactly as roles/http builds
+  server_name - so a domain added there is probed without touching
+  this role. The empty subdomain is the apex, and the regex_replace is
+  what turns the ".example.com" that joining produces back into
+  "example.com".
+
+  Computed here rather than in the role's vars/main.yml so that the
+  static tests, which render templates from the test inventory alone,
+  exercise the derivation itself rather than a hand-written copy of
+  its result.
+#}
+{% set probe_public = b.web.public | product(http.domains)
+     | map('join', '.') | map('regex_replace', '^\.', '') | list %}
+{% set probe_guarded = b.web.guarded | product(http.domains)
+     | map('join', '.') | map('regex_replace', '^\.', '') | list %}
+{#
+  Every blackbox job needs the same four relabel steps, so they are
+  written once here and used by each job below. The dance is not
+  decoration: the exporter is scraped at ITS address with the real
+  target as a URL parameter, so `targets` has to be moved into
+  `__param_target`, copied to `instance` so the series is labelled by
+  what was probed rather than by the exporter, and `__address__` then
+  replaced with the exporter itself. Miss the last step and Prometheus
+  scrapes the probed host directly.
+#}
+{% macro probe_relabel() %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: {{ b.listen_address }}:{{ b.port }}
+{%- endmacro %}
+
+  # Names that must answer 2xx.
+  - job_name: probe_https
+    metrics_path: /probe
+    params:
+      module: [https_2xx]
+    static_configs:
+      - targets:
+{% for name in probe_public %}
+          - https://{{ name }}/
+{% endfor %}
+{{ probe_relabel() }}
+
+  # Names that must answer 401, i.e. the basic-auth gate is still in
+  # front of them. A 200 here is a finding.
+  - job_name: probe_https_guarded
+    metrics_path: /probe
+    params:
+      module: [https_401]
+    static_configs:
+      - targets:
+{% for name in probe_guarded %}
+          - https://{{ name }}/
+{% endfor %}
+{{ probe_relabel() }}
+
+  # Postfix, reached the way a sending MX and a submitting client
+  # reach it. The STARTTLS handshake is also what measures the
+  # certificate Postfix serves, which is a different question from the
+  # one nginx serves - see probes.rules.yml.
+  - job_name: probe_smtp
+    metrics_path: /probe
+    params:
+      module: [smtp_starttls]
+    static_configs:
+      - targets:
+{% for port in b.mail.starttls_ports %}
+          - {{ b.mail.host }}:{{ port }}
+{% endfor %}
+{{ probe_relabel() }}
+
+  # Dovecot, likewise, and likewise for its own copy of the
+  # certificate.
+  - job_name: probe_imap
+    metrics_path: /probe
+    params:
+      module: [imaps]
+    static_configs:
+      - targets:
+{% for port in b.mail.imaps_ports %}
+          - {{ b.mail.host }}:{{ port }}
+{% endfor %}
+{{ probe_relabel() }}
+{% if b.dns.authoritative.enabled %}
+{% for zone in b.dns.authoritative.zones %}
+
+  # NSD answering authoritatively for {{ zone }}. One job per zone,
+  # because the queried name is a module setting rather than something
+  # the scrape can pass.
+  - job_name: probe_dns_{{ zone | replace('.', '_') | replace('-', '_') }}
+    metrics_path: /probe
+    params:
+      module: [dns_soa_{{ zone | replace('.', '_') | replace('-', '_') }}]
+    static_configs:
+      - targets:
+          - {{ b.dns.authoritative.server }}
+{{ probe_relabel() }}
+{% endfor %}
+{% endif %}
+{% if b.dns.recursive.enabled %}
+
+  # unbound, asked for a name it has to recurse for. RSpamd's resolver
+  # points here, so this failing means SPF, DKIM, DMARC and every RBL
+  # check quietly stop working.
+  - job_name: probe_dns_recursive
+    metrics_path: /probe
+    params:
+      module: [dns_recursive]
+    static_configs:
+      - targets:
+          - {{ b.dns.recursive.server }}
+{{ probe_relabel() }}
+{% endif %}
+{% endif %}

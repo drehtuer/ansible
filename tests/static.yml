@@ -43,8 +43,10 @@
     cloud_push_arch: x86_64
     ip_version: 4
     # roles/monitoring renders a service and a timer per textfile
-    # collector, with the name passed in as `collector`.
+    # collector, with the name and its interval passed in as
+    # `collector` / `collector_interval`.
     collector: fail2ban
+    collector_interval: 1min
     # roles/monitoring renders one EnvironmentFile per enabled
     # exporter, with the entry passed in as `exporter`; supply the
     # first one from the role's own table.

@@ -1,0 +1,94 @@
+{{ ansible_managed | comment }}
+# Alerts over the nsd textfile collector. Each of these is a check
+# roles/nsd already makes at deploy time, made continuous - the point
+# being that between deploys nothing watched any of them, and all
+# three failures are silent: this host answers correctly throughout
+# while the world holds something stale.
+#
+# As elsewhere in this directory, annotations use Prometheus's own Go
+# templating - hence the raw blocks - and none may *begin* with one of
+# those expressions.
+{% set z = monitoring.alerts.zones %}
+groups:
+  - name: zones
+    rules:
+      - alert: NsdDown
+        expr: nsd_up == 0
+        for: 10m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: nsd is not answering its control socket
+          description: >-
+            The authoritative server is down. The delegated
+            nameservers keep answering from their own copies, so the
+            domains stay up - but nothing propagates, and every zone
+            edit from here reaches nobody.
+{% endraw %}
+
+      # The failure that went unnoticed for 21 hours in August 2026,
+      # and the reason this collector exists. A serial that moved here
+      # and never arrived there means a refused transfer, a TSIG key
+      # that stopped matching, or a NOTIFY that never landed. Nothing
+      # about this host looks wrong while it is happening.
+      #
+      # An hour of tolerance because a transfer legitimately takes a
+      # moment, and the collector's own interval is coarse.
+      - alert: NsdZoneNotPropagated
+        expr: >-
+          nsd_zone_secondary_serial
+          != on(zone) group_left() nsd_zone_serial
+        for: {{ z.propagation_for }}
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Zone {{ $labels.zone }} is stale on {{ $labels.server }}
+          description: >-
+            That nameserver is serving serial {{ $value | printf "%.0f" }}
+            while this host serves a different one. Check the transfer
+            ACL, the TSIG key and the NOTIFY list.
+{% endraw %}
+
+      # Distinct from the rule above on purpose: a nameserver that
+      # cannot be reached at all is not the same finding as one
+      # serving the wrong serial, and the collector deliberately emits
+      # no serial in that case rather than a zero that would fire the
+      # other rule for the wrong reason.
+      - alert: NsdSecondaryUnreachable
+        expr: nsd_zone_secondary_up == 0
+        for: {{ z.propagation_for }}
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Nameserver {{ $labels.server }} is not answering
+          description: >-
+            No SOA came back for {{ $labels.zone }} from a server its
+            own NS records delegate to. The zone is still served by the
+            others; this one cannot be checked or updated.
+{% endraw %}
+{% if nsd.dnssec.enabled %}
+
+      # Scheduling a job proves it started and nothing more, which is
+      # the same reasoning behind the Watchdog alert. This reads the
+      # signature actually being served.
+      #
+      # Note the scope: while the zones are signed but no DS exists in
+      # either parent, expiry is inert - resolvers never consult the
+      # RRSIGs. It becomes an outage on the day a DS is published, and
+      # a bogus zone under p=reject DMARC is mail and web at once.
+      - alert: NsdSignaturesExpiringSoon
+        expr: >-
+          (nsd_zone_rrsig_expiry_seconds - time()) / 86400
+          < {{ nsd.dnssec.min_signature_days }}
+        for: 1h
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Signatures for {{ $labels.zone }} expire in {{ $value | printf "%.1f" }} days
+          description: >-
+            The re-signing timer has not run, or has run and failed.
+            Check nsd-resign.timer and its last journal entry. Once a
+            DS is published in the parent, expired signatures make the
+            zone bogus rather than unsigned.
+{% endraw %}
+{% endif %}

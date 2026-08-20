@@ -56,6 +56,21 @@
     state: restarted
     enabled: true
 
+# The module file is re-read on SIGHUP, which the packaged unit
+# defines an ExecReload for; the bind address is a flag and so needs
+# the process to come back. Same split as Prometheus above.
+- name: Reload blackbox exporter
+  ansible.builtin.systemd_service:
+    name: prometheus-blackbox-exporter
+    state: reloaded
+    enabled: true
+
+- name: Restart blackbox exporter
+  ansible.builtin.systemd_service:
+    name: prometheus-blackbox-exporter
+    state: restarted
+    enabled: true
+
 # Grafana reads its provisioning and its admin credential at startup
 # only, so a change to either needs the container to come back rather
 # than merely to keep running.
