@@ -74,10 +74,11 @@ Two checks, both in `tests/static.yml`:
 
 *Argument specs.* Every `roles/*/meta/argument_specs.yml` is validated against the test inventory. This catches a role and its inventory drifting apart, and in particular the trap that has caused the most trouble here: overriding a role's top-level dictionary in `group_vars` *replaces* the role default rather than merging into it, so an override that forgets a single key breaks the role at run time.
 
-*Template rendering.* Every `*.j2` in every role is rendered. This catches Jinja errors and undefined variables without needing a host. Two templates get extra attention, both because a per-item branch is where silent wrong-output bugs have actually lived:
+*Template rendering.* Every `*.j2` in every role is rendered. This catches Jinja errors and undefined variables without needing a host. Three templates get extra attention, each because a conditional branch is where silent wrong-output bugs have actually lived:
 
 * The firewall rules are rendered twice, for IPv4 and IPv6, and the test asserts that the two outputs actually differ — that branch previously compared a string against an integer and silently emitted the IPv4 ruleset into the IPv6 file.
 * The `nsd` zone template is rendered once per entry in `nsd.zones` rather than only for the first, and the test asserts that `tsig.conf` renders as many distinct key names as there are zones. The role used to emit one transfer key for the whole server; one key per zone is what Hetzner's naming scheme forces, and a template regressing to a single shared block would otherwise render perfectly valid config that no secondary could use. The test inventory carries two zones for exactly this reason.
+* The Grafana dashboards are parsed as JSON after rendering, and `roles/monitoring`'s `uptime.json.j2` is rendered a *second* time with the blackbox probes and every service exporter switched off. Its probe and self-report panels are conditional, so the test inventory - which has all of them on - exercises one branch only, and the other is exactly where a stray comma would sit. What that catches is quiet by nature: Grafana logs a malformed dashboard and carries on without it, so a broken file is a missing page rather than a failed run. The role validates the same thing with `validate:` at deploy time; this is the check moved to where it costs nothing and needs no host.
 
 These tests are quick and need no container, which is why CI runs them before anything else.
 

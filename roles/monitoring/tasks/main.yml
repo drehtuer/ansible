@@ -555,6 +555,7 @@
       loop:
         - host
         - security
+        - uptime
       notify:
         - Restart grafana
 
