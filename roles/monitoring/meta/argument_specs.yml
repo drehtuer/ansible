@@ -286,6 +286,140 @@ argument_specs:
                     type: str
                     required: true
                     description: Controller password.
+          blackbox:
+            type: dict
+            required: true
+            description:
+              - End-to-end probes via the packaged blackbox exporter.
+                The only part of this role that measures a service from
+                a client's side of the socket rather than from inside
+                the host, and the source of certificate expiry as
+                actually served.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether this host runs it.
+              listen_address:
+                type: str
+                required: true
+                description: Address the exporter binds. Loopback.
+              port:
+                type: int
+                required: true
+                description: Port the exporter binds.
+              config_file:
+                type: str
+                required: true
+                description: Module definitions, written by this role.
+              timeout:
+                type: str
+                required: true
+                description: Per-probe timeout, inside the scrape interval.
+              web:
+                type: dict
+                required: true
+                description:
+                  - Subdomains to probe over HTTPS, each crossed with
+                    http.domains exactly as roles/http builds
+                    server_name.
+                options:
+                  public:
+                    type: list
+                    elements: str
+                    required: true
+                    description:
+                      - Names expected to answer 2xx. The empty string
+                        is the apex.
+                  guarded:
+                    type: list
+                    elements: str
+                    required: true
+                    description:
+                      - Names behind the shared basic-auth credential,
+                        expected to answer 401. Expecting 401 rather
+                        than accepting 200-or-401 is what makes a
+                        missing gate visible.
+              mail:
+                type: dict
+                required: true
+                description:
+                  - Postfix and Dovecot, probed on the name the
+                    certificate is served under. One of each answers for
+                    every domain, so probing per domain would repeat
+                    itself.
+                options:
+                  host:
+                    type: str
+                    required: true
+                    description: Name to connect to.
+                  starttls_ports:
+                    type: list
+                    elements: int
+                    required: true
+                    description:
+                      - Ports reaching TLS through STARTTLS, i.e. the MX
+                        and submission.
+                  imaps_ports:
+                    type: list
+                    elements: int
+                    required: true
+                    description: Ports serving TLS from the first byte.
+              dns:
+                type: dict
+                required: true
+                description: The two DNS servers this host runs.
+                options:
+                  authoritative:
+                    type: dict
+                    required: true
+                    description:
+                      - NSD, on the public address. A failure does not
+                        take a zone down - the secondaries answer from
+                        their own copies - but it stops every change
+                        propagating.
+                    options:
+                      enabled:
+                        type: bool
+                        required: true
+                        description: Whether to probe it.
+                      server:
+                        type: str
+                        required: true
+                        description:
+                          - Address and port NSD binds. Not loopback, which is
+                            unbound's.
+                      zones:
+                        type: list
+                        elements: str
+                        required: true
+                        description:
+                          - Zones to ask for a SOA, wired from
+                            nsd.zones rather than repeated. One probe
+                            module per zone, since the queried name is a
+                            module setting.
+                  recursive:
+                    type: dict
+                    required: true
+                    description:
+                      - unbound, on loopback. RSpamd's resolver points
+                        here, so a break turns off every SPF, DKIM,
+                        DMARC and RBL check silently.
+                    options:
+                      enabled:
+                        type: bool
+                        required: true
+                        description: Whether to probe it.
+                      server:
+                        type: str
+                        required: true
+                        description: Address and port to query.
+                      query_name:
+                        type: str
+                        required: true
+                        description:
+                          - A name outside every zone this host holds,
+                            so only recursion can answer it.
           alertmanager:
             type: dict
             required: true
@@ -470,6 +604,29 @@ argument_specs:
             required: true
             description: Thresholds the rules are rendered from.
             options:
+              probes:
+                type: dict
+                required: true
+                description: Thresholds for the blackbox probe alerts.
+                options:
+                  cert_expiry_warning_days:
+                    type: int
+                    required: true
+                    description:
+                      - Days of certificate life left before warning.
+                        Certbot renews at 30, so this firing means
+                        renewal has already been failing.
+                  cert_expiry_critical_days:
+                    type: int
+                    required: true
+                    description: Days left before it is critical.
+                  cert_skew_hours:
+                    type: int
+                    required: true
+                    description:
+                      - How far the certificates served by nginx,
+                        Postfix and Dovecot may drift apart. They read
+                        one lineage, so a gap means a reload was missed.
               disk:
                 type: dict
                 required: true

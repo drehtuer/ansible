@@ -1,0 +1,151 @@
+{{ ansible_managed | comment }}
+# Replaces the file shipped by the prometheus-blackbox-exporter
+# package, which is a dpkg conffile holding examples only - pop3,
+# grpc, irc, ssh banners, icmp. Nothing set by the distribution is
+# lost by owning the whole file, the same reasoning that made
+# prometheus.yml safe to take over.
+#
+# Every module here probes a service the way a client reaches it,
+# which is the whole point of this exporter: everything else in this
+# role measures a service from the inside - a process that is running,
+# a counter that moves - and none of that says the name answers.
+#
+# What it deliberately does NOT prove is reachability from the
+# internet. The probes run on this host and the names resolve to this
+# host, so the packet goes out and comes back over `lo` and never
+# meets the internet-facing path. A firewall rule that dropped 443
+# would not show here. This measures nginx's name routing, the
+# certificate actually served for each name, and the application's
+# answer - not the route to it.
+{% set b = monitoring.blackbox %}
+modules:
+  # Names that should answer 200. Redirects are followed, so a vhost
+  # that 302s to its own login page still counts as up.
+  https_2xx:
+    prober: http
+    timeout: {{ b.timeout }}
+    http:
+      # This host has both families and the probe would otherwise pick
+      # per resolver order, which makes a failure ambiguous about
+      # which address it tried.
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      valid_status_codes: []
+      follow_redirects: true
+      fail_if_not_ssl: true
+
+  # Names behind the shared basic-auth credential. Expecting *401*
+  # rather than accepting 200-or-401 is the stronger check by some
+  # way: a module that allowed both could not tell a working gate from
+  # one that had disappeared, and an unguarded Grafana or RSpamd
+  # controller answering 200 is exactly the failure worth catching.
+  https_401:
+    prober: http
+    timeout: {{ b.timeout }}
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      valid_status_codes:
+        - 401
+      # A 401 carries no redirect, and following one would mean the
+      # gate had let the request through.
+      follow_redirects: false
+      fail_if_not_ssl: true
+
+  # SMTP on 25 and submission on 587, both of which reach TLS through
+  # STARTTLS rather than serving it from the first byte. The handshake
+  # is what populates probe_ssl_earliest_cert_expiry, so this is also
+  # how the certificate Postfix serves is measured - separately from
+  # the one nginx serves, which is the point. See the rules file.
+  smtp_starttls:
+    prober: tcp
+    timeout: {{ b.timeout }}
+    tcp:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      query_response:
+        - expect: "^220 "
+        - send: "EHLO prometheus-blackbox"
+        - expect: "^250-STARTTLS"
+        - send: "STARTTLS"
+        - expect: "^220 "
+        - starttls: true
+        - send: "EHLO prometheus-blackbox"
+        - expect: "^250 "
+        - send: "QUIT"
+
+  # IMAP on 993, which is TLS from the first byte rather than
+  # negotiated, so there is no STARTTLS step and the banner arrives
+  # already encrypted.
+  imaps:
+    prober: tcp
+    timeout: {{ b.timeout }}
+    tcp:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      tls: true
+      query_response:
+        - expect: "^\\* OK"
+        - send: "a1 LOGOUT"
+{% if b.dns.authoritative.enabled %}
+{% for zone in b.dns.authoritative.zones %}
+
+  # NSD answering authoritatively for {{ zone }} on the public address.
+  # One module per zone rather than one shared: query_name is a module
+  # setting and the scrape can only pass `target` and `module`, so a
+  # zone cannot be varied per target.
+  #
+  # Requiring the SOA in the *answer* section is what separates "the
+  # server answered" from "the server answered for this zone". NSD
+  # answers REFUSED with an empty answer section for a zone it does
+  # not hold, which passes neither check. Note that blackbox's DNS
+  # prober offers no way to assert the AA flag itself, so this is the
+  # available approximation rather than a direct test of authority.
+  #
+  # RD off, as `dig +norecurse` is in roles/nsd for the same query:
+  # this server has no recursion to ask for, and setting it would
+  # merely be a flag NSD ignores.
+  dns_soa_{{ zone | replace('.', '_') | replace('-', '_') }}:
+    prober: dns
+    timeout: {{ b.timeout }}
+    dns:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      query_name: {{ zone }}
+      query_type: SOA
+      recursion_desired: false
+      valid_rcodes:
+        - NOERROR
+      validate_answer_rrs:
+        fail_if_not_matches_regexp:
+          - "{{ zone }}\\.\\s+\\d+\\s+IN\\s+SOA\\s+"
+{% endfor %}
+{% endif %}
+{% if b.dns.recursive.enabled %}
+
+  # unbound on loopback, asked for a name it must recurse for. This is
+  # the check roles/dns cannot make of itself: unbound answering its
+  # control socket says the process is alive, not that recursion
+  # works - and RSpamd points its resolver here, so every DNS-based
+  # check it makes returns nothing at all when this breaks, silently
+  # and without an error in any log.
+  dns_recursive:
+    prober: dns
+    timeout: {{ b.timeout }}
+    dns:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      query_name: {{ b.dns.recursive.query_name }}
+      query_type: A
+      recursion_desired: true
+      # An address in the answer section, not merely NOERROR. unbound
+      # returns NOERROR with an empty answer for several states that
+      # are not "recursion works" - a NODATA upstream, or a name that
+      # exists with no A record - so the rcode alone would let a
+      # resolver that had stopped resolving look healthy.
+      validate_answer_rrs:
+        fail_if_not_matches_regexp:
+          - "\\s+IN\\s+A\\s+"
+      valid_rcodes:
+        - NOERROR
+{% endif %}

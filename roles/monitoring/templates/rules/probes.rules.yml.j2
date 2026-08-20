@@ -1,0 +1,100 @@
+{{ ansible_managed | comment }}
+# Alerts over the blackbox probes. These are the only rules in this
+# role that speak for a client rather than for the host: everything in
+# services.rules.yml asks a process how it feels, and a process can
+# feel fine while the name in front of it answers nothing.
+#
+# As in services.rules.yml, annotations use Prometheus's own Go
+# templating - hence the raw blocks - and no annotation may *begin*
+# with one of those expressions, since a YAML value opening with a
+# brace parses as a flow mapping and promtool then reports the error a
+# dozen lines further down.
+{% set p = monitoring.alerts.probes %}
+groups:
+  - name: probes
+    rules:
+      # The probe itself failed: connection refused, timeout, TLS
+      # handshake rejected, or a status code the module does not
+      # accept. Deliberately one rule over every probe rather than one
+      # per service - the instance label already says which, and a
+      # rule per target is a rule per target to forget to add.
+      - alert: ProbeFailing
+        expr: probe_success == 0
+        for: 5m
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Probe of {{ $labels.instance }} is failing
+          description: >-
+            {{ $labels.instance }} did not answer as expected for five
+            minutes, on job {{ $labels.job }}. This is the view from a
+            client, so it fires for a service that is running but
+            unreachable, or answering wrongly.
+{% endraw %}
+
+      # Certificate expiry, measured on what each service actually
+      # serves rather than on the file in /etc/letsencrypt. That is
+      # the whole reason this is worth having: certbot renewing is not
+      # the same event as nginx, Postfix and Dovecot picking the
+      # renewal up, and only one of those is visible from the disk.
+      #
+      # Certbot renews at 30 days remaining, so reaching the warning
+      # threshold means renewal has already been failing for a
+      # fortnight.
+      - alert: CertificateExpiringSoon
+        expr: >-
+          (probe_ssl_earliest_cert_expiry - time()) / 86400
+          < {{ p.cert_expiry_warning_days }}
+        for: 1h
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Certificate for {{ $labels.instance }} expires in {{ $value | printf "%.1f" }} days
+          description: >-
+            Certbot renews at 30 days remaining, so this means renewal
+            has not happened or has not reached this service. Check
+            `certbot certificates` and the deploy hook.
+{% endraw %}
+
+      - alert: CertificateExpiringCritical
+        expr: >-
+          (probe_ssl_earliest_cert_expiry - time()) / 86400
+          < {{ p.cert_expiry_critical_days }}
+        for: 1h
+        labels:
+          severity: critical
+{% raw %}        annotations:
+          summary: Certificate for {{ $labels.instance }} expires in {{ $value | printf "%.1f" }} days
+          description: >-
+            Nearly out of road. When this expires, browsers refuse the
+            site and sending MXs refuse STARTTLS.
+{% endraw %}
+
+      # The rule this whole exporter earns its place with, and the one
+      # no check against the filesystem could make.
+      #
+      # nginx, Postfix and Dovecot all serve the SAME certificate
+      # lineage - roles/mail and roles/imap read
+      # /etc/letsencrypt/live/<cert_name>/, which roles/http pins. So
+      # the expiry they serve must agree. It stops agreeing when
+      # certbot renews and the deploy hook fails to reload one of
+      # them: that service goes on serving the old certificate, from
+      # memory, with the new one sitting on disk beside it. Nothing
+      # else here would notice until the old one expired.
+      - alert: ServedCertificatesDisagree
+        expr: >-
+          (max(probe_ssl_earliest_cert_expiry)
+           - min(probe_ssl_earliest_cert_expiry)) / 3600
+          > {{ p.cert_skew_hours }}
+        for: 1h
+        labels:
+          severity: warning
+{% raw %}        annotations:
+          summary: Services are serving different certificates
+          description: >-
+            The earliest expiry differs by {{ $value | printf "%.1f" }}
+            hours across the probed services, which all read one
+            lineage. Certbot has renewed and at least one of nginx,
+            Postfix or Dovecot has not reloaded. Check the deploy hook
+            in roles/http.
+{% endraw %}

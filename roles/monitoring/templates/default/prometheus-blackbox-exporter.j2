@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+#
+# Read by the packaged unit, which is why a change here is a restart
+# rather than a reload: flags are parsed once at startup. The config
+# file itself is reloaded on SIGHUP.
+#
+# The packaged ARGS names only --config.file, so the exporter would
+# otherwise bind :9115 on every interface - the same packaged default
+# Prometheus and Alertmanager have, and the same reason this role owns
+# the binding rather than inheriting it.
+ARGS="--config.file {{ monitoring.blackbox.config_file }} --web.listen-address={{ monitoring.blackbox.listen_address }}:{{ monitoring.blackbox.port }}"
