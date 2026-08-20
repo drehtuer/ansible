@@ -18,7 +18,7 @@
 {% set ds = '{"type": "prometheus", "uid": "' ~ monitoring.grafana.datasource_uid ~ '"}' %}
 {
   "uid": "security-overview",
-  "title": "Logins, firewall and mail rejections",
+  "title": "Logins, firewall and mail",
   "tags": ["ansible"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -68,7 +68,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Packets dropped and rejected per second",
-      "description": "Terminal rules only, so a packet is counted once where it is disposed of. DROP is silent, REJECT answers - both are traffic this host refused. fail2ban's bans are not in here: its nftables rules carry no counter.",
+      "description": "Terminal rules only, so a packet is counted once where it is disposed of. DROP is silent, REJECT answers - both are traffic this host refused. The policy series is filtered to the policies that refuse, because OUTPUT's policy is ACCEPT and is the whole of this host's outbound traffic - it is on the accepted panel below, and summing it in here buried two packets per second of real refusals under eighty of ordinary traffic. Note the DROP policies are structurally zero: INPUT ends in explicit REJECT rules, so nothing ever reaches its policy. fail2ban's bans are not in here either: its nftables rules carry no counter.",
       "datasource": {{ ds }},
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 9},
       "fieldConfig": {"defaults": {"unit": "pps", "min": 0}, "overrides": []},
@@ -82,8 +82,8 @@
         {
           "refId": "B",
           "datasource": {{ ds }},
-          "expr": "sum by (family, chain) (rate(firewall_policy_packets_total[15m]))",
-{% raw %}          "legendFormat": "{{family}} {{chain}} policy"
+          "expr": "sum by (family, chain, policy) (rate(firewall_policy_packets_total{policy!=\"ACCEPT\"}[15m]))",
+{% raw %}          "legendFormat": "{{family}} {{chain}} policy {{policy}}"
 {% endraw %}        }
       ]
     },
@@ -114,6 +114,29 @@
           "expr": "rate(postfix_smtpd_sasl_authentication_failures_total[15m]) * 60",
           "legendFormat": "smtp auth failures"
         }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Packets accepted per second",
+      "description": "The other half of the panel to its left, kept apart from it because the two differ by a factor of forty and one graph cannot show both. Read the chains rather than the total: INPUT ACCEPT is dominated by the established/related rule and so tracks inbound traffic generally, while the TCP and UDP chains count only conntrack NEW - connections opened, which is the number that says whether this host is busy or merely talkative. OUTPUT is the policy counter, not a rule: the chain has no rules at all, so it is every packet this host sends.",
+      "datasource": {{ ds }},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 18},
+      "fieldConfig": {"defaults": {"unit": "pps", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {{ ds }},
+          "expr": "sum by (family, chain, target) (rate(firewall_rule_packets_total{target=\"ACCEPT\"}[15m]))",
+{% raw %}          "legendFormat": "{{family}} {{chain}} accept"
+{% endraw %}        },
+        {
+          "refId": "B",
+          "datasource": {{ ds }},
+          "expr": "sum by (family, chain, policy) (rate(firewall_policy_packets_total{policy=\"ACCEPT\"}[15m]))",
+{% raw %}          "legendFormat": "{{family}} {{chain}} policy {{policy}}"
+{% endraw %}        }
       ]
     }
   ]
