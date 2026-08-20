@@ -4,7 +4,7 @@ FROM  ubuntu:26.04
 
 LABEL name="Ansible controller" \
     description="Control node running Ubuntu 26.04" \
-    version="1.11"
+    version="1.12"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 ARG   ARG_USER
@@ -199,6 +199,50 @@ RUN   \
     "molecule==${MOLECULE_VERSION}" \
     "molecule-plugins[docker]==${MOLECULE_PLUGINS_VERSION}" \
     && ln -s /opt/molecule/bin/molecule /usr/local/bin/molecule
+
+# The Claude Code CLI, so `claude` works in a container
+# terminal and not just through the VS Code extension
+# listed in devcontainer.json. Pinned like every other
+# tool here, and bumped by editing this line.
+ARG   CLAUDE_CODE_VERSION=2.1.228
+
+RUN   \
+    # Anthropic's install.sh is deliberately not used: it
+    # installs under $HOME/.claude, which devcontainer.json
+    # bind-mounts from the host, so anything written there at
+    # build time is shadowed the moment the container starts.
+    # The released binary is self-contained, so fetch the
+    # pinned build straight from the release channel and drop
+    # it on PATH system-wide instead. `claude update` cannot
+    # replace a root-owned binary - rebuild the image to move
+    # to a newer version.
+    #
+    # The download path names architectures x64/arm64, which
+    # is what dpkg's amd64/arm64 maps onto with the one
+    # substitution below.
+    arch="$(dpkg --print-architecture | sed 's/amd64/x64/')" \
+    && base="https://downloads.claude.ai/claude-code-releases/${CLAUDE_CODE_VERSION}" \
+    && curl \
+    --location \
+    --fail \
+    --silent \
+    --show-error \
+    "${base}/linux-${arch}/claude" \
+    -o /usr/local/bin/claude \
+    # The per-release manifest carries the SHA256 for each
+    # platform; check the download against it rather than
+    # pinning a hash here that would have to be updated in
+    # lockstep with the version above.
+    && curl \
+    --location \
+    --fail \
+    --silent \
+    --show-error \
+    "${base}/manifest.json" \
+    | python3 -c \
+    "import json,sys;print(json.load(sys.stdin)['platforms']['linux-${arch}']['checksum'] + '  /usr/local/bin/claude')" \
+    | sha256sum --check - \
+    && chmod 755 /usr/local/bin/claude
 
 COPY \
     --chmod=644 \
