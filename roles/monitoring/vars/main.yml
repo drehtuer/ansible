@@ -49,8 +49,17 @@ monitoring_exporters:
 
 # The textfile collectors, in one table for the same reason as the
 # exporters above.
+# Each carries its own interval because they are not alike: two read
+# local state and cost nothing, while `nsd` queries the delegated
+# nameservers over the internet and has no business doing so every
+# minute.
 monitoring_collectors:
   - name: fail2ban
     enabled: "{{ monitoring.textfile.fail2ban.enabled }}"
+    interval: "{{ monitoring.textfile.fail2ban.interval }}"
   - name: packetfilter
     enabled: "{{ monitoring.textfile.packetfilter.enabled }}"
+    interval: "{{ monitoring.textfile.packetfilter.interval }}"
+  - name: nsd
+    enabled: "{{ monitoring.textfile.nsd.enabled }}"
+    interval: "{{ monitoring.textfile.nsd.interval }}"

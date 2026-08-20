@@ -118,10 +118,6 @@ argument_specs:
                 for what nothing exports. Both run as root from a timer,
                 since both read something an unprivileged process cannot.
             options:
-              interval:
-                type: str
-                required: true
-                description: How often each collector runs.
               fail2ban:
                 type: dict
                 required: true
@@ -133,6 +129,10 @@ argument_specs:
                     type: bool
                     required: true
                     description: Whether to run it.
+                  interval:
+                    type: str
+                    required: true
+                    description: How often it runs.
               packetfilter:
                 type: dict
                 required: true
@@ -144,6 +144,32 @@ argument_specs:
                     type: bool
                     required: true
                     description: Whether to run it.
+                  interval:
+                    type: str
+                    required: true
+                    description: How often it runs.
+              nsd:
+                type: dict
+                required: true
+                description:
+                  - Zone serials, the serials the delegated nameservers
+                    are actually serving, and DNSSEC signature expiry.
+                    The checks roles/nsd makes at deploy time, made
+                    continuous - between deploys nothing watched them,
+                    and each failure is silent because this host goes on
+                    answering correctly.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description: Whether to run it.
+                  interval:
+                    type: str
+                    required: true
+                    description:
+                      - How often it runs. Coarser than the others,
+                        because this is the one collector that queries
+                        off-host.
           exporters:
             type: dict
             required: true
@@ -604,6 +630,18 @@ argument_specs:
             required: true
             description: Thresholds the rules are rendered from.
             options:
+              zones:
+                type: dict
+                required: true
+                description: Thresholds for the nsd zone alerts.
+                options:
+                  propagation_for:
+                    type: str
+                    required: true
+                    description:
+                      - How long a delegated nameserver may disagree
+                        with this host before it counts as a failed
+                        transfer rather than one still in flight.
               probes:
                 type: dict
                 required: true

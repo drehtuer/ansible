@@ -25,11 +25,18 @@ monitoring:
   # Textfile collectors: fail2ban's jail counters (failed SSH logins
   # among them) and the packet filter's own per-rule counters.
   textfile:
-    interval: 1min
     fail2ban:
       enabled: true
+      interval: 1min
     packetfilter:
       enabled: true
+      interval: 1min
+    # Zone serials, what the delegated nameservers are actually
+    # serving, and DNSSEC signature expiry. A coarse interval because
+    # this is the one collector that queries off-host.
+    nsd:
+      enabled: true
+      interval: 15min
   # Per-service exporters, all on loopback. Ports are the exporters'
   # own defaults; what is wired here is which ones this host runs and
   # the two secrets that come from elsewhere rather than being
@@ -153,6 +160,8 @@ monitoring:
     services:
       deferred_queue: 50
       auth_failures_per_minute: 30
+    zones:
+      propagation_for: 1h
     probes:
       cert_expiry_warning_days: 14
       cert_expiry_critical_days: 5

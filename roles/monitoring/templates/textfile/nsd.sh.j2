@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Makes the checks roles/nsd already runs at deploy time continuous.
+# That role reads the live serial, compares it against the inventory,
+# asks every delegated nameserver whether it has caught up, and reads
+# the RRSIG expiry off the SOA - but only while a playbook is running.
+# Between deploys nothing watches any of it, and all three failures
+# are silent by construction: this host keeps answering correctly
+# while the world holds something stale.
+#
+# The zone list, the addresses and the thresholds are rendered in from
+# the inventory, so this script takes no arguments and needs no
+# configuration of its own.
+set -euo pipefail
+
+OUT="{{ monitoring.node_exporter.textfile_dir }}/nsd.prom"
+TMP="$(mktemp "${OUT}.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+
+emit() { printf '%s\n' "$*" >> "$TMP"; }
+
+finish() {
+  chmod 0644 "$TMP"
+  mv "$TMP" "$OUT"
+  trap - EXIT
+  exit 0
+}
+
+emit "# HELP nsd_up Whether nsd answered its control socket."
+emit "# TYPE nsd_up gauge"
+
+if ! nsd-control status >/dev/null 2>&1; then
+  emit "nsd_up 0"
+  finish
+fi
+emit "nsd_up 1"
+
+emit "# HELP nsd_zone_serial Serial this host is currently serving."
+emit "# TYPE nsd_zone_serial gauge"
+emit "# HELP nsd_zone_secondary_up Whether a delegated nameserver answered."
+emit "# TYPE nsd_zone_secondary_up gauge"
+emit "# HELP nsd_zone_secondary_serial Serial a delegated nameserver is serving."
+emit "# TYPE nsd_zone_secondary_serial gauge"
+{% if nsd.dnssec.enabled %}
+emit "# HELP nsd_zone_rrsig_expiry_seconds Unix time the SOA's signature expires."
+emit "# TYPE nsd_zone_rrsig_expiry_seconds gauge"
+{% endif %}
+
+# The serial is the third field of the SOA rdata - mname rname serial
+# refresh retry expire minimum - not the last, which is the trap
+# roles/nsd's own comment records.
+serial_of() {
+  local answer
+  answer="$(dig +short +time=3 +tries=1 "${2:+@$2}" SOA "$1" 2>/dev/null || true)"
+  awk 'NF >= 7 { print $3; exit }' <<<"$answer"
+}
+{% for zone in nsd.zones | map(attribute='name') %}
+
+# ---- {{ zone }} ----------------------------------------------------
+# Asked of this host on the address NSD binds, since what the
+# secondaries compare against is what it actually answers with rather
+# than what is in the zone file.
+local_serial="$(serial_of '{{ zone }}' '{{ nsd.listen[0] }}')"
+if [ -n "${local_serial}" ]; then
+  emit "nsd_zone_serial{zone=\"{{ zone }}\"} ${local_serial}"
+fi
+{% if nsd.dnssec.enabled %}
+
+# Field 9 of the RRSIG rdata is the expiry, as YYYYMMDDHHMMSS. Read
+# from the signature actually being served rather than from the key
+# files, because a re-signing timer that has quietly stopped leaves
+# valid keys on disk and expiring signatures in the answer - and once
+# a DS exists in the parent, expired signatures take the domain off
+# the internet rather than merely unsigning it.
+rrsig="$(dig +dnssec +noall +answer +time=3 +tries=1 \
+         SOA '{{ zone }}' @'{{ nsd.listen[0] }}' 2>/dev/null \
+         | awk '/[[:space:]]RRSIG[[:space:]]/ { print $9; exit }' || true)"
+if [ -n "${rrsig}" ]; then
+  when="${rrsig:0:8} ${rrsig:8:2}:${rrsig:10:2}:${rrsig:12:2}"
+  if expiry="$(date -u -d "${when}" +%s 2>/dev/null)"; then
+    emit "nsd_zone_rrsig_expiry_seconds{zone=\"{{ zone }}\"} ${expiry}"
+  fi
+fi
+{% endif %}
+{% for ns in (nsd.zones | selectattr('name', 'equalto', zone) | first).nameservers %}
+
+# Asked of the nameservers in the zone's own NS records - the servers
+# the world actually queries - rather than of the transfer ACL, which
+# can perfectly well permit a host nobody is delegated to.
+ns_serial="$(serial_of '{{ zone }}' '{{ ns }}')"
+if [ -n "${ns_serial}" ]; then
+  emit "nsd_zone_secondary_up{zone=\"{{ zone }}\",server=\"{{ ns }}\"} 1"
+  emit "nsd_zone_secondary_serial{zone=\"{{ zone }}\",server=\"{{ ns }}\"} ${ns_serial}"
+else
+  # No serial emitted at all for a server that did not answer. A zero
+  # would read as a serial far behind this host's and fire the
+  # propagation alert, which is a different fault from the one that
+  # actually happened.
+  emit "nsd_zone_secondary_up{zone=\"{{ zone }}\",server=\"{{ ns }}\"} 0"
+fi
+{% endfor %}
+{% endfor %}
+
+finish

@@ -57,16 +57,33 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # Owned entirely by this role, unlike the file above.
     rules_dir: /etc/prometheus/rules
   # Collectors that write into node_exporter's textfile directory,
-  # for things nothing exports: fail2ban's jail counters, and the
-  # packet filter's own per-rule counters. Both read something an
-  # unprivileged process cannot, so both run from a timer as root
-  # rather than being scraped directly.
+  # for things nothing exports: fail2ban's jail counters, the packet
+  # filter's own per-rule counters, and nsd's zone serials and
+  # signature expiry. Each reads something an unprivileged process
+  # cannot, so all run from a timer as root rather than being scraped
+  # directly. Each carries its own interval - see `nsd` below, which
+  # is the one that leaves the host.
   textfile:
-    interval: 1min
     fail2ban:
       enabled: false
+      interval: 1min
     packetfilter:
       enabled: false
+      interval: 1min
+    # Zone serials, the serials the delegated nameservers are actually
+    # serving, and DNSSEC signature expiry - the checks roles/nsd makes
+    # at deploy time, made continuous. Between deploys nothing watched
+    # any of them, and every one of those failures is silent: this host
+    # goes on answering correctly while the world holds something
+    # stale.
+    #
+    # A far longer interval than the other two, and deliberately: this
+    # one leaves the host to ask Hetzner's nameservers, where the
+    # others read local state. A transfer takes minutes to settle, so
+    # asking every minute would cost traffic to measure nothing new.
+    nsd:
+      enabled: false
+      interval: 15min
   # Per-service exporters. Everything here binds loopback, is scraped
   # over loopback, and is opened in no firewall - the same stance as
   # the servers above.
@@ -302,6 +319,13 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
       # Failed Dovecot authentications per minute, averaged over a
       # quarter of an hour.
       auth_failures_per_minute: 30
+    zones:
+      # How long a delegated nameserver may disagree with this host
+      # before it counts as a failed transfer rather than one still in
+      # flight. A NOTIFY normally settles in seconds, but the
+      # collector's own interval is coarse and a retry after a missed
+      # NOTIFY waits out the zone's refresh.
+      propagation_for: 1h
     probes:
       # Days of certificate life left. Certbot renews at 30 days
       # remaining, so 14 means renewal has already failed for a

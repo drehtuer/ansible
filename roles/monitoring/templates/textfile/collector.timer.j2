@@ -13,7 +13,7 @@ Description=Run the {{ collector }} textfile collector
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec={{ monitoring.textfile.interval }}
+OnUnitActiveSec={{ collector_interval }}
 AccuracySec=10s
 
 [Install]

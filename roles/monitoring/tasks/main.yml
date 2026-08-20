@@ -319,6 +319,7 @@
     label: "{{ item.0.name }}.{{ item.1 }}"
   vars:
     collector: "{{ item.0.name }}"
+    collector_interval: "{{ item.0.interval }}"
   notify:
     - Reload systemd
 
@@ -360,7 +361,19 @@
     validate: promtool check rules %s
   loop: >-
     {{ ['node', 'monitoring', 'services']
-       + (['probes'] if monitoring.blackbox.enabled else []) }}
+       + (['probes'] if monitoring.blackbox.enabled else [])
+       + (['zones'] if monitoring.textfile.nsd.enabled else []) }}
+  notify:
+    - Reload prometheus
+
+- name: Remove the zone rules on a host with no nsd collector
+  # Same reasoning as the probe rules below: rule_files is a glob, so
+  # a file left behind by a run that had the collector enabled goes on
+  # being evaluated against metrics that no longer arrive.
+  ansible.builtin.file:
+    path: "{{ monitoring.prometheus.rules_dir }}/zones.rules.yml"
+    state: absent
+  when: not monitoring.textfile.nsd.enabled
   notify:
     - Reload prometheus
 
