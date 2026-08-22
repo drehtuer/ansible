@@ -540,6 +540,7 @@ Nothing asserts these; they are why an umbrella playbook is wanted (`doc/TODO.ad
 == Documentation
 
 * `README.adoc` — top-level overview, license, environment setup pointer.
+* `doc/BACKUP.adoc` — what is backed up, what deliberately is not, and the restore order. Design only; nothing is implemented yet.
 * `doc/environment-setup.adoc` — Dev Container / VS Code host setup.
 * `doc/STATUS.adoc` — this file.
 * `doc/TESTING.adoc` — what is tested, how to run it, and what is deliberately not covered.
