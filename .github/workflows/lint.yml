@@ -109,8 +109,14 @@ jobs:
       # Keep in step with the asciidoctor apt package in
       # .devcontainer/Dockerfile (Ubuntu 26.04 ships 2.0.26), so CI
       # and a local run check the same things.
+      #
+      # sudo because the runner's system gem directory is root-owned -
+      # a bare `gem install` fails with Gem::FilePermissionError on
+      # /var/lib/gems. Same escalation the apt installs above use, and
+      # it puts the binstub in /usr/local/bin, which is already on
+      # PATH; --user-install would need the gem bindir added to it.
       - name: Install asciidoctor
-        run: gem install --no-document asciidoctor -v 2.0.26
+        run: sudo gem install --no-document asciidoctor -v 2.0.26
 
       # The same single invocation `invoke lint-docs` builds in
       # tasks.py, so CI and a local run check the same things the same
