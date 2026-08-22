@@ -4,7 +4,7 @@ FROM  ubuntu:26.04
 
 LABEL name="Ansible controller" \
     description="Control node running Ubuntu 26.04" \
-    version="1.13"
+    version="1.14"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 ARG   ARG_USER
@@ -284,9 +284,25 @@ RUN \
     # non-root user would never see them). /usr/share/ansible is
     # searched by every ansible-core, including the one inside the
     # molecule virtualenv, which has no collections of its own.
+    #
+    # --force-with-deps, and without it this step silently does
+    # nothing. Ubuntu's `ansible` package bundles ~50 collections into
+    # /usr/lib/python3/dist-packages/ansible_collections, these three
+    # among them, so ansible-galaxy finds them already installed and
+    # prints "Nothing to do. All requested collections are already
+    # installed" - then exits 0, leaving --collections-path empty and
+    # the build green. That is invisible until molecule runs: its
+    # virtualenv cannot see dist-packages, so it fails at the
+    # dependency stage with "Collection 'community.docker' not found".
+    #
+    # `--force` alone is not enough. It reinstalls what was asked for
+    # but not what those depend on, so community.docker lands without
+    # community.library_inventory_filtering_v1 and its modules break
+    # on import. Both were measured here rather than reasoned about.
     && ansible-galaxy \
     collection \
     install \
+    --force-with-deps \
     --requirements-file \
     /ansible-galaxy.yml \
     --collections-path \
