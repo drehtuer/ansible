@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+#
+# Read by `mariadb` and `mariadb-dump` in backup-run through
+# --defaults-extra-file. It exists so the credential never appears on
+# a command line, where `ps` would show it to every user on the host.
+[client]
+user = {{ backup.mysql.login_user }}
+password = {{ backup.mysql.login_password }}

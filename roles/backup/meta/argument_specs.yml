@@ -54,6 +54,31 @@ argument_specs:
                 description:
                   - Where dumps are written, and consequently a path
                     that has to appear in `paths` below.
+              login_user:
+                type: str
+                required: true
+                description:
+                  - Account the dump connects as. Not the unix_socket
+                    pattern roles/monitoring uses for its exporter -
+                    that works because the exporter runs as the
+                    matching system user, and this runs as root so it
+                    can read /home and the DKIM keys.
+              login_password:
+                type: str
+                required: true
+                description:
+                  - Its password, wired from the database role rather
+                    than kept as a second copy. Required because
+                    roles/database gives root@localhost a password,
+                    which turns it from Ubuntu's default unix_socket
+                    into mysql_native_password.
+              defaults_file:
+                type: str
+                required: true
+                description:
+                  - Where that credential is written, 0600. A file
+                    rather than a command-line option, which `ps`
+                    would show to every user on the host.
               skip_databases:
                 type: list
                 elements: str

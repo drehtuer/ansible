@@ -21,6 +21,9 @@ backup:
   mysql:
     enabled: true
     dump_dir: /var/backups/mysql
+    login_user: root
+    login_password: "{{ database.mysql.root.password }}"
+    defaults_file: /etc/restic/mariadb.cnf
     skip_databases:
       - information_schema
       - performance_schema
