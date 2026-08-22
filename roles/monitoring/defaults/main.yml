@@ -310,6 +310,21 @@ monitoring:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # rather than a literal in two files that could drift apart.
     datasource_uid: prometheus
   alerts:
+    # roles/backup writes the metrics these read, and nothing else
+    # does. Enabled by default because the role's defaults have to
+    # satisfy its own argument spec - a host that does not run
+    # roles/backup turns this off in inventory, which is what stops a
+    # rule sitting over a metric no exporter produces.
+    backup:
+      enabled: true
+      # 36h rather than 24 for a daily backup: the timer carries a
+      # randomized delay and Persistent=true catches up after a
+      # reboot, so a day and a half is the first figure that means
+      # something went wrong rather than something ran late.
+      stale_hours: 36
+      # `restic check` is weekly, so this is a missed run plus
+      # margin rather than a tight bound.
+      unverified_days: 10
     # Per-service thresholds. Both are deliberately generous: these
     # exist to catch a state that persists, not to report a busy
     # hour.
