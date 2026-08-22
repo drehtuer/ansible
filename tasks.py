@@ -18,6 +18,7 @@ ANSIBLE_PLAYBOOK_BIN = 'ansible-playbook'
 ANSIBLE_LINT_BIN = 'ansible-lint'
 YAMLLINT_BIN = 'yamllint'
 RUFF_BIN = 'ruff'
+ASCIIDOCTOR_BIN = 'asciidoctor'
 MOLECULE_BIN = 'molecule'
 INVENTORY_DIR = 'inventories'
 INVENTORY = f'{INVENTORY_DIR}/machines.yml'
@@ -35,6 +36,9 @@ PLAYBOOKS_DIR = 'playbooks'
 HOSTS_ALL = 'all'
 LOG_DIR = 'log'
 HOOKS_DIR = '.githooks'
+# Every AsciiDoc page: doc/, README.adoc and
+# .claude/CLAUDE.adoc alike.
+DOCS_GLOB = '*.adoc'
 ASK_PASS = '--ask-pass'
 ASK_BECOME_PASS = '--ask-become-pass'
 VERBOSE = '-vvv'
@@ -187,6 +191,65 @@ def ansible_lint_cmds(
   return [cmd]
 
 
+def doc_files() -> list[str]:
+  """
+  Every AsciiDoc page in the repository, sorted
+  so that a run reports them in a stable order.
+
+  `doc/.attributes-page.adoc` is included rather
+  than skipped for being a fragment: it parses
+  standalone, so there is nothing to leave out
+  and therefore no exclusion list to fall out of
+  date.
+  """
+  return sorted(
+    str(path) for path in Path('.').rglob(DOCS_GLOB) if '.git' not in path.parts
+  )
+
+
+def docs_lint_cmds() -> list[list[str]]:
+  """
+  Commands to check AsciiDoc structure via
+  `asciidoctor`.
+
+  One invocation for every page rather than one
+  per page: asciidoctor reports the faults in
+  all of its inputs before exiting, so a single
+  run already names every broken page - the same
+  property `run_linters` provides for the
+  linters either side of this one.
+
+  There is no `--fix` counterpart, so this takes
+  no flag: nothing here can be repaired
+  automatically.
+  """
+  files = doc_files()
+  if not files:
+    return []
+
+  return [
+    [
+      ASCIIDOCTOR_BIN,
+      # A warning that does not fail is a warning
+      # nobody reads, which is the same stance as
+      # `yamllint --strict` above. It is what
+      # turns a dropped table cell, a missing
+      # include or a skipped section level into a
+      # failure. Note what it does not catch: an
+      # unresolved cross-reference is rendered as
+      # a dead link and reported nowhere - see
+      # .devcontainer/Dockerfile.
+      '--failure-level=WARN',
+      # Rendered only to find faults. Publishing
+      # the pages is separate work, tracked in
+      # doc/TODO.adoc.
+      '--out-file',
+      '/dev/null',
+      *files,
+    ],
+  ]
+
+
 def python_lint_cmds(
   fix: bool,
 ) -> list[list[str]]:
@@ -237,6 +300,16 @@ def lint_python(
 
 
 @task
+def lint_docs(
+  ctx: context,
+) -> None:
+  """
+  Check AsciiDoc structure via `asciidoctor`.
+  """
+  run_linters(ctx, docs_lint_cmds())
+
+
+@task
 def lint(
   ctx: context,
   fix: bool = False,
@@ -246,11 +319,15 @@ def lint(
 
   With `--fix`, apply the fixes the linters
   can make on their own instead of only
-  reporting them.
+  reporting them. `lint-docs` has no such
+  mode and runs unchanged either way.
   """
   run_linters(
     ctx,
-    yaml_lint_cmds() + ansible_lint_cmds(fix) + python_lint_cmds(fix),
+    yaml_lint_cmds()
+    + ansible_lint_cmds(fix)
+    + python_lint_cmds(fix)
+    + docs_lint_cmds(),
   )
 
 

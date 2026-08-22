@@ -4,7 +4,7 @@ FROM  ubuntu:26.04
 
 LABEL name="Ansible controller" \
     description="Control node running Ubuntu 26.04" \
-    version="1.12"
+    version="1.13"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 ARG   ARG_USER
@@ -52,6 +52,31 @@ RUN   \
     # Editor
     neovim \
     luarocks \
+    # Documentation. Every page under doc/ is AsciiDoc, and this one
+    # package is both halves of handling it: it renders the pages (the
+    # `include::.attributes-page.adoc[]` at the top of each already
+    # asks for html5, :data-uri: and a table of contents), and it is
+    # the structural linter for them. `--failure-level=WARN` is what
+    # makes it the latter - a dropped table cell, a missing include or
+    # a section level skipped becomes a non-zero exit instead of a
+    # warning that scrolls past.
+    #
+    # Know what it does NOT catch, measured rather than assumed: an
+    # unresolved cross-reference produces no warning at any failure
+    # level, in either the `<<id>>` or the `xref:id[]` form. It is
+    # rendered as a dead link reading `[id]` and the build succeeds.
+    # The prose-style linters (vale and friends) would not help - they
+    # check writing rather than structure - so this gap is open rather
+    # than covered by something else.
+    #
+    # Unpinned here because Ubuntu 26.04 packages 2.0.26, which is
+    # current enough to have the checks above. That is not true of
+    # every release and the difference is not cosmetic: 24.04 ships
+    # 2.0.20, which is *silent* on the incomplete-table error that was
+    # dropping 44 KB of doc/STATUS.adoc from its own render. That is
+    # why .github/workflows/lint.yml installs a pinned gem rather than
+    # the runner's apt package - see the comment there.
+    asciidoctor \
     # Network
     ca-certificates \
     curl \
