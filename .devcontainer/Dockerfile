@@ -4,7 +4,7 @@ FROM  ubuntu:26.04
 
 LABEL name="Ansible controller" \
     description="Control node running Ubuntu 26.04" \
-    version="1.14"
+    version="1.15"
 
 ARG   DEBIAN_FRONTEND=noninteractive
 ARG   ARG_USER
@@ -47,6 +47,19 @@ RUN   \
     # packaged for Ubuntu 26.04.
     python3-pip \
     python3-venv \
+    # community.docker's modules, which molecule's docker driver uses
+    # to create and destroy test containers, talk to the daemon over
+    # HTTP with `requests` - the collection dropped the docker SDK in
+    # v5. It has to be on the *system* interpreter rather than in
+    # /opt/molecule: the driver runs its create/destroy playbooks
+    # against localhost, where Ansible picks /usr/bin/python3, so a
+    # copy inside molecule's virtualenv is never the one imported.
+    #
+    # Without it every scenario fails at `destroy` with "Failed to
+    # import the required Python library (requests) on dev_host's
+    # Python /usr/bin/python3" - which names the interpreter, and is
+    # the detail that says where to install it.
+    python3-requests \
     # User may become root
     sudo \
     # Editor
