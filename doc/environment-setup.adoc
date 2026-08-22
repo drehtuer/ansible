@@ -55,6 +55,18 @@ It is only needed for `invoke test-molecule`. Everything else, including `invoke
 
 The socket's group ownership depends on the host machine's `docker` GID, which can't be baked into the image, so `devcontainer.json`'s `postStartCommand` runs `.devcontainer/fix-docker-gid.sh` on every container start to add the user to a matching group. That only takes effect in a *new* login shell — a terminal already open when the container started keeps its old group list and gets `permission denied` talking to the socket. The Dockerfile also configures passwordless `sudo` for exactly this gap: `sudo docker ...` / `sudo molecule test` works regardless of session age, so that's the reliable way to invoke anything that touches Docker. `sudo` resets `PATH`, so use `sudo -E env "PATH=$PATH" invoke test-molecule` rather than a bare `sudo invoke test-molecule` (which fails with `invoke: command not found`).
 
+**That `sudo -E` leaves root-owned files behind, and the symptom appears somewhere else entirely.** `-E` keeps `HOME` pointing at your own account, so the run creates `~/.ansible/tmp`, `~/.ansible/galaxy_cache` and their siblings owned by root. Nothing complains at the time; the next `invoke lint` fails instead, with
+
+[source]
+----
+CRITICAL:root:Unhandled exception when retrieving 'DEFAULT_LOCAL_TMP':
+[Errno 13] Permission denied: '/home/<user>/.ansible/tmp/ansible-local-...'
+----
+
+which reads like a broken ansible-lint rather than a permissions leftover. Fix it with `sudo chown -R "$(id -u):$(id -g)" ~/.ansible`.
+
+Avoiding it entirely is better: open a *new* login shell after the container starts and run `invoke test-molecule` without `sudo` at all. The group membership `fix-docker-gid.sh` adds is what makes that work, and it is only ever missing in a terminal that was already open when the container started.
+
 === Tooling not packaged for Ubuntu
 
 Five tools are installed outside `apt` because Ubuntu 26.04 does not package them at all, or not at a usable version, and all five are pinned in `.devcontainer/Dockerfile`:
