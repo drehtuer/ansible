@@ -1,0 +1,292 @@
+= Backup
+include::.attributes-page.adoc[]
+
+What is backed up, what deliberately is not, and why — plus the restore order, which is the part that decides whether any of it was worth doing.
+
+**Nothing here is implemented yet.** This page is the design and the decisions behind it, written before `roles/backup` exists so that the reasoning is on record rather than reconstructed from tasks later. `doc/TODO.adoc` still carries *No backup strategy* as open work, and it stays open until a restore has been performed on the lab — this repo's rule is that an item leaves when it is verified on a host, not when it is written.
+
+== The framing: this repo is already half the backup
+
+Most backup designs start by trying to capture a whole machine. That is the wrong shape here, because the README's stated goal — a complete, documentation-as-code setup that can be rebuilt or migrated with minimal manual effort — means the *configuration* is already versioned, reviewed and reproducible. `carcosa` is not a snowflake to be photographed; it is the output of running these playbooks.
+
+So a backup only has to cover **state**: the things a playbook run cannot produce. That is a much smaller and much more tractable problem than "back up the server", and it is why the tiers below are as small as they are.
+
+Two artefact classes that would otherwise be the hardest part of a restore are already solved by that framing, and both are worth stating explicitly because they are easy to forget when listing what to back up:
+
+* **SSH host keys** are vault-encrypted in `roles/sshd/files/` and deployed by content.
+* **DNSSEC keys** are vault-encrypted in `roles/nsd/files/dnssec/` — the KSK above all, since the DS in the parent points at it and a host rebuilt without it needs a new DS published and propagated, during which the zone is *bogus* rather than unsigned.
+
+Neither needs a backup. Both need the git remote and the vault password, which is a different problem and is covered under <<key-management,Key management>>.
+
+== What has to survive what
+
+Four failure modes, because they need different answers and a design that conflates them ends up covering one of them twice:
+
+[cols="1,3", options="header,autowidth"]
+|===
+| Failure | What answers it
+
+| A bad upgrade or a bad `occ` run
+| A *local* snapshot from before it. Fast, same disk, no network. This is by far the most likely event and the cheapest to cover.
+
+| Accidental deletion
+| The same local snapshots — and specifically *not* the Nextcloud sync clients, which replicate a deletion faithfully.
+
+| Loss of the host
+| An off-site copy of the small tier, plus the sync clients for Nextcloud's file content, plus this repo for everything the playbooks build.
+
+| Compromise
+| Partially covered, and honestly so — see <<not-covered,What this deliberately does not cover>>.
+|===
+
+== Scope
+
+[cols="2,1,3", options="header,autowidth"]
+|===
+| Data | Tier | Rationale
+
+| MariaDB databases (dumps)
+| local + off-site
+| The metadata layer that makes the client-side file replica meaningful, and the *only* copy of calendars, contacts, shares and tags. See <<nextcloud-clients,the Nextcloud decision above>>.
+
+| `/home/*` — including the Maildirs at `~/.mail`
+| local + off-site
+| User data, and mail as a side effect of where mail lives. Small today; that is not a reason to exclude it.
+
+| Host-generated secrets the repo does not hold
+| local + off-site
+| DKIM private keys, the Let's Encrypt account and lineage, Nextcloud's `config.php`. Tiny, and each has a real cost to lose. Enumerated below.
+
+| The deployed commit
+| local + off-site
+| Which state of this repository the host was actually running. See <<deploy-stamp,The deploy stamp>>.
+
+| `/var/www/nextcloud/data` (104 GB)
+| local only
+| Bad-upgrade protection. The off-site copy is the sync clients.
+
+| Logs, Prometheus TSDB, Grafana's database
+| none
+| Live data. Losing it is acceptable and is recorded as a decision, not an oversight.
+
+| RSpamd's Bayes classifier (Redis)
+| none
+| Retrainable from the restored mail with the scripts this repo already deploys.
+
+| Installation artefacts, container images, packages
+| none
+| Fetched by the playbooks. The host is meant to move forward to current versions, not to be pinned to what it happened to have.
+|===
+
+[#host-secrets]
+=== The host-generated secrets, in full
+
+These are the things that exist only on `carcosa` — generated there by a role, never written back into the repository — and each one is small enough that there is no argument for leaving it out:
+
+[cols="2,1,3", options="header,autowidth"]
+|===
+| Artefact | Path | Cost of losing it
+
+| DKIM private keys
+| `/var/lib/rspamd/dkim/*.key`
+| `dkim_keygen.sh` is idempotent and *never regenerates an existing key*, so a host without them silently generates new ones under the same selector — signing against records that no longer match. Recovering means a new selector, republished records and a propagation wait, and every message signed before the loss becomes unverifiable.
+
+| Let's Encrypt account + lineage
+| `/etc/letsencrypt/`
+| Re-issuable, but only once DNS points at the new host, and Let's Encrypt's rate limits (5 duplicate certificates per week) make a fumbled rebuild expensive. The renewal state and deploy-hook wiring go with it.
+
+| Nextcloud `config.php`
+| `/var/www/nextcloud/config/`
+| Carries `instanceid`, `passwordsalt` and `secret`. A restored database does not match a freshly installed instance without them — and see the ordering trap in <<restore-order,Restore order>>.
+
+| DH parameters
+| `/etc/nginx/dhparam.pem`
+| Regenerable, and the role does so on a `creates:` guard. Listed only so nobody spends time wondering: it costs minutes of CPU and no data.
+|===
+
+== The decisions
+
+Each of these narrows the scope, and each is a trade rather than a free win. They are written out so that a future reader meets a decision rather than a gap.
+
+[#nextcloud-clients]
+=== Nextcloud is restored from the clients, not from a backup
+
+The desktop clients hold a current copy of the synced files, so the 104 GB does not need an off-site home. That is what makes this whole design fit inside free storage.
+
+**What that covers and what it does not** is the part worth being precise about, because "the clients have it" is true of the file *content* and of almost nothing else:
+
+* **Not covered by the clients, and therefore load-bearing on the database dump:** calendars and contacts (CalDAV/CardDAV live in the database, not the data directory), shares and share links, tags and comments, per-user settings, Talk history, and app data.
+* **Not covered by anything:** file versions and the trash, which exist only in the data directory. A restore from the clients returns the current state of each file and no history.
+* **Not covered at any client:** anything a user excluded from sync, or holds as a virtual/online-only file rather than a downloaded one. This is worth auditing once rather than assuming, since a selectively-synced folder looks identical in the client to one that is fully present.
+* **Deletions and encryption propagate.** The client is a *replica*, not a backup: it answers loss of the host and answers nothing else. That is precisely why the local snapshot tier exists below it.
+
+A restore by re-upload also produces new file IDs, which is what breaks existing share links. The database dump is what preserves the rest of the instance around those files, so the two halves are not independent — **the client replica is only a backup in combination with the database dump.**
+
+=== A local snapshot tier, on the same disk, on purpose
+
+The most likely thing to go wrong is a bad upgrade or a mistaken deletion, and neither of those is helped by an off-site copy — they are helped by yesterday's state being reachable in seconds. `carcosa` has 3.4 TB free, so this costs almost nothing and can afford generous retention.
+
+**It protects against software faults and not against hardware loss**, which is the whole point of it being cheap. It is the first tier, not the only one.
+
+Two things follow from having it:
+
+* `roles/cloud` should take a snapshot before it extracts a release over the top, alongside the database dump it already takes. STATUS records that the dump "is the only thing that makes an upgrade reversible" because a schema migration cannot be undone by re-extracting a tarball — a file snapshot closes the other half.
+* The "extract over the top and delete nothing" decision in `roles/cloud` is explicitly justified there by there being *no backup strategy in this repo yet*. Once snapshots exist that trade can be revisited. Noted as a consequence, not proposed as a change.
+
+=== RSpamd's Bayes classifier is not backed up
+
+It can be retrained, and the corpus is the restored mail: `rspamd-train-bulk` seeds from mail already on disk, and the mail is in the backup. That closes the argument — this is not "accept the loss", it is "the input is already covered by another line item".
+
+**Three caveats belong on the record**, since a retrain is not a restore:
+
+* The result is a *different* classifier, not the same one. `carcosa`'s current counters (`learns_spam` 20147, `learns_ham` 11778) include a one-sided skew of roughly 1910 from the 2026-08-16 seeding incident, deliberately accepted; a fresh seed would not reproduce it, which is arguably an improvement.
+* Filtering is weaker until the seed completes. A classifier at zero learns contributes nothing, and everything else in the pipeline — SPF, DKIM, DMARC, RBLs, `force_actions.conf` — carries the load meanwhile.
+* The STATUS lesson applies unchanged and is the one way to make this worse: **do not re-send a corpus to chase a shortfall.** An immediate second pass over an identical corpus re-learned 6% of it on an idle lab guest.
+
+=== Logs, Prometheus and Grafana are not backed up
+
+Live data. Losing it is acceptable.
+
+Worth knowing what that costs, so the decision is made with the price visible: Prometheus holds 90 days of history and the alert rules are largely written from *this host's own past*, so a rebuild starts with no baseline — which lands directly on the open TODO item asking for the traffic thresholds to be set from a fortnight of real observation. Grafana's database holds nothing but what the role provisions from files, so that half genuinely costs nothing.
+
+RSpamd's log is a separate small note: it keeps four daily generations, and TODO already records that an empty log is not proof that nothing was rejected. That is unchanged by this decision, because the log was never going to be retained long enough to be evidence anyway.
+
+=== Mail is backed up, although the clients hold it too
+
+The reasoning that excuses Nextcloud's 104 GB does not transfer, for two reasons. Mail is small enough that the argument is not needed — it fits in the off-site tier with room to spare. And an IMAP client's local store is a cache whose completeness nobody has verified, where a Nextcloud sync client's folder is a stated invariant.
+
+It also falls out of backing up `/home/*` at all, since `imap.conf.maildir` is `~/.mail`. Excluding it would take deliberate effort and buy nothing.
+
+**Exclude the rebuildable index files and keep the two that are not**: `dovecot.index*` and `dovecot.list.index*` regenerate, but `dovecot-uidlist` and `dovecot-keywords` must be kept. Losing uidlist makes every client re-download every message; losing keywords loses the `$label1` history the 2026-08-16 Maildir import deliberately preserved.
+
+=== Installation artefacts and containers are not backed up
+
+The host should move forward to current versions rather than being restored to what it happened to be running. The playbooks fetch what they need, pinned and checksummed.
+
+**The gap that opens is real and is the reason the next section exists:** a backup restored against a *newer* repository may not fit it. Schemas migrate, layouts move, a role changes what it owns. The answer is not to archive tarballs and images — it is to record which commit the host was running, so a restore can start from a repository that is known to match the data.
+
+[#deploy-stamp]
+== The deploy stamp
+
+**Record on the host which state of this repository was deployed to it.** Re-running that commit reproduces the setup the backup was taken from; re-running `main` might not.
+
+=== Shape
+
+A file per playbook rather than one file for the host, because there is no umbrella playbook yet (`doc/TODO.adoc`) and "this host runs commit X" is therefore not a true statement — only some playbooks were run, possibly at different times:
+
+----
+/var/lib/ansible/deployed/<playbook>.commit
+----
+
+Each holds the commit hash and nothing else. It collapses to a single file the day `site.yml` exists, and until then it is the honest version of the same fact.
+
+=== Two details that decide whether it works
+
+**No timestamp inside the file.** The mtime already carries "when", and a timestamp in the content would make every `invoke check-drift` report a change on every run — turning the one signal this repo relies on into noise. The stamp has to be idempotent or it is worse than nothing.
+
+**A dirty working tree must be recorded as dirty**, e.g. `<hash>-dirty` from `git describe --always --dirty`. A hash that does not reproduce what was deployed is worse than no hash at all, because it invites confidence that is not earned. Whether a dirty tree should *refuse* to deploy is a policy question left open here.
+
+The git facts come from the controller, so the task reads them with `delegate_to: localhost` and `run_once: true`.
+
+=== What re-running the commit does and does not reproduce
+
+Stating this plainly, because "re-run the hash and you have the machine back" is close to true and the gap between close and true is where a restore fails:
+
+* **Reproduced:** every configuration file, every template, every role decision. This is the large majority of what a rebuild is.
+* **Reproduced as long as upstream keeps it:** the pinned artefacts — Nextcloud by version and sha256, Prometheus by version and sha256, container images by digest. Nextcloud archives old releases and GitHub releases persist, but a digest disappears if a tag is deleted from the registry.
+* **Not reproduced:** Ubuntu archive package versions, which are whatever the archive holds on the day. The base image likewise. This is deliberate and matches the decision above — the host moves forward.
+* **Not reproduced:** everything under <<host-secrets,the host-generated secrets above>>, which is exactly why they are in the backup.
+
+So the stamp answers *"what configuration was this host running"*, which is the question a restore actually asks. It does not promise a byte-identical machine and should not be read as doing so.
+
+== Tooling
+
+**`restic`.** Client-side encryption is not an option to switch on but the only mode it has, which is what satisfies the requirement that nothing readable leaves this host: the remote sees opaque pack files, with filenames and directory structure encrypted along with the content. Content-defined chunking dedups across snapshots, which suits both a Maildir (immutable files, purely additive) and Nextcloud's data directory. It reaches a local directory, SFTP and S3 natively, and anything `rclone` supports — which is the only route to Google Drive or OneDrive.
+
+It is in the 24.04 archive, which matches this repo's install-from-the-archive stance everywhere except Prometheus. **Verify the packaged version before committing to it** rather than assuming: the archive's `rclone` in particular is old enough that its Drive and OneDrive backends should be exercised against the live APIs before anything depends on them.
+
+Rejected, with reasons, so this is not researched twice:
+
+* **`borg`** — better compression and dedup, but it needs `borg serve` on the far end or a real filesystem, and cannot address Drive or OneDrive at all. It becomes the right answer only if the storage becomes a Hetzner Storage Box, which supports it natively.
+* **`duplicity`** — full+incremental chains mean a restore needs the whole chain intact, so one bad full costs everything after it.
+* **`rclone crypt` alone** — encrypts, but gives no dedup, no snapshots and no atomic restore point. It is the right transport *under* restic, not a backup tool.
+* **Nextcloud's Drive/OneDrive external storage** — mounts the remote *into* Nextcloud. That is replication, and it propagates deletions, which is the failure this is meant to insure against.
+
+== Where it goes
+
+**Tier 1 — a local repository on `carcosa`.** Everything in scope, nightly. Covers bad upgrades and deletions, restores fast, costs disk that is already there.
+
+**Tier 2 — the small tier, off-site.** Database dumps, `/home/*`, the host-generated secrets, the deploy stamps. Encrypted by restic before it leaves, so the storage being third-party and public-facing is not a property that matters. Google Drive's 15 GB is the target; OneDrive's 5 GB is a fallback and probably too tight to plan around.
+
+**GitHub is not a candidate** and was ruled out on three independent grounds: their Acceptable Use Policy forbids using it as file storage or a backup service, files above 100 MB are refused outright, and this repository is public.
+
+**Set a review trigger rather than discovering the ceiling.** The off-site tier grows with mail. When it passes roughly 10 GB, the free tier is no longer the right answer and paid object storage (a Hetzner Storage Box at ~€4/month, or Backblaze B2 at ~$6/TB/month, which restic addresses natively without rclone) becomes the cheaper option than re-scoping. That threshold belongs in the monitoring below, not in someone's memory.
+
+=== `nyarlathotep` as a third copy — considered, not chosen
+
+The LAN machine has 1 TB and could be woken on a schedule, which is genuinely attractive and free. It is recorded here as an option with its objections rather than adopted:
+
+* **It is a `testlab` host, and `inventories/machines.yml` says in as many words that nothing on them is backed up.** Test machines get reset; that is their purpose. Making one load-bearing for backups puts two contradictory jobs on one box.
+* **It has no console**, and its `lab.sh reinstall-stage`/`reinstall-arm` path is recorded in `doc/TODO.adoc` as unverified and able to strand the machine.
+* **The scheduling collision is real but smaller than it looks.** An unattended-upgrades reboot landing mid-run — at either end, since `carcosa` reboots at 04:00 for exactly that — does *not* corrupt a restic repository: an interrupted run leaves it consistent and the next run re-uses the blobs already written. The residual risk is not corruption, it is a machine that was off and backed up nothing while nobody noticed. That is a monitoring problem, and <<proving,Proving it worked>> is the answer to it.
+
+If it is used, it should be **pull-based**: `nyarlathotep` runs restic against `carcosa` over SSH, so `carcosa` never holds a credential that can delete the copy. The cost is an SSH key onto `carcosa` with broad read access, which needs restricting with a forced command rather than being left general — and note that `roles/sshd` sets `AllowAgentForwarding no`, so the key has to live on the machine.
+
+**Verdict: a third copy, never the only off-site one.**
+
+== Consistency
+
+A backup of a file that was being written is a file that will not restore. Each of these needs quiescing differently:
+
+* **MariaDB** — `mariadb-dump --single-transaction` per database to a dump directory, and let restic take the directory. Never back up a live `/var/lib/mysql`. Use a dedicated account `IDENTIFIED VIA unix_socket`, which is the pattern `roles/monitoring` already established for `mysqld-exporter`: no password to store, rotate, or leak into a `--diff`. Note the trap STATUS records — `root@localhost` authenticates by `unix_socket`, so handing a password to `mariadb-dump` fails with *"Access denied (1698)"* even though every other task connects as root happily.
+* **Nextcloud** — hold `maintenance:mode` around the *database dump only*, never across a walk of 104 GB. Put the mode-off in an `always:` block, exactly as `roles/cloud` does for the upgrade path, so a failure cannot leave the instance behind a maintenance page.
+* **Maildirs** — message files are immutable once written, so a live copy is safe. Excludes as noted above.
+* **Home directories** — no quiescing needed, and none available; a file being written during the run is captured mid-write and that is accepted.
+
+== Retention and integrity
+
+* `restic forget --prune` runs **after** a successful backup, never before, so a failed run cannot prune the last good snapshot.
+* Retention differs by tier: the local tier can afford a long tail on 3.4 TB of free disk; the off-site tier is bounded by 15 GB and needs a policy that keeps it there.
+* `restic check` weekly, and `restic check --read-data-subset` on a slower cycle. **Bit rot on storage you do not own is silent by construction**, and a repository that fails only at restore time is the worst possible time to find out.
+
+[#proving]
+== Proving it worked
+
+The repository's own doctrine applies here more sharply than anywhere else: *scheduling a job proves it started, and nothing more.* The same reasoning that put a serial check in `roles/nsd` and a `Watchdog` alert in `roles/monitoring` applies to a backup, which is the one system whose failure is invisible until the day it matters.
+
+* **A systemd timer with `Persistent=true`**, not cron — this host reboots at 04:00 for unattended upgrades and cron silently skips a run whose moment passed while it was down. Same reasoning as `nsd-resign.timer`.
+* **A textfile collector**, reusing the pattern in `roles/monitoring/templates/textfile/`: `backup_last_success_timestamp_seconds`, `backup_duration_seconds`, `backup_repo_bytes`, `backup_snapshot_count`, and a separate `backup_check_last_success_timestamp_seconds` for the integrity run. The off-site repository size is what makes the 10 GB review trigger above automatic rather than remembered.
+* **An alert on staleness rather than on failure.** A run that fails loudly is the easy case; a run that never happens emits nothing at all, which is the `nyarlathotep` risk and the powered-off-host gap in one. `BackupStale` at >36 h covers both, because it is keyed on the *absence* of a success rather than the presence of an error.
+* Note the collector caveat STATUS already records: node_exporter reads a textfile whatever its age, so a stopped collector leaves its last values in place looking current. `node_textfile_mtime_seconds` is what gives that away.
+
+[#restore-order]
+== Restore order
+
+The ordering is the part that will cost time under pressure if it is not written down, and three of these steps are traps rather than merely sequence — a role that finds its artefact missing does not fail, it generates a *new* one and reports success.
+
+. **Provision from the repository at the recorded commit.** `git checkout <hash>` from the deploy stamp, then run the playbooks in the order `.claude/skills/testlab/lab.sh` carries in its `PLAYBOOKS` array — which is a tested order, not a guess. Note it omits `nsd`, `fail2ban_ui` and `talk`.
+. **Restore `/etc/letsencrypt/` before `http.yml`.** Otherwise certbot issues a fresh certificate, against rate limits, and only after DNS already points at the new host.
+. **Restore the DKIM keys before `spam.yml`.** `dkim_keygen.sh` skips a key that exists and generates one that does not — so running the role first silently rotates the keys under a published selector, and mail signs against records that no longer match.
+. **Restore `config/config.php` before `cloud.yml`.** The role runs `occ maintenance:install` on a host with no `config.php`. Running it first gives a *fresh instance*, and restoring the file afterwards is too late — the `instanceid` and `secret` will not match the database being restored.
+. **Restore the database**, then the Nextcloud data directory or a client re-sync, then `occ` repair as needed.
+. **Retrain RSpamd** from the restored mail with `rspamd-train-bulk`, once and not twice.
+. **DNS last.** The zone is a hidden primary with hand-managed serials; bump them, and remember that a DS in the parent (once published) makes a key mismatch *bogus* rather than unsigned.
+
+**The restore is the deliverable, not the backup.** `yuggoth` resets to a pristine 24.04 image in seconds and `lab.sh deploy` runs the stack against it, so the rig for proving all of the above already exists — and doing it would be the first evidence for the migration/disaster-recovery goal the README claims, which nothing currently provides.
+
+[#key-management]
+== Key management
+
+**restic's repository password** is vault-encrypted in inventory and deployed `0600`, which is the same treatment as every other secret here.
+
+**The vault password is the single point of failure for the entire design**, and it is not a technical problem. `vault/secret.txt` is gitignored and exists only on the workstation. Lose that machine and what remains is a public repository that cannot be decrypted and a backup that cannot be opened. It needs at least two copies that are not on that machine and not inside the backup — a password manager, or paper. The same is true of the restic password itself: **a credential stored only inside the thing it unlocks is not stored.**
+
+**The rclone OAuth token** for Drive or OneDrive lives in `rclone.conf` on the host and is a credential that can *delete* the off-site copy. Vault it, `0600` it, and know that Google expires refresh tokens for an unpublished OAuth application after seven days — so it needs rclone's own client ID or a published app, or it works for a week and then stops without saying so.
+
+[#not-covered]
+== What this deliberately does not cover
+
+* **Compromise with propagation.** An attacker on `carcosa` holds the credentials that reach the off-site copy, and a deletion or encryption of Nextcloud's data propagates to every sync client by design. The local snapshots are on the same machine. Closing this needs either append-only remote storage (a B2 application key without `deleteFiles`, or object lock) or the pull model described under `nyarlathotep` — neither is chosen here, and the gap is real.
+* **The 104 GB has no off-site copy** other than the sync clients, which is a deliberate decision and not an accident. Its limits are set out under <<nextcloud-clients,the Nextcloud decision above>>; the ones that matter are versions, trash, and any folder a user does not fully sync.
+* **No restore has ever been performed.** Everything above is design. Until a restore into the lab produces a Nextcloud that answers and a mailbox Dovecot will serve, this is a plan and should be read as one.
+* **The host prerequisites are still undocumented** — base image, disk layout, and the bootstrap access needed before Ansible can connect. That gap is already recorded in `doc/TODO.adoc` and a restore runs straight into it.

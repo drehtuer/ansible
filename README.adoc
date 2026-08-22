@@ -31,10 +31,12 @@ See `invoke --list` for all available tasks.
 :url-yamllint: https://yamllint.readthedocs.io/en/stable[yamllint^]
 :url-ansible-lint: https://ansible.readthedocs.io/projects/lint[ansible-lint^]
 :url-ruff: https://docs.astral.sh/ruff[ruff^]
+:url-asciidoctor: https://asciidoctor.org[asciidoctor^]
 
 YAML is checked with link:{url-yamllint} (style, configured in `.yamllint`) and link:{url-ansible-lint} (Ansible practices, configured in `.ansible-lint`, strictest `production` profile).
 Python is checked and formatted with link:{url-ruff} (configured in `pyproject.toml`).
-All three are installed in the Dev Container.
+The AsciiDoc pages are checked with link:{url-asciidoctor} itself, run as `--failure-level=WARN` so that a dropped table cell, a missing include or a skipped section level fails instead of scrolling past — it needs no configuration file. Note it does *not* check cross-references: an unresolved one renders as a dead link and is reported nowhere.
+All four are installed in the Dev Container.
 
 [source, bash]
 ----
@@ -46,11 +48,12 @@ invoke lint --fix
 invoke lint-yaml
 invoke lint-ansible
 invoke lint-python
+invoke lint-docs
 ----
 
 The same checks run automatically in two places:
 
-* *Before each commit*, via the hook in `.githooks/pre-commit`, which lints the staged YAML and Python files. Git only picks the hook up once per clone:
+* *Before each commit*, via the hook in `.githooks/pre-commit`, which lints the staged YAML and Python files — the AsciiDoc check is deliberately not in the hook yet, so it runs only via `invoke lint` and in CI. Git only picks the hook up once per clone:
 +
 [source, bash]
 ----

@@ -1,5 +1,8 @@
-# Runs the same linters as `invoke lint`, on the committed state.
-# See .yamllint, .ansible-lint and pyproject.toml for the rules.
+# Runs the same linters as `invoke lint`, on the committed state,
+# plus the AsciiDoc structural check - which has no `invoke lint`
+# counterpart yet, so this workflow is currently the only thing
+# running it. See .yamllint, .ansible-lint and pyproject.toml for the
+# rules; the docs job carries its own reasoning inline.
 name: Lint
 
 "on":
@@ -84,3 +87,64 @@ jobs:
 
       - name: ruff format
         run: ruff format --check .
+
+  docs:
+    name: AsciiDoc
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Pinned as a gem rather than taken from the runner's apt, and
+      # the version is load-bearing rather than tidiness. 24.04 ships
+      # asciidoctor 2.0.20, which is *silent* on the incomplete-table
+      # error - measured against both releases, not assumed. That is
+      # the one structural fault this repository has actually had:
+      # three unescaped `|` characters inside table cells in
+      # doc/STATUS.adoc were dropping 44 KB of it from the render
+      # while the build reported success. An apt-installed check here
+      # would have passed over it, which is the vacuous-rule failure
+      # doc/STATUS.adoc keeps warning about.
+      #
+      # Keep in step with the asciidoctor apt package in
+      # .devcontainer/Dockerfile (Ubuntu 26.04 ships 2.0.26), so CI
+      # and a local run check the same things.
+      #
+      # sudo because the runner's system gem directory is root-owned -
+      # a bare `gem install` fails with Gem::FilePermissionError on
+      # /var/lib/gems. Same escalation the apt installs above use, and
+      # it puts the binstub in /usr/local/bin, which is already on
+      # PATH; --user-install would need the gem bindir added to it.
+      - name: Install asciidoctor
+        run: sudo gem install --no-document asciidoctor -v 2.0.26
+
+      # The same single invocation `invoke lint-docs` builds in
+      # tasks.py, so CI and a local run check the same things the same
+      # way. Every .adoc in the repository is passed at once, the
+      # fragment the pages include and .claude/CLAUDE.adoc among them -
+      # all of them parse standalone, so there is nothing to exclude
+      # and therefore no exclusion list to fall out of date.
+      #
+      # One invocation rather than a loop because asciidoctor reports
+      # the faults in all of its inputs before exiting, so a single run
+      # already names every broken page instead of stopping at the
+      # first - the property run_linters() gives the other linters.
+      #
+      # --failure-level=WARN because a warning that does not fail is a
+      # warning nobody reads, the same stance as `yamllint --strict`
+      # above. Output goes to /dev/null: this renders only to find
+      # faults, and publishing the pages is separate work tracked in
+      # doc/TODO.adoc.
+      #
+      # Collected into an array first rather than piped into xargs,
+      # which would be free to split them across several invocations
+      # and reports its own exit code 123 rather than asciidoctor's.
+      - name: asciidoctor
+        run: |
+          mapfile -d '' files < <(
+            find . -name '*.adoc' -not -path './.git/*' -print0 | sort -z
+          )
+          asciidoctor \
+            --failure-level=WARN \
+            --out-file /dev/null \
+            "${files[@]}"
