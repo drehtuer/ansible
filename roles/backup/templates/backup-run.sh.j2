@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Dump the databases, snapshot them alongside the rest of the state a
+# playbook run cannot produce, then apply the retention policy.
+#
+# Ordering is the whole of the design here:
+#
+#   1. Dumps are taken before the snapshot, so what restic reads is a
+#      consistent file rather than a live /var/lib/mysql mid-write.
+#   2. Maintenance mode is held around the dump only. Across a walk of
+#      104 GB it would take the instance off the air for the length of
+#      the backup, and the file data does not need it.
+#   3. `forget --prune` runs only after `backup` has succeeded, so a
+#      failed run can never prune the last good snapshot.
+#
+# Metrics are written at the end, and deliberately carry the success
+# *timestamp* as a value rather than relying on the file's mtime:
+# node_exporter reads whatever is in the textfile directory whenever it
+# is scraped, so a stale file looks current. An alert comparing
+# time() against the value inside is what survives that.
+set -euo pipefail
+
+REPOSITORY={{ backup.repository | quote }}
+DUMP_DIR={{ backup.mysql.dump_dir | quote }}
+EXCLUDE_FILE={{ backup.exclude_file | quote }}
+TEXTFILE_DIR={{ backup.metrics.textfile_dir | quote }}
+NEXTCLOUD_PATH={{ backup.nextcloud.path | quote }}
+
+export RESTIC_REPOSITORY="${REPOSITORY}"
+export RESTIC_PASSWORD_FILE={{ backup.password_file | quote }}
+
+STARTED="$(date +%s)"
+MAINTENANCE_ON=0
+
+log() { printf '%s %s\n' "$(date -Is)" "$*"; }
+
+# Whatever happens after this point, the instance must not be left
+# behind a maintenance page - an upgrade that fails is recoverable, one
+# that fails and locks the door needs someone at a terminal. Same
+# stance as the `always` block in roles/cloud.
+maintenance_off() {
+  if ((MAINTENANCE_ON)); then
+    log "nextcloud: leaving maintenance mode"
+    # In a subshell with its own cd: `occ` resolves paths from the
+    # working directory, and this runs from a trap that fires wherever
+    # the script happened to be - which is `/` by the time the dump is
+    # under way. Without it the command fails, `|| true` swallows it,
+    # and the instance stays behind a maintenance page: the one
+    # outcome this function exists to prevent.
+    (cd "${NEXTCLOUD_PATH}" \
+      && sudo -u www-data php occ maintenance:mode --off) > /dev/null \
+      || log "nextcloud: FAILED to leave maintenance mode"
+    MAINTENANCE_ON=0
+  fi
+}
+trap maintenance_off EXIT
+
+{% if backup.mysql.enabled %}
+# --- databases ---------------------------------------------------
+install -d -m 0700 -o root -g root "${DUMP_DIR}"
+
+{% if backup.nextcloud.enabled %}
+if [ -f "${NEXTCLOUD_PATH}/occ" ]; then
+  log "nextcloud: entering maintenance mode"
+  cd "${NEXTCLOUD_PATH}"
+  sudo -u www-data php occ maintenance:mode --on > /dev/null
+  MAINTENANCE_ON=1
+  cd /
+fi
+{% endif %}
+
+# root authenticates to MariaDB by unix_socket here, so there is no
+# password to hand mariadb-dump - and handing it one would fail with
+# "Access denied (1698)" rather than working, which is the trap
+# roles/cloud documents.
+#
+# Every database is dumped except the three views over server state, so
+# that one added later is not silently missed. `mysql` is in scope
+# deliberately: it holds the grants.
+mapfile -t databases < <(
+  mariadb --skip-column-names --batch --execute 'SHOW DATABASES' \
+    | grep -vxF -e {{ backup.mysql.skip_databases | map('quote') | join(' -e ') }}
+)
+
+{% raw %}
+db_count=${#databases[@]}
+{% endraw %}
+
+# An unreachable server, a missing client or a changed socket all end
+# here with an empty list - and an empty list means the loop below does
+# nothing at all, the snapshot captures yesterday's dumps, and the run
+# reports success. Refusing is the only honest answer: this host always
+# has databases.
+if ((db_count == 0)); then
+  log "mysql: no databases listed - refusing to snapshot stale dumps"
+  exit 1
+fi
+
+for database in "${databases[@]}"; do
+  log "mysql: dumping ${database}"
+  # --single-transaction takes a consistent view without locking the
+  # tables, so the dump does not block whatever is still running.
+  # Written to a temporary name and moved into place, so an
+  # interrupted dump cannot leave a truncated file that restores
+  # silently and incompletely.
+  mariadb-dump \
+    --single-transaction \
+    --quick \
+    --routines \
+    --events \
+    --databases "${database}" \
+    | gzip --stdout > "${DUMP_DIR}/${database}.sql.gz.tmp"
+  mv "${DUMP_DIR}/${database}.sql.gz.tmp" "${DUMP_DIR}/${database}.sql.gz"
+done
+
+maintenance_off
+{% endif %}
+
+# --- snapshot ----------------------------------------------------
+# Paths that do not exist are dropped rather than failing the run: this
+# role is deployed to hosts that do not run every service, and a
+# missing /var/lib/rspamd/dkim on such a host is correct rather than a
+# fault. A path that vanishes on a host that *should* have it is a
+# different problem, and one this cannot tell apart - so each is
+# logged.
+paths=()
+{% for path in backup.paths %}
+if [ -e {{ path | quote }} ]; then
+  paths+=({{ path | quote }})
+else
+  log "skipping {{ path }}: not present"
+fi
+{% endfor %}
+
+{% raw %}
+# Jinja reads `{#` as the start of a comment tag, and bash's
+# `${#array[@]}` contains exactly that - so the length is taken once
+# inside a raw block and referred to by name afterwards. Nothing else
+# in this file needs one, and the static tests are what caught it.
+path_count=${#paths[@]}
+{% endraw %}
+
+if ((path_count == 0)); then
+  log "nothing to back up"
+  exit 1
+fi
+
+log "restic: backing up ${path_count} path(s)"
+restic backup \
+  --exclude-file "${EXCLUDE_FILE}" \
+  --tag scheduled \
+  "${paths[@]}"
+
+# --- retention ---------------------------------------------------
+# Reached only when the backup above succeeded, because of `set -e`.
+log "restic: applying retention"
+restic forget \
+  --prune \
+  --keep-daily {{ backup.retention.daily }} \
+  --keep-weekly {{ backup.retention.weekly }} \
+  --keep-monthly {{ backup.retention.monthly }} \
+  --keep-yearly {{ backup.retention.yearly }}
+
+FINISHED="$(date +%s)"
+log "done in $((FINISHED - STARTED))s"
+
+{% if backup.metrics.enabled %}
+# --- metrics -----------------------------------------------------
+# The directory belongs to roles/monitoring. Absent means this host
+# does not run node_exporter, which is not a failure of the backup.
+[ -d "${TEXTFILE_DIR}" ] || exit 0
+
+# grep -o then wc -l, not grep -c: `--json` is a single line, so
+# counting *lines* that contain the key answers 1 however many
+# snapshots there are.
+snapshots="$(restic snapshots --json | grep -o '"short_id"' | wc -l)"
+repository_bytes="$(
+  restic stats --mode raw-data --json \
+    | sed -n 's/.*"total_size":\([0-9]*\).*/\1/p'
+)"
+
+OUT="${TEXTFILE_DIR}/backup.prom"
+TMP="$(mktemp "${OUT}.XXXXXX")"
+trap 'rm -f "$TMP"; maintenance_off' EXIT
+
+{
+  echo "# HELP backup_last_success_timestamp_seconds When the last backup finished."
+  echo "# TYPE backup_last_success_timestamp_seconds gauge"
+  echo "backup_last_success_timestamp_seconds ${FINISHED}"
+  echo "# HELP backup_duration_seconds How long the last successful backup took."
+  echo "# TYPE backup_duration_seconds gauge"
+  echo "backup_duration_seconds $((FINISHED - STARTED))"
+  echo "# HELP backup_snapshots Snapshots in the repository."
+  echo "# TYPE backup_snapshots gauge"
+  echo "backup_snapshots ${snapshots}"
+  echo "# HELP backup_repository_bytes Deduplicated size of the repository."
+  echo "# TYPE backup_repository_bytes gauge"
+  echo "backup_repository_bytes ${repository_bytes:-0}"
+} > "$TMP"
+
+# Written elsewhere and moved into place: node_exporter parses a
+# half-written file as a truncated one.
+chmod 0644 "$TMP"
+mv "$TMP" "$OUT"
+trap maintenance_off EXIT
+{% endif %}

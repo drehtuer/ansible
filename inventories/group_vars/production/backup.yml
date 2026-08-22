@@ -1,0 +1,61 @@
+# Mirrors roles/backup/defaults/main.yml, because an inventory dict
+# REPLACES the role default rather than merging into it - so this file
+# has to repeat every key the role reads, not only the ones that
+# differ. See doc/STATUS.adoc.
+#
+# Split per environment rather than living in group_vars/all, for the
+# reason inventories/machines.yml gives: the repository password is a
+# credential, and credentials above all are what keeps production's
+# out of the test machines.
+backup:
+  repository: /var/backups/restic
+  password: !vault |
+            $ANSIBLE_VAULT;1.1;AES256
+            61303131323835646363343439663161653737653663633464363163643564383738326465343066
+            3637613163393063653963343435656664336235393831620a313930643035353663396362393063
+            37356334666264626433373739613262376630313038343435396161636133333364383333356461
+            3334666439663937640a313065363561633537666534643134386334313762636533613432346265
+            36616134396365353264393662323065333036656466656463386135653630666136313831653463
+            6535373632353339366232303239336231343662333438623335
+  password_file: /etc/restic/password
+  mysql:
+    enabled: true
+    dump_dir: /var/backups/mysql
+    skip_databases:
+      - information_schema
+      - performance_schema
+      - sys
+  nextcloud:
+    enabled: true
+    path: /var/www/nextcloud
+  paths:
+    - /var/backups/mysql
+    - /home
+    - /var/lib/rspamd/dkim
+    - /etc/letsencrypt
+    - /var/www/nextcloud/config
+    - /var/www/nextcloud/data
+  exclude_file: /etc/restic/excludes
+  excludes:
+    - dovecot.index*
+    - dovecot.list.index*
+    - /var/www/nextcloud/data/appdata_*/preview
+    - /var/www/nextcloud/data/*/cache
+    - /var/www/nextcloud/data/*/uploads
+    - /var/www/nextcloud/data/nextcloud.log*
+  retention:
+    daily: 14
+    weekly: 8
+    monthly: 12
+    yearly: 3
+  schedule:
+    on_calendar: "*-*-* 02:30:00"
+    randomized_delay: 15min
+  check:
+    enabled: true
+    on_calendar: "Sun *-*-* 05:00:00"
+    randomized_delay: 15min
+    read_data_subset: 5%
+  metrics:
+    enabled: true
+    textfile_dir: /var/lib/prometheus/node-exporter

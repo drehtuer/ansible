@@ -145,9 +145,26 @@ The rest are not covered, for concrete reasons rather than lack of effort:
 
 | `upgrade`
 | Runs `do-release-upgrade` and reboots. Not meaningfully automatable.
+
+| `backup`
+| Wants a real MariaDB to dump and a real Nextcloud to quiesce, which is the same blocker as the row above it. What was done instead is recorded below.
 |===
 
 This table is the single record of what molecule covers and why the rest is not covered; `doc/TODO.adoc` points here rather than repeating it. Update it here when a scenario is added.
+
+*`backup`'s scripts were tested standalone instead, and it is worth saying exactly what that is worth.* The two rendered scripts were run in the dev container against a scratch `restic` repository - initialize, back up, honour the exclude file, prune to the retention policy, verify with `restic check`, then destroy the source tree and restore it, comparing every restored file byte-for-byte against the original. That is a real end-to-end exercise of the half of the role that is shell.
+
+It found three defects, and the reason to record them is that *none of them would have failed a playbook run*: `occ` was called from a shell trap without its own working directory, so maintenance mode would never have come off; an empty database list was skipped rather than refused, so an unreachable MariaDB would have snapshotted the previous day's dumps and reported success; and the snapshot count was read with `grep -c` over single-line JSON, which answers 1 however many snapshots exist. A converge-only scenario would have reported green on all three.
+
+*The role was then deployed to `yuggoth` on 2026-08-22, and the run closes what the standalone exercise could not.* It converged and reported `changed=0` on the second run. `systemctl start backup.service` dumped both databases - `mysql` and `nextcloud`, correctly leaving the three system schemas out - held maintenance mode around the dump and *left it off afterwards*, which is the trap fix above confirmed against a real Nextcloud rather than reasoned about. Six paths were snapshotted, the retention policy applied, and the metrics written.
+
+The restore was then performed rather than assumed. A home file, a DKIM private key and a database table were deleted and dropped, then restored from the snapshot: both files came back byte-identical by SHA-256 and, the part worth checking separately, with ownership and mode intact - `_rspamd:_rspamd 0600` on the DKIM key, which rspamd refuses to use if it is wrong. The database was reloaded from its own dump with `restic dump ... | gunzip | mariadb`, the dropped row was back, and Nextcloud still reported `installed: true` afterwards.
+
+*The alert rules were proven non-vacuous in both directions*, which matters more here than the fact that they load. Backdating the success timestamp past 36h took `BackupStale` to `pending` while the other two stayed inactive. Removing the metric file entirely then took `BackupStale` back to *inactive* - because `time() - <absent>` is an empty vector and cannot fire - while `BackupMetricsMissing` went `pending`. That is the whole argument for the third rule, demonstrated rather than asserted: the obvious staleness alert is blind to its own worst case.
+
+*One defect only the real run could surface.* A systemd unit inherits no `HOME`, so restic could not locate a cache and logged `unable to open cache` on every invocation while carrying on. Correct output, and increasingly expensive as the tree grows. The units now set `CacheDirectory=restic` and `RESTIC_CACHE_DIR`; after redeploying, the warning is gone and `/var/cache/restic` is populated.
+
+What this still does not establish is production. `carcosa` has 104 GB and millions of small files where the lab has 67 MB, so nothing here says anything about how long a first backup takes, what the repository costs on disk, or whether 02:30 leaves enough room before the 04:00 reboot. `doc/TODO.adoc` keeps the item open on that basis.
 
 == Deployment test
 

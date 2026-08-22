@@ -630,6 +630,35 @@ argument_specs:
             required: true
             description: Thresholds the rules are rendered from.
             options:
+              backup:
+                type: dict
+                required: true
+                description: Thresholds for the roles/backup alerts.
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                    description:
+                      - Whether to deploy them. Off for a host that
+                        does not run roles/backup, since a rule over a
+                        metric nothing produces can never fire and
+                        reports nothing wrong forever.
+                  stale_hours:
+                    type: int
+                    required: true
+                    description:
+                      - Hours without a successful backup before
+                        warning. Above the timer's period plus its
+                        randomized delay, or a run that merely ran
+                        late would alert.
+                  unverified_days:
+                    type: int
+                    required: true
+                    description:
+                      - Days without a passing `restic check` before
+                        warning. A separate failure from the backup
+                        itself, since backups can keep succeeding into
+                        a repository that will not restore.
               zones:
                 type: dict
                 required: true

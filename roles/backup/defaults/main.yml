@@ -1,0 +1,123 @@
+backup:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
+  # Where restic keeps its repository. A local path today, on the same
+  # 3.6 TB disk the data is on - which is the deliberate scope of this
+  # tier and not an oversight: it covers a bad upgrade and a mistaken
+  # deletion, the two most likely events, and covers hardware loss for
+  # nothing. See doc/BACKUP.adoc for what answers that instead.
+  #
+  # restic addresses a local path, sftp:, s3: and rclone: with the same
+  # string, so pointing this off-host later is an inventory change
+  # rather than a code change.
+  repository: /var/backups/restic
+  # Empty on purpose, so the role cannot initialize a repository with a
+  # guessable password. The real value is vault-encrypted in
+  # inventories/group_vars/production/backup.yml, and the role asserts
+  # it is set before it touches anything.
+  #
+  # Note what this password is not: recoverable. It opens the
+  # repository and it is not stored inside it, so a copy has to exist
+  # somewhere neither this host nor this repository can lose - see
+  # doc/BACKUP.adoc.
+  password: ""
+  password_file: /etc/restic/password
+
+  mysql:
+    # Dumped to files first, then snapshotted. Never snapshot a live
+    # /var/lib/mysql: the files are mid-write and restore to a database
+    # that has to be repaired, when it opens at all.
+    enabled: true
+    dump_dir: /var/backups/mysql
+    # Everything else is dumped, rather than naming the databases to
+    # include. A backup that silently misses a database added later is
+    # the failure worth designing against, and `mysql` itself is in
+    # scope deliberately - it holds the grants.
+    #
+    # The three below are views over server state with no data of their
+    # own; `sys` in particular cannot be restored from a dump.
+    skip_databases:
+      - information_schema
+      - performance_schema
+      - sys
+
+  nextcloud:
+    # Maintenance mode is held around the database dump and nothing
+    # else. Holding it across a walk of 104 GB would take the instance
+    # off the air for the length of the backup, and the file data does
+    # not need it: Nextcloud writes uploads to a temporary name and
+    # moves them into place.
+    enabled: true
+    path: /var/www/nextcloud
+
+  # What goes into the snapshot. The 104 GB data directory is here
+  # deliberately - this tier is what makes a bad upgrade recoverable -
+  # while its off-site copy is the sync clients rather than storage
+  # this role writes to.
+  paths:
+    - /var/backups/mysql
+    - /home
+    - /var/lib/rspamd/dkim
+    - /etc/letsencrypt
+    - /var/www/nextcloud/config
+    - /var/www/nextcloud/data
+
+  # Read by restic as an --exclude-file, one pattern per line.
+  exclude_file: /etc/restic/excludes
+  excludes:
+    # Dovecot rebuilds these. `dovecot-uidlist` and `dovecot-keywords`
+    # are deliberately NOT excluded: losing uidlist makes every client
+    # re-download every message, and keywords is where the $label1
+    # history the 2026-08-16 Maildir import preserved lives.
+    - dovecot.index*
+    - dovecot.list.index*
+    # Regenerated on demand, and previews are a large share of the file
+    # count rather than of the bytes - which is what makes them worth
+    # excluding on a filesystem this host can run out of inodes on.
+    - /var/www/nextcloud/data/appdata_*/preview
+    - /var/www/nextcloud/data/*/cache
+    - /var/www/nextcloud/data/*/uploads
+    # Nextcloud's own log, rotated by Nextcloud into the data
+    # directory. Live data, and doc/BACKUP.adoc records losing it as
+    # acceptable.
+    - /var/www/nextcloud/data/nextcloud.log*
+
+  # Applied by `restic forget --prune` after a successful backup, never
+  # before one: a failed run must not be able to prune the last good
+  # snapshot.
+  retention:
+    daily: 14
+    weekly: 8
+    monthly: 12
+    yearly: 3
+
+  schedule:
+    # 02:30, which clears the 04:00 unattended-upgrades reboot window
+    # in roles/apt with room to spare. An overrun is survivable rather
+    # than merely unlikely - an interrupted restic run leaves the
+    # repository consistent and the next run re-uses what was already
+    # written - so this is about the backup finishing, not about it
+    # being safe.
+    on_calendar: "*-*-* 02:30:00"
+    randomized_delay: 15min
+
+  check:
+    # `restic check` verifies the repository's own structure;
+    # read_data_subset re-reads a sample of the actual pack files,
+    # which is the only thing that finds bit rot. Weekly, and a
+    # different day from anything else that runs long.
+    enabled: true
+    on_calendar: "Sun *-*-* 05:00:00"
+    randomized_delay: 15min
+    read_data_subset: 5%
+
+  metrics:
+    # Written into node_exporter's textfile directory by the scripts
+    # themselves rather than by a collector of their own: a backup
+    # already knows whether it succeeded and how long it took, and a
+    # separate collector would only be able to guess from the outside.
+    #
+    # The directory belongs to roles/monitoring, which creates it with
+    # its own ownership. This role never creates it - the scripts skip
+    # writing when it is absent, so a host without monitoring is not a
+    # failure here.
+    enabled: true
+    textfile_dir: /var/lib/prometheus/node-exporter

@@ -1,0 +1,11 @@
+---
+# The unit files this role installs, in one list so that deploying
+# them and reloading systemd cannot drift apart. The verification pair
+# is installed whether or not `backup.check.enabled` is set - the
+# timer is what that flag stops, so that turning it back on does not
+# need a redeploy of the unit it starts.
+backup_units:
+  - backup.service
+  - backup.timer
+  - backup-check.service
+  - backup-check.timer

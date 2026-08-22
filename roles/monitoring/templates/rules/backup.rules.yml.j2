@@ -1,0 +1,77 @@
+{{ ansible_managed | comment }}
+#
+# What roles/backup reports about itself. Every rule here alerts on the
+# *absence* of a success rather than on the presence of an error, which
+# is the only thing that works for a scheduled job: a run that fails
+# loudly is the easy case, while a run that never happened emits
+# nothing at all - and a host that was powered off, a timer that was
+# never enabled and a unit that failed silently are indistinguishable
+# from the outside.
+#
+# That is why the metrics carry the success timestamp as a *value*.
+# node_exporter reads whatever is in its textfile directory whenever it
+# is scraped, so the file of a collector that has stopped keeps being
+# served and looks current; comparing time() against the value inside
+# is what sees through that, where the file's own mtime would not.
+groups:
+  - name: backup
+    rules:
+      - alert: BackupStale
+        # 36h rather than 24: the backup runs daily, so anything under
+        # a day and a half would fire on a single run that was delayed
+        # by the randomized delay or by a reboot catching up a
+        # Persistent=true timer.
+        expr: >-
+          time() - backup_last_success_timestamp_seconds
+          > {{ monitoring.alerts.backup.stale_hours * 3600 }}
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: No successful backup for over {{ monitoring.alerts.backup.stale_hours }}h
+          description: >-
+            The last backup finished
+            {{ '{{' }} $value | humanizeDuration {{ '}}' }} ago.
+            Check `systemctl status backup.service` and
+            `journalctl -u backup.service`.
+
+      - alert: BackupMetricsMissing
+        # A different failure from the one above, and it has to be its
+        # own rule: if the metric never appears at all - the timer was
+        # never enabled, or the first run never succeeded - then
+        # `time() - <absent>` is an empty vector and BackupStale cannot
+        # fire. An alert that goes quiet when the thing it watches
+        # disappears is the failure this repository keeps finding in
+        # other people's software.
+        expr: absent(backup_last_success_timestamp_seconds)
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: The backup has never reported a success
+          description: >-
+            No backup_last_success_timestamp_seconds is being scraped,
+            so nothing here can say whether backups are running. Check
+            that backup.timer is enabled and that its first run
+            completed.
+
+      - alert: BackupUnverified
+        # `restic check` is what finds a repository that has rotted on
+        # disk, and it is worth alerting separately because it fails
+        # differently: backups can keep succeeding into a repository
+        # that will not restore.
+        expr: >-
+          time() - backup_check_last_success_timestamp_seconds
+          > {{ monitoring.alerts.backup.unverified_days * 86400 }}
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            Repository unverified for over
+            {{ monitoring.alerts.backup.unverified_days }} days
+          description: >-
+            `restic check` last passed
+            {{ '{{' }} $value | humanizeDuration {{ '}}' }} ago. A
+            repository that fails only at restore time is the worst
+            moment to find out.

@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+#
+# Persistent for the same reason as backup.timer: a verification that
+# is skipped rather than failed leaves the repository looking checked.
+[Unit]
+Description=Weekly restic repository verification
+
+[Timer]
+OnCalendar={{ backup.check.on_calendar }}
+Persistent=true
+RandomizedDelaySec={{ backup.check.randomized_delay }}
+
+[Install]
+WantedBy=timers.target

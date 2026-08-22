@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+# Verify the repository rather than trusting it.
+#
+# `restic check` alone verifies the repository's own structure - that
+# every snapshot references packs that exist and the indexes agree. It
+# reads none of the actual data, so a pack file that has rotted on disk
+# passes it. `--read-data-subset` is what re-reads a sample and is
+# therefore the only part of this that can find bit rot at all.
+#
+# A repository that fails only at restore time is the worst possible
+# moment to learn about it, which is the whole reason this runs on a
+# timer rather than being something someone remembers.
+set -euo pipefail
+
+TEXTFILE_DIR={{ backup.metrics.textfile_dir | quote }}
+
+export RESTIC_REPOSITORY={{ backup.repository | quote }}
+export RESTIC_PASSWORD_FILE={{ backup.password_file | quote }}
+
+log() { printf '%s %s\n' "$(date -Is)" "$*"; }
+
+log "restic: checking repository structure and {{ backup.check.read_data_subset }} of its data"
+restic check --read-data-subset {{ backup.check.read_data_subset | quote }}
+
+FINISHED="$(date +%s)"
+log "check passed"
+
+{% if backup.metrics.enabled %}
+# Reached only on success, because of `set -e`, so this timestamp
+# means "last verified" rather than "last attempted" - which is the
+# claim the alert beside it needs.
+[ -d "${TEXTFILE_DIR}" ] || exit 0
+
+OUT="${TEXTFILE_DIR}/backup_check.prom"
+TMP="$(mktemp "${OUT}.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT
+
+{
+  echo "# HELP backup_check_last_success_timestamp_seconds When the repository last verified clean."
+  echo "# TYPE backup_check_last_success_timestamp_seconds gauge"
+  echo "backup_check_last_success_timestamp_seconds ${FINISHED}"
+} > "$TMP"
+
+chmod 0644 "$TMP"
+mv "$TMP" "$OUT"
+trap - EXIT
+{% endif %}
