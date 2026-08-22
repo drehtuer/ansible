@@ -1,0 +1,6 @@
+# The units are this role's own files rather than a package's, so
+# systemd has to be told to re-read them before starting or restarting
+# either timer means anything.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true

@@ -1,0 +1,54 @@
+# Fake and deliberately not vault-encrypted, like everything under
+# inventories/test - which is what lets the static tests run in CI,
+# where there is no vault password. Nothing here is ever deployed.
+#
+# Mirrors the role defaults, because the static tests render templates
+# from this inventory alone - without role defaults - so anything a
+# template reads has to be defined here or the render fails.
+backup:
+  repository: /var/backups/restic
+  # A throwaway string. The role asserts this is non-empty, so it
+  # cannot be left blank here either.
+  password: not-the-real-restic-password
+  password_file: /etc/restic/password
+  mysql:
+    enabled: true
+    dump_dir: /var/backups/mysql
+    skip_databases:
+      - information_schema
+      - performance_schema
+      - sys
+  nextcloud:
+    enabled: true
+    path: /var/www/nextcloud
+  paths:
+    - /var/backups/mysql
+    - /home
+    - /var/lib/rspamd/dkim
+    - /etc/letsencrypt
+    - /var/www/nextcloud/config
+    - /var/www/nextcloud/data
+  exclude_file: /etc/restic/excludes
+  excludes:
+    - dovecot.index*
+    - dovecot.list.index*
+    - /var/www/nextcloud/data/appdata_*/preview
+    - /var/www/nextcloud/data/*/cache
+    - /var/www/nextcloud/data/*/uploads
+    - /var/www/nextcloud/data/nextcloud.log*
+  retention:
+    daily: 14
+    weekly: 8
+    monthly: 12
+    yearly: 3
+  schedule:
+    on_calendar: "*-*-* 02:30:00"
+    randomized_delay: 15min
+  check:
+    enabled: true
+    on_calendar: "Sun *-*-* 05:00:00"
+    randomized_delay: 15min
+    read_data_subset: 5%
+  metrics:
+    enabled: true
+    textfile_dir: /var/lib/prometheus/node-exporter

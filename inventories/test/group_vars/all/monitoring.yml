@@ -157,6 +157,17 @@ monitoring:
   alerts:
     # Per-service thresholds, generous on purpose: they exist to catch
     # a state that persists rather than to report a busy hour.
+    backup:
+      # roles/backup writes these; nothing else does. Off for a host
+      # that does not run it, since an alert on a metric no exporter
+      # produces can never fire and reports nothing wrong forever.
+      enabled: true
+      # 36h rather than 24 for a daily backup: the timer carries a
+      # randomized delay and Persistent=true catches up after a
+      # reboot, so a day and a half is the first figure that means
+      # something went wrong rather than something ran late.
+      stale_hours: 36
+      unverified_days: 10
     services:
       deferred_queue: 50
       auth_failures_per_minute: 30

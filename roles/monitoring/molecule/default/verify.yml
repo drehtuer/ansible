@@ -128,10 +128,19 @@
       #
       # The blackbox and nsd groups are deliberately absent here - the
       # role only deploys those rule files where the feature is on,
-      # and neither is on in this container.
+      # and neither is on in this container. `backup` is present for
+      # the opposite reason: monitoring.alerts.backup.enabled defaults
+      # to true, so it deploys unless a host turns it off.
+      #
+      # The set is asserted exactly rather than as a subset, which is
+      # what makes this catch a rule group that silently stops being
+      # rendered - so adding one deliberately means updating this line,
+      # and that is the intended cost rather than a nuisance.
       ansible.builtin.assert:
         that:
-          - monitoring_group_names | sort == ['monitoring', 'node', 'services']
+          - >-
+            monitoring_group_names | sort
+            == ['backup', 'monitoring', 'node', 'services']
           - monitoring_rule_healths == ['ok']
         fail_msg: >-
           Rule groups were {{ monitoring_group_names | sort }} with

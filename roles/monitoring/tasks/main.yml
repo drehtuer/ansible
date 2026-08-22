@@ -362,7 +362,8 @@
   loop: >-
     {{ ['node', 'monitoring', 'services']
        + (['probes'] if monitoring.blackbox.enabled else [])
-       + (['zones'] if monitoring.textfile.nsd.enabled else []) }}
+       + (['zones'] if monitoring.textfile.nsd.enabled else [])
+       + (['backup'] if monitoring.alerts.backup.enabled else []) }}
   notify:
     - Reload prometheus
 

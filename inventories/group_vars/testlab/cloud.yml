@@ -47,6 +47,14 @@ cloud:
     log_rotate_size: 104857600
   push:
     port: 7867
+  # Added 2026-08-22. The role has required this since the commit that
+  # turned Mail's importance classifier off by default; production and
+  # inventories/test were updated with it and this file was not, so
+  # playbooks/cloud.yml has failed its argument spec against the lab
+  # ever since - which the static tests cannot see, because they read
+  # inventories/test rather than this file.
+  mail:
+    classify_importance: false
   ocr:
     languages:
       - eng

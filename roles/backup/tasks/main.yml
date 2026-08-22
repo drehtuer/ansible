@@ -1,0 +1,130 @@
+- name: Refuse to run without a repository password
+  # Before anything is installed or initialized. A repository created
+  # with an empty password is not fixable afterwards - restic cannot
+  # change the password of a repository nobody can open, so the only
+  # repair is to throw it away and lose every snapshot in it.
+  ansible.builtin.assert:
+    that:
+      - backup.password | length > 0
+    fail_msg: >-
+      backup.password is empty. Set it, vault-encrypted, in
+      inventories/group_vars/<group>/backup.yml - and keep a copy
+      somewhere this host cannot lose, since it is not recoverable
+      from the repository it opens. See doc/BACKUP.adoc.
+    quiet: true
+
+- name: Install restic
+  # From the archive, the same stance as everything here except
+  # Prometheus. Note this is the one component whose *format* has to
+  # keep working across a rebuild: a repository written by a newer
+  # restic is not readable by an older one, so a restore on a fresh
+  # host wants a release at least as new as the one that wrote it.
+  ansible.builtin.apt:
+    name: restic
+    state: present
+
+- name: Create the restic configuration directory
+  ansible.builtin.file:
+    path: "{{ backup.password_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy the repository password
+  # no_log, and 0600 in a 0700 directory: the file is the repository,
+  # for anyone who also has the repository. A --diff from
+  # `invoke check-drift` would otherwise print it, which is the same
+  # separation roles/nsd makes for its TSIG secret.
+  ansible.builtin.copy:
+    content: "{{ backup.password }}"
+    dest: "{{ backup.password_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Create the repository directory
+  # Only for a local repository. `restic init` creates the repository
+  # itself; this is the parent it needs to exist first, and 0700
+  # because everything in it is this host's data.
+  ansible.builtin.file:
+    path: "{{ backup.repository }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: backup.repository.startswith('/')
+
+- name: Check whether the repository is initialized
+  # Read-only, and check_mode: false so that `invoke check-drift`
+  # reports the initialization below honestly instead of skipping the
+  # probe and then claiming a change it cannot know about.
+  ansible.builtin.command:
+    cmd: restic cat config
+  environment: &restic_env
+    RESTIC_REPOSITORY: "{{ backup.repository }}"
+    RESTIC_PASSWORD_FILE: "{{ backup.password_file }}"
+  register: backup_repository_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Initialize the repository
+  ansible.builtin.command:
+    cmd: restic init
+  environment: *restic_env
+  when: backup_repository_probe.rc != 0
+  changed_when: true
+
+- name: Deploy the exclude patterns
+  ansible.builtin.template:
+    src: templates/excludes.j2
+    dest: "{{ backup.exclude_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy the backup scripts
+  ansible.builtin.template:
+    src: templates/{{ item }}.sh.j2
+    dest: /usr/local/bin/{{ item }}
+    owner: root
+    group: root
+    mode: "0755"
+    # Caught before it is installed rather than at 02:30, the same
+    # stance as `nginx -t` and `iptables-restore --test` elsewhere
+    # here. bash -n parses without running: it finds the unbalanced
+    # quote a Jinja loop can introduce, and cannot find anything about
+    # what the script would do.
+    validate: bash -n %s
+  loop:
+    - backup-run
+    - backup-check
+
+- name: Deploy the systemd units
+  ansible.builtin.template:
+    src: templates/{{ item }}.j2
+    dest: /etc/systemd/system/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ backup_units }}"
+  notify:
+    - Reload systemd
+
+- name: Enable the backup timer
+  # Flush first: a timer cannot be started from a unit file systemd has
+  # not read yet, and the handler above is what makes it read it.
+  ansible.builtin.systemd_service:
+    name: backup.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Enable the verification timer
+  ansible.builtin.systemd_service:
+    name: backup-check.timer
+    state: "{{ backup.check.enabled | ternary('started', 'stopped') }}"
+    enabled: "{{ backup.check.enabled }}"
+    daemon_reload: true

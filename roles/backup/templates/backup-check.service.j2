@@ -1,0 +1,26 @@
+{{ ansible_managed | comment }}
+#
+# One-shot, run by the timer beside it.
+[Unit]
+Description=Verify the restic repository
+Documentation=file://{{ backup.repository }}
+
+[Service]
+Type=oneshot
+# A systemd unit inherits no HOME, and restic falls back to
+# $XDG_CACHE_HOME or $HOME to find its cache - so without this it
+# logs "unable to open cache" on every invocation and runs
+# cacheless. That is a correctness non-issue and a performance one
+# that grows with the data: the cache is how restic avoids re-reading
+# metadata it already knows, which on a 104 GB tree is the difference
+# between a backup that reads what changed and one that reads
+# everything. Found on the lab, on the first run through systemd.
+#
+# CacheDirectory has systemd create and own /var/cache/restic; the
+# environment variable is what points restic at it rather than at the
+# HOME it does not have.
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+ExecStart=/usr/local/bin/backup-check
+Nice=10
+IOSchedulingClass=idle

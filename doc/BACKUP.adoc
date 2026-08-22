@@ -3,7 +3,9 @@ include::.attributes-page.adoc[]
 
 What is backed up, what deliberately is not, and why — plus the restore order, which is the part that decides whether any of it was worth doing.
 
-**Nothing here is implemented yet.** This page is the design and the decisions behind it, written before `roles/backup` exists so that the reasoning is on record rather than reconstructed from tasks later. `doc/TODO.adoc` still carries *No backup strategy* as open work, and it stays open until a restore has been performed on the lab — this repo's rule is that an item leaves when it is verified on a host, not when it is written.
+**The local tier is implemented and verified on the lab; `carcosa` has never run it.** `roles/backup` does what <<local-tier,the local snapshot tier>> below describes, and on 2026-08-22 it converged on `yuggoth`, backed up a real MariaDB and a real Nextcloud through systemd, and a restore was performed from what it produced — files byte-identical with ownership and mode intact, and the database reloaded from its dump. `doc/TESTING.adoc` records what that run proved and what it did not. The remaining step is production.
+
+Two parts of this page are still design only, and are marked where they appear: <<deploy-stamp,the deploy stamp>>, and any off-site copy at all. What exists today is one repository on `carcosa`'s own disk.
 
 == The framing: this repo is already half the backup
 
@@ -122,6 +124,7 @@ The desktop clients hold a current copy of the synced files, so the 104 GB does 
 
 A restore by re-upload also produces new file IDs, which is what breaks existing share links. The database dump is what preserves the rest of the instance around those files, so the two halves are not independent — **the client replica is only a backup in combination with the database dump.**
 
+[#local-tier]
 === A local snapshot tier, on the same disk, on purpose
 
 The most likely thing to go wrong is a bad upgrade or a mistaken deletion, and neither of those is helped by an off-site copy — they are helped by yesterday's state being reachable in seconds. `carcosa` has 3.4 TB free, so this costs almost nothing and can afford generous retention.
@@ -167,6 +170,8 @@ The host should move forward to current versions rather than being restored to w
 
 [#deploy-stamp]
 == The deploy stamp
+
+**Not implemented.** The rest of this section is the design.
 
 **Record on the host which state of this repository was deployed to it.** Re-running that commit reproduces the setup the backup was taken from; re-running `main` might not.
 

@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+#
+# One restic --exclude-file pattern per line. Note what is deliberately
+# absent as much as what is here - see roles/backup/defaults/main.yml.
+{% for pattern in backup.excludes %}
+{{ pattern }}
+{% endfor %}

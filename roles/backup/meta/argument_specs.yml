@@ -1,0 +1,172 @@
+argument_specs:
+  main:
+    short_description: Local restic snapshots of unreproducible state
+    description:
+      - Dumps the MariaDB databases, then takes a restic snapshot of
+        those dumps together with the home directories, the secrets
+        generated on this host that the repository does not hold, and
+        Nextcloud's data directory.
+      - The repository is local, which is the deliberate scope of this
+        tier - it answers a bad upgrade and a mistaken deletion, and
+        answers hardware loss for nothing. What covers that instead is
+        recorded in doc/BACKUP.adoc.
+      - Reports its own outcome through node_exporter's textfile
+        directory, so that a backup which stops running is visible
+        rather than merely absent.
+    options:
+      backup:
+        type: dict
+        required: true
+        description: Backup settings.
+        options:
+          repository:
+            type: str
+            required: true
+            description:
+              - The restic repository. A local path here; restic
+                addresses `sftp`, `s3` and `rclone` targets with the
+                same string, so moving this off-host is an inventory
+                change rather than a code change.
+          password:
+            type: str
+            required: true
+            description:
+              - Password opening the repository. Vault-encrypted, and
+                asserted non-empty before anything is initialized.
+                Note it is not recoverable from the repository it
+                opens - see doc/BACKUP.adoc.
+          password_file:
+            type: str
+            required: true
+            description: Where that password is written, 0600.
+          mysql:
+            type: dict
+            required: true
+            description: The database dump taken before each snapshot.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether to dump databases at all.
+              dump_dir:
+                type: str
+                required: true
+                description:
+                  - Where dumps are written, and consequently a path
+                    that has to appear in `paths` below.
+              skip_databases:
+                type: list
+                elements: str
+                required: true
+                description:
+                  - Databases not dumped. Everything else is, so that
+                    a database added later is not silently missed.
+          nextcloud:
+            type: dict
+            required: true
+            description: Quiescing Nextcloud around the dump.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description:
+                  - Whether to hold maintenance mode around the
+                    database dump. Off for a host with no Nextcloud.
+              path:
+                type: str
+                required: true
+                description: Installation directory, where occ lives.
+          paths:
+            type: list
+            elements: str
+            required: true
+            description: What the snapshot contains.
+          exclude_file:
+            type: str
+            required: true
+            description: Where the exclude patterns are written.
+          excludes:
+            type: list
+            elements: str
+            required: true
+            description:
+              - Patterns restic excludes. Note which Dovecot files are
+                deliberately absent from this list - see the role
+                defaults.
+          retention:
+            type: dict
+            required: true
+            description:
+              - What `restic forget --prune` keeps. Applied after a
+                successful backup only.
+            options:
+              daily:
+                type: int
+                required: true
+                description: Daily snapshots kept.
+              weekly:
+                type: int
+                required: true
+                description: Weekly snapshots kept.
+              monthly:
+                type: int
+                required: true
+                description: Monthly snapshots kept.
+              yearly:
+                type: int
+                required: true
+                description: Yearly snapshots kept.
+          schedule:
+            type: dict
+            required: true
+            description: When the backup runs.
+            options:
+              on_calendar:
+                type: str
+                required: true
+                description:
+                  - systemd calendar expression. Clear of the 04:00
+                    unattended-upgrades reboot window in roles/apt.
+              randomized_delay:
+                type: str
+                required: true
+                description: Spread off an exact minute.
+          check:
+            type: dict
+            required: true
+            description: Repository integrity verification.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether to run `restic check` on a timer.
+              on_calendar:
+                type: str
+                required: true
+                description: systemd calendar expression.
+              randomized_delay:
+                type: str
+                required: true
+                description: Spread off an exact minute.
+              read_data_subset:
+                type: str
+                required: true
+                description:
+                  - Fraction of the pack files re-read, which is the
+                    only part of the check that finds bit rot.
+          metrics:
+            type: dict
+            required: true
+            description: What this role reports about itself.
+            options:
+              enabled:
+                type: bool
+                required: true
+                description: Whether the scripts write metrics.
+              textfile_dir:
+                type: str
+                required: true
+                description:
+                  - node_exporter's textfile directory, owned by
+                    roles/monitoring. This role never creates it; the
+                    scripts skip writing when it is absent.

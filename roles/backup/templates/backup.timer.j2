@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+#
+# A systemd timer rather than cron, for Persistent=true. Cron silently
+# skips a run whose moment passed while the host was down, and this
+# host reboots for unattended upgrades - so the one night a backup is
+# missed would be a night nobody hears about. Same reasoning as
+# nsd-resign.timer.
+[Unit]
+Description=Daily backup
+
+[Timer]
+OnCalendar={{ backup.schedule.on_calendar }}
+Persistent=true
+RandomizedDelaySec={{ backup.schedule.randomized_delay }}
+
+[Install]
+WantedBy=timers.target
