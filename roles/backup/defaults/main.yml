@@ -27,6 +27,29 @@ backup:  # noqa: var-naming[no-role-prefix] - see doc/STATUS.adoc
     # that has to be repaired, when it opens at all.
     enabled: true
     dump_dir: /var/backups/mysql
+    # The dump authenticates with an explicit credential rather than
+    # relying on the socket, and that is a correction rather than a
+    # preference. `roles/database` sets a root password, which turns
+    # `root@localhost` from Ubuntu's default `unix_socket` into
+    # `mysql_native_password` - so a passwordless `mariadb` as root is
+    # refused. Measured on `carcosa`, where it is refused, and on
+    # `yuggoth`, where it is *not* only because that host's
+    # root@localhost carries a 7-character authentication_string that
+    # is not a valid hash and therefore matches an empty password. The
+    # lab passed this by accident; production is the honest case.
+    #
+    # The account is deliberately not the unix_socket one that
+    # `roles/monitoring` gives its exporter: that works because the
+    # exporter runs as the matching *system* user, and this script
+    # runs as root precisely so it can read /home and the DKIM keys.
+    login_user: root
+    # Wired from the database role rather than kept as a second copy.
+    login_password: ""
+    # Written 0600 beside the restic password, and for the same
+    # reason: a credential on the command line is visible in `ps` to
+    # every user on the host, and one in the inventory would print in
+    # a --diff from `invoke check-drift`.
+    defaults_file: /etc/restic/mariadb.cnf
     # Everything else is dumped, rather than naming the databases to
     # include. A backup that silently misses a database added later is
     # the failure worth designing against, and `mysql` itself is in

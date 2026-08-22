@@ -3,7 +3,9 @@ include::.attributes-page.adoc[]
 
 What is backed up, what deliberately is not, and why — plus the restore order, which is the part that decides whether any of it was worth doing.
 
-**The local tier is implemented and verified on the lab; `carcosa` has never run it.** `roles/backup` does what <<local-tier,the local snapshot tier>> below describes, and on 2026-08-22 it converged on `yuggoth`, backed up a real MariaDB and a real Nextcloud through systemd, and a restore was performed from what it produced — files byte-identical with ownership and mode intact, and the database reloaded from its dump. `doc/TESTING.adoc` records what that run proved and what it did not. The remaining step is production.
+**The local tier is implemented and running on `carcosa` since 2026-08-22.** `roles/backup` does what <<local-tier,the local snapshot tier>> below describes. The first production backup read 201913 files and 103.4 GiB in 29 minutes into a 95.8 GiB repository, holding Nextcloud's maintenance mode for 8 seconds of that; the repository verifies clean and a restore has been performed from it. `doc/STATUS.adoc` carries the numbers and `doc/TESTING.adoc` what the lab run did and did not establish beforehand.
+
+The off-site tier and <<deploy-stamp,the deploy stamp>> remain design only. Everything that exists today is one repository on `carcosa`'s own disk.
 
 Two parts of this page are still design only, and are marked where they appear: <<deploy-stamp,the deploy stamp>>, and any off-site copy at all. What exists today is one repository on `carcosa`'s own disk.
 
@@ -243,7 +245,13 @@ If it is used, it should be **pull-based**: `nyarlathotep` runs restic against `
 
 A backup of a file that was being written is a file that will not restore. Each of these needs quiescing differently:
 
-* **MariaDB** — `mariadb-dump --single-transaction` per database to a dump directory, and let restic take the directory. Never back up a live `/var/lib/mysql`. Use a dedicated account `IDENTIFIED VIA unix_socket`, which is the pattern `roles/monitoring` already established for `mysqld-exporter`: no password to store, rotate, or leak into a `--diff`. Note the trap STATUS records — `root@localhost` authenticates by `unix_socket`, so handing a password to `mariadb-dump` fails with *"Access denied (1698)"* even though every other task connects as root happily.
+* **MariaDB** — `mariadb-dump --single-transaction` per database to a dump directory, and let restic take the directory. Never back up a live `/var/lib/mysql`.
++
+**This page originally specified a `unix_socket` account here, and production disproved it.** The plan was to copy what `roles/monitoring` does for `mysqld-exporter` — no password to store, rotate or leak into a `--diff`. That works there because the exporter runs as the *system* user `prometheus` and `unix_socket` authenticates by matching the two names; the backup script runs as root precisely so it can read `/home` and the DKIM keys, so the account it would authenticate as is `root@localhost`.
++
+And on `carcosa`, measured on 2026-08-22, `root@localhost` is `mysql_native_password` rather than `unix_socket` — `roles/database` gives it a password — so a passwordless connection as root is refused outright. The dump therefore uses an explicit credential from a `0600` file, read with `--defaults-extra-file` so it never reaches a command line where `ps` would show it to every user on the host.
++
+**The lab did not catch this, and the reason is worth keeping.** On `yuggoth` the same passwordless connection *succeeds* — not because that host uses `unix_socket`, but because its `root@localhost` carries a 7-character `authentication_string` that is not a valid hash, which MariaDB treats as no password at all. So the lab passed by accident while production would have failed, and only running it on `carcosa` could tell the two apart. That is also a finding about `roles/database` rather than about this role, and is recorded in `doc/TODO.adoc`.
 * **Nextcloud** — hold `maintenance:mode` around the *database dump only*, never across a walk of 104 GB. Put the mode-off in an `always:` block, exactly as `roles/cloud` does for the upgrade path, so a failure cannot leave the instance behind a maintenance page.
 * **Maildirs** — message files are immutable once written, so a live copy is safe. Excludes as noted above.
 * **Home directories** — no quiescing needed, and none available; a file being written during the run is captured mid-write and that is accepted.

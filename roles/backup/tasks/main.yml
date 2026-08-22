@@ -6,11 +6,15 @@
   ansible.builtin.assert:
     that:
       - backup.password | length > 0
+      - not backup.mysql.enabled or backup.mysql.login_password | length > 0
     fail_msg: >-
       backup.password is empty. Set it, vault-encrypted, in
       inventories/group_vars/<group>/backup.yml - and keep a copy
       somewhere this host cannot lose, since it is not recoverable
       from the repository it opens. See doc/BACKUP.adoc.
+      backup.mysql.login_password must likewise be set while
+      backup.mysql.enabled is true - `roles/database` gives
+      root@localhost a password, so a passwordless dump is refused.
     quiet: true
 
 - name: Install restic
@@ -43,6 +47,19 @@
     group: root
     mode: "0600"
   no_log: true
+
+- name: Deploy the MariaDB credential
+  # no_log and 0600 in the 0700 directory above, the same treatment as
+  # the restic password beside it: this one opens every database on the
+  # host, so a --diff from `invoke check-drift` must not print it.
+  ansible.builtin.template:
+    src: templates/mariadb.cnf.j2
+    dest: "{{ backup.mysql.defaults_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: backup.mysql.enabled
 
 - name: Create the repository directory
   # Only for a local repository. `restic init` creates the repository

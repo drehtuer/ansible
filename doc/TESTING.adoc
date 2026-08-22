@@ -164,7 +164,11 @@ The restore was then performed rather than assumed. A home file, a DKIM private 
 
 *One defect only the real run could surface.* A systemd unit inherits no `HOME`, so restic could not locate a cache and logged `unable to open cache` on every invocation while carrying on. Correct output, and increasingly expensive as the tree grows. The units now set `CacheDirectory=restic` and `RESTIC_CACHE_DIR`; after redeploying, the warning is gone and `/var/cache/restic` is populated.
 
-What this still does not establish is production. `carcosa` has 104 GB and millions of small files where the lab has 67 MB, so nothing here says anything about how long a first backup takes, what the repository costs on disk, or whether 02:30 leaves enough room before the 04:00 reboot. `doc/TODO.adoc` keeps the item open on that basis.
+*The lab then gave a false pass on the one thing it could not see, which is the most useful result in this section.* The database dump ran happily on `yuggoth` and **could never have worked on `carcosa`**. The script connected to MariaDB as root with no password; that is refused on production, where `roles/database` has given `root@localhost` a real one. It succeeded on the lab only because that host's `root@localhost` carries a 7-character `authentication_string` - not a valid hash, which MariaDB treats as no password at all.
+
+So the two hosts differ in a way no assertion in this document would have caught, because the lab's behaviour was not merely different but *accidentally permissive*. Nothing short of running it on `carcosa` could distinguish them, and it is worth remembering the next time a lab pass is read as evidence about production. The role now authenticates with an explicit credential from a `0600` file; the passwordless lab account is a separate finding about `roles/database`, in `doc/TODO.adoc`.
+
+Deployed to `carcosa` on 2026-08-22 with the fix, where the first backup read 201913 files and 103.4 GiB in 29 minutes and a restore was verified against the live copies. `doc/STATUS.adoc` carries those numbers.
 
 == Deployment test
 

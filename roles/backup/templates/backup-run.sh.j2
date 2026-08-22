@@ -26,6 +26,7 @@ DUMP_DIR={{ backup.mysql.dump_dir | quote }}
 EXCLUDE_FILE={{ backup.exclude_file | quote }}
 TEXTFILE_DIR={{ backup.metrics.textfile_dir | quote }}
 NEXTCLOUD_PATH={{ backup.nextcloud.path | quote }}
+MYSQL_DEFAULTS={{ backup.mysql.defaults_file | quote }}
 
 export RESTIC_REPOSITORY="${REPOSITORY}"
 export RESTIC_PASSWORD_FILE={{ backup.password_file | quote }}
@@ -70,16 +71,19 @@ if [ -f "${NEXTCLOUD_PATH}/occ" ]; then
 fi
 {% endif %}
 
-# root authenticates to MariaDB by unix_socket here, so there is no
-# password to hand mariadb-dump - and handing it one would fail with
-# "Access denied (1698)" rather than working, which is the trap
-# roles/cloud documents.
+# The credential comes from a 0600 file rather than the command line,
+# where `ps` would show it to every user on the host. It is needed at
+# all because `roles/database` gives root@localhost a password, which
+# turns it from Ubuntu's default unix_socket into
+# mysql_native_password - so a passwordless connection as root is
+# refused. Confirmed on carcosa.
 #
 # Every database is dumped except the three views over server state, so
 # that one added later is not silently missed. `mysql` is in scope
 # deliberately: it holds the grants.
 mapfile -t databases < <(
-  mariadb --skip-column-names --batch --execute 'SHOW DATABASES' \
+  mariadb --defaults-extra-file="${MYSQL_DEFAULTS}" \
+    --skip-column-names --batch --execute 'SHOW DATABASES' \
     | grep -vxF -e {{ backup.mysql.skip_databases | map('quote') | join(' -e ') }}
 )
 
@@ -105,6 +109,7 @@ for database in "${databases[@]}"; do
   # interrupted dump cannot leave a truncated file that restores
   # silently and incompletely.
   mariadb-dump \
+    --defaults-extra-file="${MYSQL_DEFAULTS}" \
     --single-transaction \
     --quick \
     --routines \
